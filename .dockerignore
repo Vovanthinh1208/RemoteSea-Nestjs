@@ -1,0 +1,17 @@
+node_modules
+dist
+build
+coverage
+.nyc_output
+npm-debug.log*
+*.log
+.git
+.gitignore
+.env
+.env.local
+.env.*.local
+.vscode
+.idea
+README.md
+.dependency-cruiser.js
+.eslintrc.js
