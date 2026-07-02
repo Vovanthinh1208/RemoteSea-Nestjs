@@ -1,0 +1,45 @@
+import { Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
+import { ScheduleModule } from "@nestjs/schedule";
+import { validateEnv } from "@/core/config/env.validation";
+import { PrismaModule } from "@/core/database/prisma.module";
+import { SharedServicesModule } from "@/common/services/shared-services.module";
+import { AuthModule } from "@/modules/auth/auth.module";
+import { UsersModule } from "@/modules/users/users.module";
+import { TalentModule } from "@/modules/talent/talent.module";
+import { EmployerModule } from "@/modules/employer/employer.module";
+import { JobsModule } from "@/modules/jobs/jobs.module";
+import { TaxonomyModule } from "@/modules/taxonomy/taxonomy.module";
+import { ApplicationsModule } from "@/modules/applications/applications.module";
+import { SavedModule } from "@/modules/saved/saved.module";
+import { AdminModule } from "@/modules/admin/admin.module";
+import { AlertsModule } from "@/modules/alerts/alerts.module";
+import { BillingModule } from "@/modules/billing/billing.module";
+import { UploadsModule } from "@/modules/uploads/uploads.module";
+import { HealthModule } from "@/modules/health/health.module";
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validate: validateEnv,
+    }),
+    ScheduleModule.forRoot(),
+    PrismaModule,
+    SharedServicesModule,
+    AuthModule,
+    UsersModule,
+    TalentModule,
+    EmployerModule,
+    JobsModule,
+    TaxonomyModule,
+    ApplicationsModule,
+    SavedModule,
+    AdminModule,
+    AlertsModule,
+    BillingModule,
+    UploadsModule,
+    HealthModule,
+  ],
+})
+export class AppModule {}

@@ -1,0 +1,357 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  TALENT
+  EMPLOYER
+  ADMIN
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  FREELANCE
+}
+
+enum ExperienceLevel {
+  ENTRY
+  MID
+  SENIOR
+  LEAD
+  EXECUTIVE
+}
+
+enum ApplicationStatus {
+  PENDING
+  REVIEWING
+  SHORTLISTED
+  INTERVIEW
+  OFFERED
+  REJECTED
+  WITHDRAWN
+}
+
+enum AlertFrequency {
+  IMMEDIATE
+  DAILY
+  WEEKLY
+}
+
+enum JobStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  CLOSED
+  REJECTED
+}
+
+enum PlanType {
+  STANDARD
+  FEATURED
+  HANDS_ON
+}
+
+// ─── User (Auth base) ─────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  passwordHash  String?
+  name          String?
+  image         String?
+  role          UserRole  @default(TALENT)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts  Account[]
+  sessions  Session[]
+  talent    TalentProfile?
+  employer  EmployerProfile?
+  jobAlerts JobAlert[]
+  savedJobs SavedJob[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ─── Talent ───────────────────────────────────────────────────────────────────
+
+model TalentProfile {
+  id               String          @id @default(cuid())
+  userId           String          @unique
+  slug             String          @unique
+  headline         String?
+  bio              String?         @db.Text
+  location         String?
+  country          String?
+  timezone         String?
+  yearsExperience  Int?
+  level            ExperienceLevel @default(MID)
+  resumeUrl        String?
+  portfolioUrl     String?
+  githubUrl        String?
+  linkedinUrl      String?
+  isOpenToWork     Boolean         @default(true)
+  desiredSalaryMin Int?
+  desiredSalaryMax Int?
+  currency         String          @default("USD")
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills       TalentSkill[]
+  applications Application[]
+
+  @@map("talent_profiles")
+}
+
+model Skill {
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
+  talentSkills TalentSkill[]
+  jobSkills    JobSkill[]
+
+  @@map("skills")
+}
+
+model TalentSkill {
+  talentId String
+  skillId  String
+  yearsExp Int?
+
+  talent TalentProfile @relation(fields: [talentId], references: [id], onDelete: Cascade)
+  skill  Skill         @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([talentId, skillId])
+  @@map("talent_skills")
+}
+
+// ─── Employer ─────────────────────────────────────────────────────────────────
+
+model EmployerProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  companyName String
+  slug        String   @unique
+  logoUrl     String?
+  websiteUrl  String?
+  description String?  @db.Text
+  industry    String?
+  size        String?
+  founded     Int?
+  hqCountry   String?
+  hqCity      String?
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs Job[]
+
+  @@map("employer_profiles")
+}
+
+// ─── Jobs ─────────────────────────────────────────────────────────────────────
+
+model Job {
+  id               String          @id @default(cuid())
+  employerId       String
+  title            String
+  slug             String          @unique
+  description      String          @db.Text
+  requirements     String?         @db.Text
+  responsibilities String?         @db.Text
+  jobType          JobType         @default(FULL_TIME)
+  level            ExperienceLevel @default(MID)
+  salaryMin        Int?
+  salaryMax        Int?
+  currency         String          @default("USD")
+  isRemote         Boolean         @default(true)
+  timezone         String?
+  country          String?
+  applicationUrl   String?
+  status           JobStatus       @default(DRAFT)
+  planType         PlanType        @default(STANDARD)
+  planPaid         Boolean         @default(false)
+  benefits         String[]        @default([])
+  vnHireCount      Int             @default(0)
+  stripeSessionId  String?
+  reviewNote       String?         @db.Text
+  isFeatured       Boolean         @default(false)
+  viewCount        Int             @default(0)
+  applyCount       Int             @default(0)
+  publishedAt      DateTime?
+  expiresAt        DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  employer     EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  skills       JobSkill[]
+  applications Application[]
+  categories   JobCategory[]
+  savedBy      SavedJob[]
+
+  @@index([status, publishedAt])
+  @@index([employerId])
+  @@map("jobs")
+}
+
+model Category {
+  id   String  @id @default(cuid())
+  name String  @unique
+  slug String  @unique
+  icon String?
+
+  jobs            JobCategory[]
+  alertCategories AlertCategory[]
+
+  @@map("categories")
+}
+
+model JobCategory {
+  jobId      String
+  categoryId String
+
+  job      Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, categoryId])
+  @@map("job_categories")
+}
+
+model JobSkill {
+  jobId      String
+  skillId    String
+  isRequired Boolean @default(true)
+
+  job   Job   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, skillId])
+  @@map("job_skills")
+}
+
+// ─── Applications ─────────────────────────────────────────────────────────────
+
+model Application {
+  id          String            @id @default(cuid())
+  jobId       String
+  talentId    String
+  coverLetter String?           @db.Text
+  resumeUrl   String?
+  status      ApplicationStatus @default(PENDING)
+  notes       String?           @db.Text
+  appliedAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  job    Job           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  talent TalentProfile @relation(fields: [talentId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, talentId])
+  @@index([talentId])
+  @@index([jobId])
+  @@map("applications")
+}
+
+// ─── Job Alerts ───────────────────────────────────────────────────────────────
+
+model JobAlert {
+  id         String           @id @default(cuid())
+  userId     String
+  name       String
+  keywords   String?
+  jobType    JobType?
+  level      ExperienceLevel?
+  salaryMin  Int?
+  country    String?
+  timezone   String?
+  frequency  AlertFrequency   @default(DAILY)
+  isActive   Boolean          @default(true)
+  lastSentAt DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categories AlertCategory[]
+
+  @@index([userId])
+  @@map("job_alerts")
+}
+
+model SavedJob {
+  userId    String
+  jobId     String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@id([userId, jobId])
+  @@index([userId])
+  @@map("saved_jobs")
+}
+
+model AlertCategory {
+  alertId    String
+  categoryId String
+
+  alert    JobAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([alertId, categoryId])
+  @@map("alert_categories")
+}
