@@ -10,7 +10,9 @@ import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import { RateLimitService } from "@/common/services/rate-limit.service";
 import { BadRequestApiException } from "@/common/exceptions/api.exception";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+import { ApiBillingTag, ApiCheckout, ApiWebhook } from "./docs/billing.swagger";
 
+@ApiBillingTag()
 @Controller("billing")
 export class BillingController {
   constructor(
@@ -18,6 +20,7 @@ export class BillingController {
     private readonly rateLimitService: RateLimitService
   ) {}
 
+  @ApiCheckout()
   @Post("checkout")
   @UseGuards(JwtAuthGuard)
   async checkout(
@@ -28,6 +31,7 @@ export class BillingController {
     return this.billingService.createCheckoutSession(user.id, body);
   }
 
+  @ApiWebhook()
   @Post("webhook")
   async webhook(@Req() req: RawBodyRequest<Request>) {
     const signature = req.headers["stripe-signature"];

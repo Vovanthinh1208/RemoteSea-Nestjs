@@ -8,7 +8,9 @@ import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import { RateLimitService } from "@/common/services/rate-limit.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+import { ApiChangePassword, ApiDeleteAccount, ApiUpdateUserName, ApiUsersTag } from "./docs/users.swagger";
 
+@ApiUsersTag()
 @Controller("users/me")
 @UseGuards(JwtAuthGuard)
 export class UsersController {
@@ -17,6 +19,7 @@ export class UsersController {
     private readonly rateLimitService: RateLimitService
   ) {}
 
+  @ApiUpdateUserName()
   @Patch()
   async updateName(
     @CurrentUser() user: AuthenticatedUser,
@@ -25,12 +28,14 @@ export class UsersController {
     return this.usersService.updateName(user.id, body);
   }
 
+  @ApiDeleteAccount()
   @Delete()
   async deleteAccount(@CurrentUser() user: AuthenticatedUser) {
     await this.usersService.deleteAccount(user.id);
     return { success: true };
   }
 
+  @ApiChangePassword()
   @Post("password")
   async changePassword(
     @CurrentUser() user: AuthenticatedUser,

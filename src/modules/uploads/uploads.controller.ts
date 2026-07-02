@@ -5,12 +5,15 @@ import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+import { ApiPresign, ApiUploadsTag } from "./docs/uploads.swagger";
 
+@ApiUploadsTag()
 @Controller("uploads")
 @UseGuards(JwtAuthGuard)
 export class UploadsController {
   constructor(private readonly uploadsService: UploadsService) {}
 
+  @ApiPresign()
   @Post("presign")
   async presign(
     @CurrentUser() user: AuthenticatedUser,

@@ -11,11 +11,22 @@ import { RolesGuard } from "@/core/guards/roles.guard";
 import { Roles } from "@/core/decorators/roles.decorator";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+import {
+  ApiCreateEmployerProfile,
+  ApiEmployerTag,
+  ApiGetEmployerProfile,
+  ApiListEmployerJobs,
+  ApiListJobApplications,
+  ApiUpdateApplication,
+  ApiUpdateEmployerProfile,
+} from "./docs/employer.swagger";
 
+@ApiEmployerTag()
 @Controller("employer")
 export class EmployerController {
   constructor(private readonly employerService: EmployerService) {}
 
+  @ApiCreateEmployerProfile()
   @Post("profile")
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
@@ -26,6 +37,7 @@ export class EmployerController {
     return this.employerService.createProfile(user.id, body);
   }
 
+  @ApiGetEmployerProfile()
   @Get("profile")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("EMPLOYER")
@@ -33,6 +45,7 @@ export class EmployerController {
     return this.employerService.getProfile(user.id);
   }
 
+  @ApiUpdateEmployerProfile()
   @Patch("profile")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("EMPLOYER")
@@ -43,6 +56,7 @@ export class EmployerController {
     return this.employerService.updateProfile(user.id, body);
   }
 
+  @ApiListEmployerJobs()
   @Get("jobs")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("EMPLOYER")
@@ -53,6 +67,7 @@ export class EmployerController {
     return this.employerService.listJobs(user.id, query);
   }
 
+  @ApiListJobApplications()
   @Get("jobs/:id/applications")
   @UseGuards(JwtAuthGuard)
   async listJobApplications(
@@ -63,6 +78,7 @@ export class EmployerController {
     return this.employerService.listJobApplications(user.id, id, query);
   }
 
+  @ApiUpdateApplication()
   @Patch("applications/:id")
   @UseGuards(JwtAuthGuard)
   async updateApplication(

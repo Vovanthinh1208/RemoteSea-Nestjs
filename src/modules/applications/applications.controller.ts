@@ -7,7 +7,9 @@ import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import { RateLimitService } from "@/common/services/rate-limit.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+import { ApiApplicationsTag, ApiApply, ApiListApplications } from "./docs/applications.swagger";
 
+@ApiApplicationsTag()
 @Controller("applications")
 @UseGuards(JwtAuthGuard)
 export class ApplicationsController {
@@ -16,11 +18,13 @@ export class ApplicationsController {
     private readonly rateLimitService: RateLimitService
   ) {}
 
+  @ApiListApplications()
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser) {
     return this.applicationsService.findAllForUser(user.id);
   }
 
+  @ApiApply()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   apply(

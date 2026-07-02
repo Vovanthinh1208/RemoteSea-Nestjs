@@ -25,7 +25,20 @@ import { RateLimitService, clientIp } from "@/common/services/rate-limit.service
 import type { EnvConfig } from "@/core/config/env.validation";
 import type { AuthenticatedUser, JwtPayload } from "@/common/interfaces/authenticated-user.interface";
 import type { OAuthProfile } from "./interfaces";
+import {
+  ApiAuthTag,
+  ApiForgotPassword,
+  ApiGithubCallback,
+  ApiGithubLogin,
+  ApiGoogleCallback,
+  ApiGoogleLogin,
+  ApiLogin,
+  ApiRegister,
+  ApiResetPassword,
+  ApiSession,
+} from "./docs/auth.swagger";
 
+@ApiAuthTag()
 @Controller("auth")
 export class AuthController {
   constructor(
@@ -35,6 +48,7 @@ export class AuthController {
     private readonly config: ConfigService<EnvConfig, true>
   ) {}
 
+  @ApiRegister()
   @Post("register")
   @HttpCode(HttpStatus.CREATED)
   async register(
@@ -49,6 +63,7 @@ export class AuthController {
     return this.authService.register(body);
   }
 
+  @ApiLogin()
   @Post("login")
   @HttpCode(HttpStatus.OK)
   async login(@Body(new ZodValidationPipe(loginSchema)) body: LoginDto) {
@@ -56,6 +71,7 @@ export class AuthController {
     return this.authService.issueToken(user);
   }
 
+  @ApiSession()
   @Get("session")
   async session(@Req() req: Request): Promise<{ user: AuthenticatedUser | null }> {
     const header = req.headers.authorization;
@@ -69,12 +85,14 @@ export class AuthController {
     }
   }
 
+  @ApiGoogleLogin()
   @Get("google")
   @UseGuards(GoogleAuthGuard)
   googleLogin(): void {
     // Passport redirects to Google's consent screen; handled by GoogleAuthGuard.
   }
 
+  @ApiGoogleCallback()
   @Get("google/callback")
   @UseGuards(GoogleAuthGuard)
   async googleCallback(@Req() req: Request, @Res() res: Response): Promise<void> {
@@ -83,12 +101,14 @@ export class AuthController {
     res.redirect(`${this.config.get("FRONTEND_URL", { infer: true })}/auth/callback?token=${accessToken}`);
   }
 
+  @ApiGithubLogin()
   @Get("github")
   @UseGuards(GithubAuthGuard)
   githubLogin(): void {
     // Passport redirects to GitHub's consent screen; handled by GithubAuthGuard.
   }
 
+  @ApiGithubCallback()
   @Get("github/callback")
   @UseGuards(GithubAuthGuard)
   async githubCallback(@Req() req: Request, @Res() res: Response): Promise<void> {
@@ -97,6 +117,7 @@ export class AuthController {
     res.redirect(`${this.config.get("FRONTEND_URL", { infer: true })}/auth/callback?token=${accessToken}`);
   }
 
+  @ApiForgotPassword()
   @Post("forgot-password")
   @HttpCode(HttpStatus.OK)
   async forgotPassword(
@@ -112,6 +133,7 @@ export class AuthController {
     return { message: "If that email exists, a reset link was sent." };
   }
 
+  @ApiResetPassword()
   @Post("reset-password")
   @HttpCode(HttpStatus.OK)
   async resetPassword(

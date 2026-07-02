@@ -1,11 +1,14 @@
 import { Controller, Get, HttpStatus, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { PrismaService } from "@/core/database/prisma.service";
+import { ApiHealthCheck, ApiHealthTag } from "./docs/health.swagger";
 
+@ApiHealthTag()
 @Controller("health")
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 
+  @ApiHealthCheck()
   @Get()
   async check(@Res() res: Response) {
     try {
