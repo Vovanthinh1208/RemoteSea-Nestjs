@@ -98,4 +98,4 @@ See `.env.example` for the full list. Required: `DATABASE_URL`, `AUTH_SECRET`. E
 
 ## API surface
 
-44 routes across 13 modules — endpoint-for-endpoint parity with the original `remotesea/src/app/api/**` route handlers. See each module's `*.controller.ts` for the exact route list, or run the app and check the Nest bootstrap log, which prints every mapped route.
+44 routes across 13 modules — endpoint-for-endpoint parity with the original `remotesea/src/app/api/**` route handlers. See [docs/API.md](docs/API.md) for the full endpoint reference (auth, request/response shapes, error cases, rate limits), or run the app and check the Nest bootstrap log, which prints every mapped route.
