@@ -29,6 +29,12 @@ const jobListItemExample = {
 export const ListJobsResponseExample = {
   jobs: [jobListItemExample],
   pagination: { page: 1, limit: 20, total: 57, pages: 3 },
+  facets: {
+    jobType: { "Full-time": 41, Contract: 12, "Part-time": 4 },
+    timezone: { sea: 30, async: 9, SG: 14, AU: 8, US: 5 },
+    seniority: { Entry: 9, Mid: 28, Senior: 20 },
+    category: { Engineering: 24, Design: 10, Data: 7, Product: 9, Marketing: 7 },
+  },
 };
 
 export const CreateJobRequestExample = {

@@ -1,11 +1,12 @@
 import { Injectable } from "@nestjs/common";
-import type { Prisma, Job } from "@prisma/client";
+import type { Job } from "@prisma/client";
 import { nanoid } from "nanoid";
 import { JobsRepository } from "./jobs.repository";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
 import type { JobListPagination } from "./interfaces";
+import { buildJobOrderBy, buildJobWhere, computeFacets } from "./job-search.util";
 import { slugify } from "@/common/utils/slugify";
 import {
   BadRequestApiException,
@@ -19,30 +20,19 @@ export class JobsService {
   constructor(private readonly jobsRepository: JobsRepository) {}
 
   async list(query: ListJobsDto) {
-    const { q, type, level, country, category, page, limit } = query;
+    const { page, limit } = query;
     const skip = (page - 1) * limit;
-    const where: Prisma.JobWhereInput = {
-      status: "ACTIVE",
-      publishedAt: { not: null, lte: new Date() },
-      ...(type && { jobType: type }),
-      ...(level && { level }),
-      ...(country && { country }),
-      ...(q && {
-        OR: [
-          { title: { contains: q, mode: "insensitive" } },
-          { description: { contains: q, mode: "insensitive" } },
-        ],
-      }),
-      ...(category && { categories: { some: { category: { slug: category } } } }),
-    };
+    const where = buildJobWhere(query);
+    const orderBy = buildJobOrderBy(query.sort);
 
-    const [jobs, total] = await Promise.all([
-      this.jobsRepository.findMany(where, skip, limit),
+    const [jobs, total, facetRows] = await Promise.all([
+      this.jobsRepository.findMany(where, skip, limit, orderBy),
       this.jobsRepository.count(where),
+      this.jobsRepository.findFacetRows(),
     ]);
 
     const pagination: JobListPagination = { page, limit, total, pages: Math.ceil(total / limit) };
-    return { jobs, pagination };
+    return { jobs, pagination, facets: computeFacets(facetRows) };
   }
 
   async getActiveById(id: string) {

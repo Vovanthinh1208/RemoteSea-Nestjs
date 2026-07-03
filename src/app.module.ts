@@ -10,6 +10,7 @@ import { TalentModule } from "@/modules/talent/talent.module";
 import { EmployerModule } from "@/modules/employer/employer.module";
 import { JobsModule } from "@/modules/jobs/jobs.module";
 import { TaxonomyModule } from "@/modules/taxonomy/taxonomy.module";
+import { SalaryModule } from "@/modules/salary/salary.module";
 import { ApplicationsModule } from "@/modules/applications/applications.module";
 import { SavedModule } from "@/modules/saved/saved.module";
 import { AdminModule } from "@/modules/admin/admin.module";
@@ -33,6 +34,7 @@ import { HealthModule } from "@/modules/health/health.module";
     EmployerModule,
     JobsModule,
     TaxonomyModule,
+    SalaryModule,
     ApplicationsModule,
     SavedModule,
     AdminModule,

@@ -251,12 +251,45 @@ export class JobsPaginationDto {
   pages!: number;
 }
 
+export class JobFacetsDto {
+  @ApiProperty({
+    example: { "Full-time": 41, Contract: 12, "Part-time": 4 },
+    description: "Count of active jobs per job-type bucket, ignoring the caller's own filters (computed over all active jobs).",
+  })
+  jobType!: Record<string, number>;
+
+  @ApiProperty({
+    example: { sea: 30, async: 9, SG: 14, AU: 8, US: 5 },
+    description: "Count of active jobs per timezone bucket (sea/async/SG/AU/US), ignoring the caller's own filters.",
+  })
+  timezone!: Record<string, number>;
+
+  @ApiProperty({
+    example: { Entry: 9, Mid: 28, Senior: 20 },
+    description: "Count of active jobs per seniority bucket (Senior folds in LEAD/EXECUTIVE), ignoring the caller's own filters.",
+  })
+  seniority!: Record<string, number>;
+
+  @ApiProperty({
+    example: { Engineering: 24, Design: 10, Data: 7, Product: 9, Marketing: 7 },
+    description: "Count of active jobs per named category, ignoring the caller's own filters.",
+  })
+  category!: Record<string, number>;
+}
+
 export class ListJobsResponseDto {
   @ApiProperty({ type: [JobListItemDto] })
   jobs!: JobListItemDto[];
 
   @ApiProperty({ type: JobsPaginationDto })
   pagination!: JobsPaginationDto;
+
+  @ApiProperty({
+    type: JobFacetsDto,
+    description:
+      "Option counts for building a filter sidebar, always computed over ALL active jobs regardless of the filters actually applied to `jobs`/`pagination` above — matches the original app/jobs/page.tsx Server Component's facetRows behavior.",
+  })
+  facets!: JobFacetsDto;
 }
 
 export class JobDetailResponseDto {
