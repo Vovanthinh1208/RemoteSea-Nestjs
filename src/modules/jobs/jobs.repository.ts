@@ -10,7 +10,17 @@ const jobListInclude = {
 } satisfies Prisma.JobInclude;
 
 const jobDetailInclude = {
-  employer: { select: { companyName: true, logoUrl: true, slug: true, isVerified: true } },
+  employer: {
+    select: {
+      companyName: true,
+      logoUrl: true,
+      slug: true,
+      isVerified: true,
+      size: true,
+      description: true,
+      hqCountry: true,
+    },
+  },
   categories: { include: { category: true } },
   skills: { include: { skill: true } },
 } satisfies Prisma.JobInclude;

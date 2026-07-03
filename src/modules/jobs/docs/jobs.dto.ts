@@ -164,6 +164,15 @@ export class JobListEmployerDto {
 export class JobDetailEmployerDto extends JobListEmployerDto {
   @ApiProperty({ example: false })
   isVerified!: boolean;
+
+  @ApiPropertyOptional({ example: "51-200", nullable: true })
+  size?: string | null;
+
+  @ApiPropertyOptional({ example: "We build tools for remote teams across Southeast Asia.", nullable: true })
+  description?: string | null;
+
+  @ApiPropertyOptional({ example: "Singapore", nullable: true })
+  hqCountry?: string | null;
 }
 
 export class JobListItemDto {

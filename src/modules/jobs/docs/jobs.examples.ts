@@ -68,7 +68,15 @@ export const JobDetailResponseExample = {
   reviewNote: null,
   expiresAt: null,
   updatedAt: "2026-06-01T10:00:00.000Z",
-  employer: { companyName: "RemoteSEA Ltd", logoUrl: null, slug: "remotesea-ltd", isVerified: true },
+  employer: {
+    companyName: "RemoteSEA Ltd",
+    logoUrl: null,
+    slug: "remotesea-ltd",
+    isVerified: true,
+    size: "51-200",
+    description: "We build tools for remote teams across Southeast Asia.",
+    hqCountry: "Singapore",
+  },
 };
 
 export const UpdateJobRequestExample = {
