@@ -97,7 +97,26 @@ export class AdminRepository {
     });
   }
 
-  findPaidJobs(): Promise<PaidJobRevenueRow[]> {
+  async countPaidJobsByPlan(): Promise<Array<{ planType: PlanType; count: number }>> {
+    const rows = await this.prisma.job.groupBy({
+      by: ["planType"],
+      where: { planPaid: true },
+      _count: true,
+    });
+    return rows.map((row) => ({ planType: row.planType, count: row._count }));
+  }
+
+  findPaidJobsSince(since: Date): Promise<Array<Pick<Job, "planType" | "paidAt" | "createdAt">>> {
+    return this.prisma.job.findMany({
+      where: {
+        planPaid: true,
+        OR: [{ paidAt: { gte: since } }, { paidAt: null, createdAt: { gte: since } }],
+      },
+      select: { planType: true, paidAt: true, createdAt: true },
+    });
+  }
+
+  findRecentPaidJobs(limit: number): Promise<PaidJobRevenueRow[]> {
     return this.prisma.job.findMany({
       where: { planPaid: true },
       select: {
@@ -109,6 +128,7 @@ export class AdminRepository {
         employer: { select: { companyName: true } },
       },
       orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
+      take: limit,
     });
   }
 }

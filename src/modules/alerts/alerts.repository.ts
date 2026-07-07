@@ -69,7 +69,7 @@ export class AlertsRepository {
     }) as Promise<JobWithRelations[]>;
   }
 
-  markSent(id: string): Promise<JobAlert> {
-    return this.prisma.jobAlert.update({ where: { id }, data: { lastSentAt: new Date() } });
+  async markManySent(ids: string[]): Promise<void> {
+    await this.prisma.jobAlert.updateMany({ where: { id: { in: ids } }, data: { lastSentAt: new Date() } });
   }
 }

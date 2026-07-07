@@ -64,10 +64,10 @@ export class EmployerService {
       throw new ForbiddenApiException("Employer profile required");
     }
 
-    const jobs = await this.employerRepository.findJobsByEmployer(employer.id, dto.status);
-    const { totalApps, shortlisted, offered } = await this.employerRepository.getEmployerJobStats(
-      employer.id
-    );
+    const [jobs, { totalApps, shortlisted, offered }] = await Promise.all([
+      this.employerRepository.findJobsByEmployer(employer.id, dto.status),
+      this.employerRepository.getEmployerJobStats(employer.id),
+    ]);
 
     const avgTimeToHireInDays = offered.length
       ? offered.reduce(

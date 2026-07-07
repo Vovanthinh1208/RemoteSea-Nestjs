@@ -46,7 +46,7 @@ export class AlertsService {
     const now = Date.now();
     const alerts = await this.alertsRepository.findActiveAlerts();
 
-    let sent = 0;
+    const sentAlertIds: string[] = [];
 
     for (const alert of alerts) {
       const gap = FREQUENCY_GAP_MS[alert.frequency];
@@ -76,10 +76,13 @@ export class AlertsService {
       if (jobs.length === 0) continue;
 
       await this.emailService.sendJobAlertEmail(alert.user.email, jobs);
-      await this.alertsRepository.markSent(alert.id);
-      sent += 1;
+      sentAlertIds.push(alert.id);
     }
 
-    return { processed: alerts.length, sent };
+    if (sentAlertIds.length > 0) {
+      await this.alertsRepository.markManySent(sentAlertIds);
+    }
+
+    return { processed: alerts.length, sent: sentAlertIds.length };
   }
 }
