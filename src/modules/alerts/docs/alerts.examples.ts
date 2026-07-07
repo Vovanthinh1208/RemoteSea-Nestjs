@@ -55,7 +55,7 @@ export const DeleteAlertResponseExample = { success: true };
 
 export const CronDispatchResponseExample = { processed: 42, sent: 7 };
 
-export const AlertNotFoundExample = { error: "Not found" };
+export const AlertNotFoundExample = { error: "Alert not found" };
 
 export const ValidationErrorExample = {
   error: { formErrors: [], fieldErrors: { name: ["Required"] } },

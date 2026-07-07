@@ -1,6 +1,7 @@
 import { applyDecorators } from "@nestjs/common";
 import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiParam, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { ForbiddenApiResponse, InternalServerErrorApiResponse, UnauthorizedApiResponse } from "@/core/swagger/common.responses";
+import { JOB_STATUS_VALUES } from "@/common/constants/enum-values.constants";
 import {
   ListEmployersResponseDto,
   ListJobsResponseDto,
@@ -72,7 +73,7 @@ export const ApiListJobs = () =>
     ApiQuery({
       name: "status",
       required: false,
-      enum: ["DRAFT", "PENDING_REVIEW", "ACTIVE", "CLOSED", "REJECTED"],
+      enum: JOB_STATUS_VALUES,
       description: "Defaults to PENDING_REVIEW",
     }),
     ApiQuery({ name: "page", required: false, type: Number, example: 1 }),

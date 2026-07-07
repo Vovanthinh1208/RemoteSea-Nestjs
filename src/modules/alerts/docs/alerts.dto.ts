@@ -1,5 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { JOB_TYPE_VALUES, EXPERIENCE_LEVEL_VALUES } from "@/common/constants/enum-values.constants";
+import {
+  JOB_TYPE_VALUES,
+  EXPERIENCE_LEVEL_VALUES,
+  ALERT_FREQUENCY_VALUES,
+} from "@/common/constants/enum-values.constants";
 
 /**
  * Swagger-only request/response shapes for the Alerts module.
@@ -31,7 +35,7 @@ export class CreateAlertRequestDto {
   @ApiPropertyOptional({ example: "America/New_York", description: "Stored only, not used in matching" })
   timezone?: string;
 
-  @ApiPropertyOptional({ enum: ["IMMEDIATE", "DAILY", "WEEKLY"], default: "DAILY", example: "DAILY" })
+  @ApiPropertyOptional({ enum: ALERT_FREQUENCY_VALUES, default: "DAILY", example: "DAILY" })
   frequency?: "IMMEDIATE" | "DAILY" | "WEEKLY";
 
   @ApiPropertyOptional({ type: [String], example: ["cme8f1a2b0000ug0h9x1n1a2"] })
@@ -87,7 +91,7 @@ export class AlertResponseDto {
   @ApiPropertyOptional({ nullable: true, example: "America/New_York" })
   timezone!: string | null;
 
-  @ApiProperty({ enum: ["IMMEDIATE", "DAILY", "WEEKLY"], example: "DAILY" })
+  @ApiProperty({ enum: ALERT_FREQUENCY_VALUES, example: "DAILY" })
   frequency!: "IMMEDIATE" | "DAILY" | "WEEKLY";
 
   @ApiProperty({ example: true })

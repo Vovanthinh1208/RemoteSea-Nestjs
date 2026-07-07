@@ -11,3 +11,4 @@ export const APPLICATION_STATUS_VALUES = [
   "WITHDRAWN",
 ] as const;
 export const PLAN_TYPE_VALUES = ["STANDARD", "FEATURED", "HANDS_ON"] as const;
+export const ALERT_FREQUENCY_VALUES = ["IMMEDIATE", "DAILY", "WEEKLY"] as const;

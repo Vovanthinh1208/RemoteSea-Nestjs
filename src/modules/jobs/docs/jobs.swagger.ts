@@ -1,6 +1,7 @@
 import { applyDecorators } from "@nestjs/common";
 import { ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { InternalServerErrorApiResponse, UnauthorizedApiResponse } from "@/core/swagger/common.responses";
+import { JOB_TYPE_VALUES, EXPERIENCE_LEVEL_VALUES } from "@/common/constants/enum-values.constants";
 import { CreateJobRequestDto, CreateJobResponseDto, JobDetailResponseDto, ListJobsResponseDto, UpdateJobRequestDto } from "./jobs.dto";
 import {
   CreateJobRequestExample,
@@ -37,14 +38,14 @@ export const ApiListJobs = () =>
       name: "type",
       required: false,
       isArray: true,
-      enum: ["FULL_TIME", "PART_TIME", "CONTRACT", "FREELANCE"],
+      enum: JOB_TYPE_VALUES,
       description: "Repeat for multiple (OR'd together)",
     }),
     ApiQuery({
       name: "level",
       required: false,
       isArray: true,
-      enum: ["ENTRY", "MID", "SENIOR", "LEAD", "EXECUTIVE"],
+      enum: EXPERIENCE_LEVEL_VALUES,
       description: "Repeat for multiple (OR'd together)",
     }),
     ApiQuery({ name: "country", required: false, type: String, example: "Vietnam" }),

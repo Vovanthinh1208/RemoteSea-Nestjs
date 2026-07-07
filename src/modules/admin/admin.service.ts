@@ -9,12 +9,12 @@ import type { RevenuePlanMix, RevenueSummary } from "./interfaces";
 import { buildRecentMonthKeys, monthKeyOf } from "./revenue.util";
 import { NotFoundApiException } from "@/common/exceptions/api.exception";
 import { PLAN_LABELS, PLAN_PRICES } from "@/common/constants/plan.constants";
+import { PLAN_TYPE_VALUES } from "@/common/constants/enum-values.constants";
 import { EmailService } from "@/common/services/email.service";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 
 const REVENUE_MONTHS_WINDOW = 8;
 const RECENT_TRANSACTIONS_LIMIT = 10;
-const PLAN_TYPES: PlanType[] = ["STANDARD", "FEATURED", "HANDS_ON"];
 
 @Injectable()
 export class AdminService {
@@ -111,7 +111,7 @@ export class AdminService {
       mixByPlan.set(job.planType, mix);
     }
 
-    const mix: RevenuePlanMix[] = PLAN_TYPES.map((planType) => ({
+    const mix: RevenuePlanMix[] = PLAN_TYPE_VALUES.map((planType) => ({
       planType,
       label: PLAN_LABELS[planType],
       price: PLAN_PRICES[planType],

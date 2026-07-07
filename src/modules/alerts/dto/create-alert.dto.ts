@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { jobTypeSchema, experienceLevelSchema } from "@/common/dto/enums.schema";
+import { jobTypeSchema, experienceLevelSchema, alertFrequencySchema } from "@/common/dto/enums.schema";
 
 export const createAlertSchema = z.object({
   name: z.string().min(1).max(100),
@@ -9,7 +9,7 @@ export const createAlertSchema = z.object({
   salaryMin: z.number().int().positive().optional(),
   country: z.string().optional(),
   timezone: z.string().optional(),
-  frequency: z.enum(["IMMEDIATE", "DAILY", "WEEKLY"]).default("DAILY"),
+  frequency: alertFrequencySchema.default("DAILY"),
   categoryIds: z.array(z.string().cuid()).optional(),
 });
 

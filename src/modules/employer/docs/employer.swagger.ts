@@ -10,6 +10,7 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { ForbiddenApiResponse, InternalServerErrorApiResponse, UnauthorizedApiResponse } from "@/core/swagger/common.responses";
+import { JOB_STATUS_VALUES, APPLICATION_STATUS_VALUES } from "@/common/constants/enum-values.constants";
 import {
   ApplicationResponseDto,
   CreateEmployerProfileRequestDto,
@@ -115,7 +116,7 @@ export const ApiListEmployerJobs = () =>
     ApiQuery({
       name: "status",
       required: false,
-      enum: ["DRAFT", "PENDING_REVIEW", "ACTIVE", "CLOSED", "REJECTED"],
+      enum: JOB_STATUS_VALUES,
       description: "Filter jobs by status",
     }),
     ApiOkResponse({
@@ -142,7 +143,7 @@ export const ApiListJobApplications = () =>
     ApiQuery({
       name: "status",
       required: false,
-      enum: ["PENDING", "REVIEWING", "SHORTLISTED", "INTERVIEW", "OFFERED", "REJECTED", "WITHDRAWN"],
+      enum: APPLICATION_STATUS_VALUES,
       description: "Filter applications by status",
     }),
     ApiQuery({ name: "page", required: false, type: Number, example: 1 }),

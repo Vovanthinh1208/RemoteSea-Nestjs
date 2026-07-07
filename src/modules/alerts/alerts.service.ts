@@ -27,7 +27,7 @@ export class AlertsService {
   private async assertOwnership(userId: string, id: string): Promise<void> {
     const alert = await this.alertsRepository.findOwnerById(id);
     if (!alert || alert.userId !== userId) {
-      throw new NotFoundApiException("Not found");
+      throw new NotFoundApiException("Alert not found");
     }
   }
 
