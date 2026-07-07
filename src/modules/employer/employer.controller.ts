@@ -66,6 +66,7 @@ export class EmployerController {
 
   @ApiListJobApplications()
   @Get("jobs/:id/applications")
+  @Roles("EMPLOYER")
   async listJobApplications(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id") id: string,
@@ -76,6 +77,7 @@ export class EmployerController {
 
   @ApiUpdateApplication()
   @Patch("applications/:id")
+  @Roles("EMPLOYER")
   async updateApplication(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id") id: string,

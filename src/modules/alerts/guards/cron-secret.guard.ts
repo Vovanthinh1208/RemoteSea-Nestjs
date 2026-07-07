@@ -13,7 +13,7 @@ export class CronSecretGuard implements CanActivate {
     const authHeader = request.headers.authorization;
     const cronSecret = this.config.get("CRON_SECRET", { infer: true });
 
-    if (authHeader !== `Bearer ${cronSecret}`) {
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
       throw new UnauthorizedApiException();
     }
 

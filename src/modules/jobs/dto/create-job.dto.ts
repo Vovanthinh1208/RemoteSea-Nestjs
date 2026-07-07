@@ -3,8 +3,8 @@ import { jobTypeSchema, experienceLevelSchema, planTypeSchema } from "@/common/d
 
 export const createJobSchema = z.object({
   title: z.string().min(5).max(120),
-  description: z.string().min(100),
-  requirements: z.string().optional(),
+  description: z.string().min(100).max(20_000),
+  requirements: z.string().max(10_000).optional(),
   jobType: jobTypeSchema,
   level: experienceLevelSchema,
   salaryMin: z.number().int().positive(),

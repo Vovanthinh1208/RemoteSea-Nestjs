@@ -54,6 +54,7 @@ export const ApiLogin = () =>
     ApiOkResponse({ description: "Login succeeded", type: TokenResponseDto, schema: { example: TokenResponseExample } }),
     ValidationErrorResponse,
     InvalidCredentialsResponse,
+    rateLimitResponse("10 req/60s per IP, 10 req/60s per email"),
     InternalServerErrorApiResponse
   );
 

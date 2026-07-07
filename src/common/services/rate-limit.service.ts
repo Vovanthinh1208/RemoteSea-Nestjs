@@ -44,13 +44,13 @@ export class RateLimitService {
   }
 }
 
+/**
+ * Uses Express's own `req.ip`, which only reflects X-Forwarded-For/X-Real-IP
+ * when `app.set("trust proxy", ...)` is explicitly configured for the actual
+ * reverse proxy in front of this app. Trusting those headers unconditionally
+ * (as this function previously did) let any client spoof its rate-limit key
+ * by sending an arbitrary X-Forwarded-For value, bypassing the limiter entirely.
+ */
 export function clientIp(request: Request): string {
-  const xff = request.headers["x-forwarded-for"];
-  if (xff) {
-    const value = Array.isArray(xff) ? xff[0] : xff;
-    return value.split(",")[0]?.trim() || "unknown";
-  }
-  const real = request.headers["x-real-ip"];
-  if (typeof real === "string") return real;
   return request.ip ?? "unknown";
 }

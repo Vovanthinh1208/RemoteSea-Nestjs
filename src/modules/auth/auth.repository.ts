@@ -35,8 +35,12 @@ export class AuthRepository {
     return this.prisma.user.update({ where: { email }, data: { passwordHash } });
   }
 
-  createVerificationToken(identifier: string, token: string, expires: Date) {
-    return this.prisma.verificationToken.create({ data: { identifier, token, expires } });
+  async createVerificationToken(identifier: string, token: string, expires: Date) {
+    const [, created] = await this.prisma.$transaction([
+      this.prisma.verificationToken.deleteMany({ where: { identifier } }),
+      this.prisma.verificationToken.create({ data: { identifier, token, expires } }),
+    ]);
+    return created;
   }
 
   findVerificationToken(token: string) {

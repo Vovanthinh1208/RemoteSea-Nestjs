@@ -22,11 +22,15 @@ export class GoogleStrategy extends PassportStrategy(Strategy, "google") {
     profile: Profile,
     done: VerifyCallback
   ): void {
-    const email = profile.emails?.[0]?.value;
-    if (!email) {
-      done(new Error("Google account has no email"), undefined);
+    // passport-google-oauth20 exposes `verified` on the primary email (from Google's
+    // email_verified claim) even though the @types/passport base type omits it —
+    // an unverified email must never be used to look up/link a User account.
+    const primaryEmail = profile.emails?.[0] as { value?: string; verified?: boolean } | undefined;
+    if (!primaryEmail?.value || primaryEmail.verified !== true) {
+      done(new Error("Google account has no verified email"), undefined);
       return;
     }
+    const email = primaryEmail.value;
     const oauthProfile: OAuthProfile = {
       provider: "google",
       providerAccountId: profile.id,

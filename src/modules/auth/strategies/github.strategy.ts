@@ -15,19 +15,27 @@ export class GithubStrategy extends PassportStrategy(Strategy, "github") {
       clientSecret: config.get("AUTH_GITHUB_SECRET", { infer: true }),
       callbackURL: config.get("AUTH_GITHUB_CALLBACK_URL", { infer: true }),
       scope: ["user:email"],
+      // Without this, passport-github2 only surfaces the account's *primary*
+      // email (github.com/user/emails), with no guarantee it's verified — a
+      // GitHub user can set an unverified address as primary. Requesting raw
+      // emails lets us pick one that is actually verified before using it to
+      // look up/link a User account.
+      allRawEmails: true,
     });
   }
 
   validate(_accessToken: string, _refreshToken: string, profile: Profile, done: Done): void {
-    const email = profile.emails?.[0]?.value;
-    if (!email) {
-      done(new Error("GitHub account has no public email"));
+    const emails = (profile.emails ?? []) as Array<{ value: string; primary?: boolean; verified?: boolean }>;
+    const verifiedEmail = emails.find((e) => e.verified && e.primary) ?? emails.find((e) => e.verified);
+
+    if (!verifiedEmail) {
+      done(new Error("GitHub account has no verified email"));
       return;
     }
     done(null, {
       provider: "github",
       providerAccountId: profile.id,
-      email,
+      email: verifiedEmail.value,
       name: profile.displayName ?? profile.username ?? null,
       image: profile.photos?.[0]?.value ?? null,
     });

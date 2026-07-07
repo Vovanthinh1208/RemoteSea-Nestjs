@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiOperation, ApiTags } fro
 import { InternalServerErrorApiResponse, UnauthorizedApiResponse } from "@/core/swagger/common.responses";
 import { PresignRequestDto, PresignResponseDto } from "./uploads.dto";
 import { PresignRequestExample, PresignResponseExample } from "./uploads.examples";
-import { UnsupportedContentTypeResponse, ValidationErrorResponse } from "./uploads.responses";
+import { FileTooLargeResponse, UnsupportedContentTypeResponse, ValidationErrorResponse } from "./uploads.responses";
 
 /**
  * UploadsController has a controller-level @UseGuards(JwtAuthGuard), so the
@@ -25,6 +25,7 @@ export const ApiPresign = () =>
     ApiCreatedResponse({ description: "Presigned upload URL generated", type: PresignResponseDto, schema: { example: PresignResponseExample } }),
     ValidationErrorResponse,
     UnsupportedContentTypeResponse,
+    FileTooLargeResponse,
     UnauthorizedApiResponse,
     InternalServerErrorApiResponse
   );

@@ -21,6 +21,13 @@ export class PresignRequestDto {
       "Must belong to the whitelist for the given `type`: avatar/logo → image/jpeg, image/png, image/webp; resume → application/pdf",
   })
   contentType!: string;
+
+  @ApiProperty({
+    example: 245_760,
+    description:
+      "Exact byte size of the file. Signed into the presigned URL as ContentLength — S3 rejects the PUT if the uploaded bytes don't match exactly. Max: avatar/logo 5MB, resume 10MB.",
+  })
+  fileSize!: number;
 }
 
 export class PresignResponseDto {

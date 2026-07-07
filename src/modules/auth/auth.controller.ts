@@ -67,7 +67,14 @@ export class AuthController {
   @ApiLogin()
   @Post("login")
   @HttpCode(HttpStatus.OK)
-  async login(@Body(new ZodValidationPipe(loginSchema)) body: LoginDto) {
+  async login(@Req() req: Request, @Body(new ZodValidationPipe(loginSchema)) body: LoginDto) {
+    this.rateLimitService.enforce(`login-ip:${clientIp(req)}`, RATE_LIMITS.LOGIN.limit, RATE_LIMITS.LOGIN.windowMs);
+    this.rateLimitService.enforce(
+      `login-email:${body.email.toLowerCase()}`,
+      RATE_LIMITS.LOGIN.limit,
+      RATE_LIMITS.LOGIN.windowMs
+    );
+
     const user = await this.authService.validateCredentials(body.email, body.password);
     return this.authService.issueToken(user);
   }
