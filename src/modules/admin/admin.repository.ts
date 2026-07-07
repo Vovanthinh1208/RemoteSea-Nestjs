@@ -13,6 +13,10 @@ type JobListItem = Job & {
   categories: { category: unknown }[];
 };
 
+export type PaidJobRevenueRow = Pick<Job, "id" | "title" | "planType" | "paidAt" | "createdAt"> & {
+  employer: { companyName: string };
+};
+
 @Injectable()
 export class AdminRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -89,6 +93,21 @@ export class AdminRepository {
       where: { id },
       data: { status: "REJECTED", reviewNote: note },
       select: { status: true, publishedAt: true },
+    });
+  }
+
+  findPaidJobs(): Promise<PaidJobRevenueRow[]> {
+    return this.prisma.job.findMany({
+      where: { planPaid: true },
+      select: {
+        id: true,
+        title: true,
+        planType: true,
+        paidAt: true,
+        createdAt: true,
+        employer: { select: { companyName: true } },
+      },
+      orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
     });
   }
 }

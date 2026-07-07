@@ -48,3 +48,32 @@ export const JobNotFoundExample = { error: "Job not found" };
 export const ValidationErrorExample = {
   error: { formErrors: [], fieldErrors: { action: ["Invalid enum value"] } },
 };
+
+export const RevenueResponseExample = {
+  months: [
+    { key: "2025-12", label: "Dec", standard: 15000, featured: 35000, handsOn: 0 },
+    { key: "2026-01", label: "Jan", standard: 30000, featured: 70000, handsOn: 120000 },
+    { key: "2026-02", label: "Feb", standard: 15000, featured: 35000, handsOn: 0 },
+    { key: "2026-03", label: "Mar", standard: 45000, featured: 105000, handsOn: 0 },
+    { key: "2026-04", label: "Apr", standard: 15000, featured: 70000, handsOn: 120000 },
+    { key: "2026-05", label: "May", standard: 30000, featured: 35000, handsOn: 0 },
+    { key: "2026-06", label: "Jun", standard: 15000, featured: 35000, handsOn: 0 },
+    { key: "2026-07", label: "Jul", standard: 15000, featured: 0, handsOn: 0 },
+  ],
+  mix: [
+    { planType: "STANDARD", label: "Standard listing", price: 15000, count: 11, amount: 165000 },
+    { planType: "FEATURED", label: "Featured listing", price: 35000, count: 9, amount: 315000 },
+    { planType: "HANDS_ON", label: "Hands-on hiring", price: 120000, count: 2, amount: 240000 },
+  ],
+  transactions: [
+    {
+      jobId: "cjob1a2b0000ug0h9x1n1a2",
+      jobTitle: "Senior Backend Engineer",
+      companyName: "Acme Corp",
+      planType: "FEATURED",
+      amount: 35000,
+      paidAt: "2026-07-02T10:05:00.000Z",
+    },
+  ],
+  totals: { allTime: 720000, thisMonth: 15000 },
+};

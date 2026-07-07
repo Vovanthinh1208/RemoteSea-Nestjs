@@ -8,7 +8,7 @@ import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
 import { Roles } from "@/core/decorators/roles.decorator";
-import { ApiAdminTag, ApiListEmployers, ApiListJobs, ApiReviewJob, ApiUpdateEmployer } from "./docs/admin.swagger";
+import { ApiAdminTag, ApiGetRevenue, ApiListEmployers, ApiListJobs, ApiReviewJob, ApiUpdateEmployer } from "./docs/admin.swagger";
 
 @ApiAdminTag()
 @Controller("admin")
@@ -42,5 +42,11 @@ export class AdminController {
   @Patch("jobs/:id")
   async reviewJob(@Param("id") id: string, @Body(new ZodValidationPipe(reviewJobSchema)) body: ReviewJobDto) {
     return this.adminService.reviewJob(id, body);
+  }
+
+  @ApiGetRevenue()
+  @Get("revenue")
+  async getRevenue() {
+    return this.adminService.getRevenue();
   }
 }

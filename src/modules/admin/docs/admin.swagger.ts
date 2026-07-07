@@ -6,6 +6,7 @@ import {
   ListJobsResponseDto,
   ReviewJobRequestDto,
   ReviewJobResponseDto,
+  RevenueResponseDto,
   UpdateEmployerRequestDto,
   UpdateEmployerResponseDto,
 } from "./admin.dto";
@@ -15,6 +16,7 @@ import {
   ReviewJobApprovedResponseExample,
   ReviewJobRequestApproveExample,
   ReviewJobRequestRejectExample,
+  RevenueResponseExample,
   UpdateEmployerRequestExample,
   UpdateEmployerResponseExample,
 } from "./admin.examples";
@@ -110,5 +112,22 @@ export const ApiReviewJob = () =>
     UnauthorizedApiResponse,
     ForbiddenApiResponse,
     JobNotFoundResponse,
+    InternalServerErrorApiResponse
+  );
+
+export const ApiGetRevenue = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "Get billing revenue summary",
+      description:
+        "Aggregates every planPaid job into a monthly time series (last 8 calendar months), an all-time breakdown by plan, and the 10 most recent paid jobs. Amounts are in cents, derived from PLAN_PRICES — there is no separate payment/transaction table. Requires ADMIN role.",
+    }),
+    ApiOkResponse({
+      description: "Revenue summary",
+      type: RevenueResponseDto,
+      schema: { example: RevenueResponseExample },
+    }),
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
     InternalServerErrorApiResponse
   );

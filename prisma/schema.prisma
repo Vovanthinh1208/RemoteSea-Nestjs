@@ -227,6 +227,7 @@ model Job {
   status           JobStatus       @default(DRAFT)
   planType         PlanType        @default(STANDARD)
   planPaid         Boolean         @default(false)
+  paidAt           DateTime?
   benefits         String[]        @default([])
   vnHireCount      Int             @default(0)
   stripeSessionId  String?

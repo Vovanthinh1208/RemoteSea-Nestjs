@@ -27,7 +27,7 @@ export class BillingRepository {
   markJobPaidAndSubmitted(jobId: string): Promise<JobWithEmployerEmail> {
     return this.prisma.job.update({
       where: { id: jobId },
-      data: { planPaid: true, status: "PENDING_REVIEW" },
+      data: { planPaid: true, paidAt: new Date(), status: "PENDING_REVIEW" },
       include: { employer: { include: { user: { select: { email: true } } } } },
     });
   }

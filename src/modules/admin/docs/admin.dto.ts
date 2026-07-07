@@ -162,3 +162,82 @@ export class ReviewJobResponseDto {
   @ApiPropertyOptional({ nullable: true, example: "2026-07-02T10:05:00.000Z" })
   publishedAt!: string | null;
 }
+
+export class RevenueMonthBucketDto {
+  @ApiProperty({ example: "2026-07" })
+  key!: string;
+
+  @ApiProperty({ example: "Jul" })
+  label!: string;
+
+  @ApiProperty({ example: 45000, description: "Sum of PLAN_PRICES for STANDARD jobs paid this month, in cents" })
+  standard!: number;
+
+  @ApiProperty({ example: 70000, description: "Sum of PLAN_PRICES for FEATURED jobs paid this month, in cents" })
+  featured!: number;
+
+  @ApiProperty({ example: 120000, description: "Sum of PLAN_PRICES for HANDS_ON jobs paid this month, in cents" })
+  handsOn!: number;
+}
+
+export class RevenuePlanMixDto {
+  @ApiProperty({ enum: ["STANDARD", "FEATURED", "HANDS_ON"], example: "FEATURED" })
+  planType!: "STANDARD" | "FEATURED" | "HANDS_ON";
+
+  @ApiProperty({ example: "Featured listing" })
+  label!: string;
+
+  @ApiProperty({ example: 35000, description: "PLAN_PRICES[planType], in cents" })
+  price!: number;
+
+  @ApiProperty({ example: 12, description: "Count of planPaid jobs with this planType, all time" })
+  count!: number;
+
+  @ApiProperty({ example: 420000, description: "price * count, in cents" })
+  amount!: number;
+}
+
+export class RevenueTransactionDto {
+  @ApiProperty({ example: "cjob1a2b0000ug0h9x1n1a2" })
+  jobId!: string;
+
+  @ApiProperty({ example: "Senior Backend Engineer" })
+  jobTitle!: string;
+
+  @ApiProperty({ example: "Acme Corp" })
+  companyName!: string;
+
+  @ApiProperty({ enum: ["STANDARD", "FEATURED", "HANDS_ON"], example: "FEATURED" })
+  planType!: "STANDARD" | "FEATURED" | "HANDS_ON";
+
+  @ApiProperty({ example: 35000, description: "PLAN_PRICES[planType], in cents" })
+  amount!: number;
+
+  @ApiProperty({
+    example: "2026-07-02T10:05:00.000Z",
+    description: "Job.paidAt when available, else Job.createdAt as a fallback for jobs paid before that column existed",
+  })
+  paidAt!: string;
+}
+
+export class RevenueTotalsDto {
+  @ApiProperty({ example: 655000, description: "Sum of PLAN_PRICES over every planPaid job, in cents" })
+  allTime!: number;
+
+  @ApiProperty({ example: 85000, description: "Sum of PLAN_PRICES for jobs paid in the current calendar month, in cents" })
+  thisMonth!: number;
+}
+
+export class RevenueResponseDto {
+  @ApiProperty({ type: [RevenueMonthBucketDto], description: "Last 8 calendar months, oldest first" })
+  months!: RevenueMonthBucketDto[];
+
+  @ApiProperty({ type: [RevenuePlanMixDto], description: "All-time breakdown by plan, one entry per PlanType" })
+  mix!: RevenuePlanMixDto[];
+
+  @ApiProperty({ type: [RevenueTransactionDto], description: "Most recent 10 paidAt jobs, newest first" })
+  transactions!: RevenueTransactionDto[];
+
+  @ApiProperty({ type: RevenueTotalsDto })
+  totals!: RevenueTotalsDto;
+}
