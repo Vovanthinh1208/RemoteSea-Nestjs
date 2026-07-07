@@ -4,6 +4,7 @@ import { ConfigService } from "@nestjs/config";
 import { ExtractJwt, Strategy } from "passport-jwt";
 import type { EnvConfig } from "@/core/config/env.validation";
 import type { AuthenticatedUser, JwtPayload } from "@/common/interfaces/authenticated-user.interface";
+import { AuthMapper } from "../auth.mapper";
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
@@ -16,6 +17,6 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
   }
 
   validate(payload: JwtPayload): AuthenticatedUser {
-    return { id: payload.sub, email: payload.email, name: payload.name, role: payload.role };
+    return AuthMapper.fromPayload(payload);
   }
 }

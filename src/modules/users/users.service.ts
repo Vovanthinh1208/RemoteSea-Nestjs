@@ -2,10 +2,10 @@ import { Injectable } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import type { User } from "@prisma/client";
 import { UsersRepository } from "./users.repository";
-import { BCRYPT_SALT_ROUNDS } from "./constants";
 import type { UpdateUserDto } from "./dto/update-user.dto";
 import type { ChangePasswordDto } from "./dto/change-password.dto";
 import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import { BCRYPT_SALT_ROUNDS } from "@/common/constants/bcrypt.constants";
 
 @Injectable()
 export class UsersService {

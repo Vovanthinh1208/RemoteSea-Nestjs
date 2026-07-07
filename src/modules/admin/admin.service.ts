@@ -5,11 +5,12 @@ import type { ListEmployersDto } from "./dto/list-employers.dto";
 import type { UpdateEmployerDto } from "./dto/update-employer.dto";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
 import type { ReviewJobDto } from "./dto/review-job.dto";
-import type { Pagination, RevenuePlanMix, RevenueSummary } from "./interfaces";
+import type { RevenuePlanMix, RevenueSummary } from "./interfaces";
 import { buildRecentMonthKeys, monthKeyOf } from "./revenue.util";
 import { NotFoundApiException } from "@/common/exceptions/api.exception";
 import { PLAN_LABELS, PLAN_PRICES } from "@/common/constants/plan.constants";
 import { EmailService } from "@/common/services/email.service";
+import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 
 const REVENUE_MONTHS_WINDOW = 8;
 const RECENT_TRANSACTIONS_LIMIT = 10;
@@ -24,7 +25,7 @@ export class AdminService {
 
   async listEmployers(query: ListEmployersDto) {
     const { verified, page, limit } = query;
-    const skip = (page - 1) * limit;
+    const skip = paginationSkip(page, limit);
     const where = verified === undefined ? {} : { isVerified: verified === "true" };
 
     const [employers, total] = await this.adminRepository.findEmployers(where, skip, limit);
@@ -35,8 +36,7 @@ export class AdminService {
       totalSpend: jobs.reduce((sum, j) => sum + (PLAN_PRICES[j.planType] ?? 0), 0),
     }));
 
-    const pagination: Pagination = { page, limit, total, pages: Math.ceil(total / limit) };
-    return { employers: data, pagination };
+    return { employers: data, pagination: buildPagination(page, limit, total) };
   }
 
   async updateEmployer(id: string, dto: UpdateEmployerDto): Promise<{ success: true }> {
@@ -56,13 +56,12 @@ export class AdminService {
 
   async listJobs(query: ListJobsDto) {
     const { status, page, limit } = query;
-    const skip = (page - 1) * limit;
+    const skip = paginationSkip(page, limit);
     const where = { status };
 
     const [jobs, total] = await this.adminRepository.findJobs(where, skip, limit);
 
-    const pagination: Pagination = { page, limit, total, pages: Math.ceil(total / limit) };
-    return { jobs, pagination };
+    return { jobs, pagination: buildPagination(page, limit, total) };
   }
 
   async reviewJob(id: string, dto: ReviewJobDto) {

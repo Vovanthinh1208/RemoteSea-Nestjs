@@ -5,11 +5,12 @@ import * as crypto from "crypto";
 import { nanoid } from "nanoid";
 import { AuthRepository } from "./auth.repository";
 import { AuthMapper } from "./auth.mapper";
-import { BCRYPT_SALT_ROUNDS, RESET_TOKEN_TTL_MS } from "./constants";
+import { RESET_TOKEN_TTL_MS } from "./constants";
 import type { RegisterDto } from "./dto/register.dto";
 import type { RegisteredUser, OAuthProfile } from "./interfaces";
 import { EmailService } from "@/common/services/email.service";
 import { slugify } from "@/common/utils/slugify";
+import { BCRYPT_SALT_ROUNDS } from "@/common/constants/bcrypt.constants";
 import {
   BadRequestApiException,
   ConflictApiException,

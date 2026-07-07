@@ -246,7 +246,7 @@ export class JobListItemDto {
   skills!: JobSkillLinkDto[];
 }
 
-export class JobsPaginationDto {
+export class PaginationDto {
   @ApiProperty({ example: 1 })
   page!: number;
 
@@ -290,8 +290,8 @@ export class ListJobsResponseDto {
   @ApiProperty({ type: [JobListItemDto] })
   jobs!: JobListItemDto[];
 
-  @ApiProperty({ type: JobsPaginationDto })
-  pagination!: JobsPaginationDto;
+  @ApiProperty({ type: PaginationDto })
+  pagination!: PaginationDto;
 
   @ApiProperty({
     type: JobFacetsDto,

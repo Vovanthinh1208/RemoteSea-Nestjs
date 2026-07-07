@@ -5,9 +5,9 @@ import { JobsRepository } from "./jobs.repository";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
-import type { JobListPagination } from "./interfaces";
 import { buildJobOrderBy, buildJobWhere, computeFacets } from "./job-search.util";
 import { slugify } from "@/common/utils/slugify";
+import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 import {
   BadRequestApiException,
   ForbiddenApiException,
@@ -21,7 +21,7 @@ export class JobsService {
 
   async list(query: ListJobsDto) {
     const { page, limit } = query;
-    const skip = (page - 1) * limit;
+    const skip = paginationSkip(page, limit);
     const where = buildJobWhere(query);
     const orderBy = buildJobOrderBy(query.sort);
 
@@ -31,8 +31,7 @@ export class JobsService {
       this.jobsRepository.findFacetRows(),
     ]);
 
-    const pagination: JobListPagination = { page, limit, total, pages: Math.ceil(total / limit) };
-    return { jobs, pagination, facets: computeFacets(facetRows) };
+    return { jobs, pagination: buildPagination(page, limit, total), facets: computeFacets(facetRows) };
   }
 
   async getActiveById(id: string) {

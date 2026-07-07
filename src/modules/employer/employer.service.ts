@@ -9,6 +9,7 @@ import type { ListEmployerJobsDto } from "./dto/list-employer-jobs.dto";
 import type { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
 import type { UpdateApplicationDto } from "./dto/update-application.dto";
 import { slugify } from "@/common/utils/slugify";
+import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 import {
   BadRequestApiException,
   ConflictApiException,
@@ -95,7 +96,7 @@ export class EmployerService {
     }
 
     const { status, page, limit } = dto;
-    const skip = (page - 1) * limit;
+    const skip = paginationSkip(page, limit);
     const { applications, total } = await this.employerRepository.findApplicationsForJob(
       jobId,
       status,
@@ -105,7 +106,7 @@ export class EmployerService {
 
     return {
       applications,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+      pagination: buildPagination(page, limit, total),
     };
   }
 

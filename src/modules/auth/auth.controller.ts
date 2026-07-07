@@ -13,6 +13,7 @@ import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import type { Request, Response } from "express";
 import { AuthService } from "./auth.service";
+import { AuthMapper } from "./auth.mapper";
 import { GoogleAuthGuard } from "./guards/google-auth.guard";
 import { GithubAuthGuard } from "./guards/github-auth.guard";
 import { registerSchema, type RegisterDto } from "./dto/register.dto";
@@ -79,7 +80,7 @@ export class AuthController {
 
     try {
       const payload = this.jwtService.verify<JwtPayload>(header.slice("Bearer ".length));
-      return { user: { id: payload.sub, email: payload.email, name: payload.name, role: payload.role } };
+      return { user: AuthMapper.fromPayload(payload) };
     } catch {
       return { user: null };
     }

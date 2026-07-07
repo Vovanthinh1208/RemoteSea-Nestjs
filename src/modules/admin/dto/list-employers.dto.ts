@@ -1,9 +1,8 @@
 import { z } from "zod";
+import { paginationQuerySchema } from "@/common/dto/pagination-query.schema";
 
-export const listEmployersSchema = z.object({
+export const listEmployersSchema = paginationQuerySchema.extend({
   verified: z.enum(["true", "false"]).optional(),
-  page: z.coerce.number().min(1).default(1),
-  limit: z.coerce.number().min(1).max(50).default(20),
 });
 
 export type ListEmployersDto = z.infer<typeof listEmployersSchema>;

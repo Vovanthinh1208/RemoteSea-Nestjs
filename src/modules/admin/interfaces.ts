@@ -1,12 +1,5 @@
 import type { PlanType } from "@prisma/client";
 
-export interface Pagination {
-  page: number;
-  limit: number;
-  total: number;
-  pages: number;
-}
-
 export interface RevenueMonthBucket {
   key: string;
   label: string;
