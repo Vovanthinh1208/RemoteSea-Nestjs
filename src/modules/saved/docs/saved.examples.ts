@@ -1,7 +1,5 @@
 /** Request/response example payloads for the Saved Jobs module's Swagger docs. */
 
-export const SaveJobRequestExample = { jobId: "cjob1a2b0000ug0h9x1n1a2" };
-
 export const SavedJobsListExample = [
   {
     userId: "cusr1a2b0000ug0h9x1n1a2",
@@ -22,7 +20,3 @@ export const EmptySavedJobsListExample: unknown[] = [];
 export const NewlySavedExample = { saved: true };
 
 export const UnSavedExample = { saved: false };
-
-export const ValidationErrorExample = {
-  error: { formErrors: [], fieldErrors: { jobId: ["Invalid cuid"] } },
-};

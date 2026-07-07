@@ -16,21 +16,17 @@ export class SavedRepository {
     }) as Promise<SavedJobWithJob[]>;
   }
 
-  findOne(userId: string, jobId: string): Promise<SavedJob | null> {
-    return this.prisma.savedJob.findUnique({
-      where: { userId_jobId: { userId, jobId } },
-    });
+  /** Idempotent: succeeds whether or not the row existed. */
+  async delete(userId: string, jobId: string): Promise<void> {
+    await this.prisma.savedJob.deleteMany({ where: { userId, jobId } });
   }
 
-  delete(userId: string, jobId: string): Promise<SavedJob> {
-    return this.prisma.savedJob.delete({
+  /** Idempotent: upsert rather than create, so calling this twice never conflicts. */
+  save(userId: string, jobId: string): Promise<SavedJob> {
+    return this.prisma.savedJob.upsert({
       where: { userId_jobId: { userId, jobId } },
-    });
-  }
-
-  create(userId: string, jobId: string): Promise<SavedJob> {
-    return this.prisma.savedJob.create({
-      data: { userId, jobId },
+      create: { userId, jobId },
+      update: {},
     });
   }
 }

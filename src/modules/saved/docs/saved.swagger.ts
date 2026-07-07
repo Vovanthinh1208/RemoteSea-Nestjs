@@ -1,11 +1,12 @@
 import { applyDecorators } from "@nestjs/common";
-import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { InternalServerErrorApiResponse, UnauthorizedApiResponse } from "@/core/swagger/common.responses";
-import { SaveJobRequestDto, SavedJobResponseDto } from "./saved.dto";
-import { NewlySavedExample, SaveJobRequestExample, SavedJobsListExample, UnSavedExample } from "./saved.examples";
-import { ValidationErrorResponse } from "./saved.responses";
+import { SavedJobResponseDto } from "./saved.dto";
+import { NewlySavedExample, SavedJobsListExample, UnSavedExample } from "./saved.examples";
 
 export const ApiSavedTag = () => applyDecorators(ApiTags("Saved Jobs"));
+
+const jobIdParam = () => ApiParam({ name: "jobId", description: "Job id", example: "cjob1a2b0000ug0h9x1n1a2" });
 
 export const ApiListSaved = () =>
   applyDecorators(
@@ -24,18 +25,28 @@ export const ApiListSaved = () =>
     InternalServerErrorApiResponse
   );
 
-export const ApiToggleSaved = () =>
+export const ApiSaveJob = () =>
   applyDecorators(
     ApiBearerAuth("bearer"),
     ApiOperation({
-      summary: "Toggle save state for a job",
-      description:
-        "**Toggles** save state for a job — saves it if not already saved, un-saves (deletes) it if it is. Never returns a 409 'already saved' — it's a toggle. Response status is dynamic: `201 Created` (with `{ saved: true }`) when newly saved, `200 OK` (with `{ saved: false }`) when removed — same body shape either way.",
+      summary: "Save a job",
+      description: "Idempotent — saves the job if not already saved; a repeat call is a no-op with the same response.",
     }),
-    ApiBody({ type: SaveJobRequestDto, examples: { default: { value: SaveJobRequestExample } } }),
-    ApiResponse({ status: 201, description: "Job newly saved", schema: { example: NewlySavedExample } }),
-    ApiResponse({ status: 200, description: "Job un-saved (was already saved)", schema: { example: UnSavedExample } }),
-    ValidationErrorResponse,
+    jobIdParam(),
+    ApiOkResponse({ description: "Job is saved", schema: { example: NewlySavedExample } }),
+    UnauthorizedApiResponse,
+    InternalServerErrorApiResponse
+  );
+
+export const ApiUnsaveJob = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Un-save a job",
+      description: "Idempotent — removes the job from saved if present; a repeat call is a no-op with the same response.",
+    }),
+    jobIdParam(),
+    ApiOkResponse({ description: "Job is no longer saved", schema: { example: UnSavedExample } }),
     UnauthorizedApiResponse,
     InternalServerErrorApiResponse
   );

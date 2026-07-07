@@ -1,7 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { nanoid } from "nanoid";
-import type { EmployerProfile } from "@prisma/client";
-import { EmployerRepository } from "./employer.repository";
+import {
+  EmployerRepository,
+  type ProfileWithApplicationCounts,
+  type PublicEmployerProfile,
+} from "./employer.repository";
 import { ALLOWED_TRANSITIONS } from "./constants";
 import type { CreateEmployerProfileDto } from "./dto/create-employer-profile.dto";
 import type { UpdateEmployerProfileDto } from "./dto/update-employer-profile.dto";
@@ -37,7 +40,9 @@ export class EmployerService {
     return this.employerRepository.createProfileForUser(userId, dto, slug);
   }
 
-  async getProfile(userId: string): Promise<Record<string, unknown>> {
+  async getProfile(
+    userId: string
+  ): Promise<Omit<ProfileWithApplicationCounts, "jobs"> & { totalApplications: number }> {
     const profile = await this.employerRepository.findProfileWithApplicationCounts(userId);
     if (!profile) {
       throw new NotFoundApiException("Profile not found");
@@ -49,7 +54,7 @@ export class EmployerService {
     return { ...rest, totalApplications };
   }
 
-  async updateProfile(userId: string, dto: UpdateEmployerProfileDto): Promise<EmployerProfile> {
+  async updateProfile(userId: string, dto: UpdateEmployerProfileDto): Promise<PublicEmployerProfile> {
     const profile = await this.employerRepository.findProfileByUserId(userId);
     if (!profile) {
       throw new NotFoundApiException("Profile not found");

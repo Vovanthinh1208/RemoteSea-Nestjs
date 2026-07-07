@@ -2,6 +2,35 @@ import { Injectable } from "@nestjs/common";
 import type { Application, ApplicationStatus, EmployerProfile, JobStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 
+const profileSelect = {
+  id: true,
+  companyName: true,
+  slug: true,
+  logoUrl: true,
+  websiteUrl: true,
+  description: true,
+  industry: true,
+  size: true,
+  founded: true,
+  hqCountry: true,
+  hqCity: true,
+  isVerified: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.EmployerProfileSelect;
+
+export type PublicEmployerProfile = Prisma.EmployerProfileGetPayload<{ select: typeof profileSelect }>;
+
+const profileWithApplicationCountsSelect = {
+  ...profileSelect,
+  _count: { select: { jobs: true } },
+  jobs: { select: { _count: { select: { applications: true } } } },
+} satisfies Prisma.EmployerProfileSelect;
+
+export type ProfileWithApplicationCounts = Prisma.EmployerProfileGetPayload<{
+  select: typeof profileWithApplicationCountsSelect;
+}>;
+
 @Injectable()
 export class EmployerRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -43,18 +72,15 @@ export class EmployerRepository {
     return profile;
   }
 
-  findProfileWithApplicationCounts(userId: string) {
+  findProfileWithApplicationCounts(userId: string): Promise<ProfileWithApplicationCounts | null> {
     return this.prisma.employerProfile.findUnique({
       where: { userId },
-      include: {
-        _count: { select: { jobs: true } },
-        jobs: { select: { _count: { select: { applications: true } } } },
-      },
+      select: profileWithApplicationCountsSelect,
     });
   }
 
-  updateProfile(id: string, data: Prisma.EmployerProfileUpdateInput): Promise<EmployerProfile> {
-    return this.prisma.employerProfile.update({ where: { id }, data });
+  updateProfile(id: string, data: Prisma.EmployerProfileUpdateInput): Promise<PublicEmployerProfile> {
+    return this.prisma.employerProfile.update({ where: { id }, data, select: profileSelect });
   }
 
   findJobsByEmployer(employerId: string, status?: JobStatus) {

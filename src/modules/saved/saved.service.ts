@@ -1,6 +1,5 @@
 import { Injectable } from "@nestjs/common";
 import { SavedRepository } from "./saved.repository";
-import type { SaveJobDto } from "./dto/save-job.dto";
 import type { SavedJobWithJob, ToggleSavedResult } from "./interfaces";
 
 @Injectable()
@@ -11,15 +10,13 @@ export class SavedService {
     return this.savedRepository.findAllForUser(userId);
   }
 
-  async toggle(userId: string, dto: SaveJobDto): Promise<{ result: ToggleSavedResult; created: boolean }> {
-    const existing = await this.savedRepository.findOne(userId, dto.jobId);
+  async save(userId: string, jobId: string): Promise<ToggleSavedResult> {
+    await this.savedRepository.save(userId, jobId);
+    return { saved: true };
+  }
 
-    if (existing) {
-      await this.savedRepository.delete(userId, dto.jobId);
-      return { result: { saved: false }, created: false };
-    }
-
-    await this.savedRepository.create(userId, dto.jobId);
-    return { result: { saved: true }, created: true };
+  async unsave(userId: string, jobId: string): Promise<ToggleSavedResult> {
+    await this.savedRepository.delete(userId, jobId);
+    return { saved: false };
   }
 }

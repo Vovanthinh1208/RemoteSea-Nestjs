@@ -1,12 +1,9 @@
-import { Body, Controller, Get, HttpStatus, Post, Res, UseGuards } from "@nestjs/common";
-import type { Response } from "express";
+import { Controller, Delete, Get, HttpCode, HttpStatus, Param, Put, UseGuards } from "@nestjs/common";
 import { SavedService } from "./saved.service";
-import { saveSchema, type SaveJobDto } from "./dto/save-job.dto";
-import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
-import { ApiListSaved, ApiSavedTag, ApiToggleSaved } from "./docs/saved.swagger";
+import { ApiListSaved, ApiSavedTag, ApiSaveJob, ApiUnsaveJob } from "./docs/saved.swagger";
 
 @ApiSavedTag()
 @Controller("saved")
@@ -20,15 +17,17 @@ export class SavedController {
     return this.savedService.findAllForUser(user.id);
   }
 
-  @ApiToggleSaved()
-  @Post()
-  async toggle(
-    @CurrentUser() user: AuthenticatedUser,
-    @Body(new ZodValidationPipe(saveSchema)) body: SaveJobDto,
-    @Res({ passthrough: true }) res: Response
-  ) {
-    const { result, created } = await this.savedService.toggle(user.id, body);
-    res.status(created ? HttpStatus.CREATED : HttpStatus.OK);
-    return result;
+  @ApiSaveJob()
+  @Put(":jobId")
+  @HttpCode(HttpStatus.OK)
+  save(@CurrentUser() user: AuthenticatedUser, @Param("jobId") jobId: string) {
+    return this.savedService.save(user.id, jobId);
+  }
+
+  @ApiUnsaveJob()
+  @Delete(":jobId")
+  @HttpCode(HttpStatus.OK)
+  unsave(@CurrentUser() user: AuthenticatedUser, @Param("jobId") jobId: string) {
+    return this.savedService.unsave(user.id, jobId);
   }
 }

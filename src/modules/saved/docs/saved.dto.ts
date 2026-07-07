@@ -9,11 +9,6 @@ import { JOB_STATUS_VALUES } from "@/common/constants/enum-values.constants";
  * typed schema in /docs. They are never imported outside this docs/ folder.
  */
 
-export class SaveJobRequestDto {
-  @ApiProperty({ example: "cme8f1a2b0000ug0h9x1n1a2", description: "CUID of the job to save/un-save" })
-  jobId!: string;
-}
-
 class SavedJobEmployerSummaryDto {
   @ApiProperty({ example: "Acme Corp" })
   companyName!: string;
