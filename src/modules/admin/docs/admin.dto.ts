@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { JOB_STATUS_VALUES, PLAN_TYPE_VALUES } from "@/common/constants/enum-values.constants";
 
 /**
  * Swagger-only request/response shapes for the Admin module.
@@ -86,7 +87,7 @@ export class UpdateEmployerResponseDto {
 
 export class ListJobsQueryDto {
   @ApiPropertyOptional({
-    enum: ["DRAFT", "PENDING_REVIEW", "ACTIVE", "CLOSED", "REJECTED"],
+    enum: JOB_STATUS_VALUES,
     default: "PENDING_REVIEW",
     example: "PENDING_REVIEW",
   })
@@ -125,7 +126,7 @@ export class JobListItemDto {
   @ApiProperty({ example: "senior-backend-engineer" })
   slug!: string;
 
-  @ApiProperty({ enum: ["DRAFT", "PENDING_REVIEW", "ACTIVE", "CLOSED", "REJECTED"], example: "PENDING_REVIEW" })
+  @ApiProperty({ enum: JOB_STATUS_VALUES, example: "PENDING_REVIEW" })
   status!: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED";
 
   @ApiProperty({ type: JobListItemEmployerDto, description: "Partial employer (no full profile)" })
@@ -153,7 +154,7 @@ export class ReviewJobRequestDto {
 
 export class ReviewJobResponseDto {
   @ApiProperty({
-    enum: ["DRAFT", "PENDING_REVIEW", "ACTIVE", "CLOSED", "REJECTED"],
+    enum: JOB_STATUS_VALUES,
     example: "ACTIVE",
     description: "Intentionally partial response — the repository only selects `status` and `publishedAt`, not a full Job object",
   })
@@ -181,7 +182,7 @@ export class RevenueMonthBucketDto {
 }
 
 export class RevenuePlanMixDto {
-  @ApiProperty({ enum: ["STANDARD", "FEATURED", "HANDS_ON"], example: "FEATURED" })
+  @ApiProperty({ enum: PLAN_TYPE_VALUES, example: "FEATURED" })
   planType!: "STANDARD" | "FEATURED" | "HANDS_ON";
 
   @ApiProperty({ example: "Featured listing" })
@@ -207,7 +208,7 @@ export class RevenueTransactionDto {
   @ApiProperty({ example: "Acme Corp" })
   companyName!: string;
 
-  @ApiProperty({ enum: ["STANDARD", "FEATURED", "HANDS_ON"], example: "FEATURED" })
+  @ApiProperty({ enum: PLAN_TYPE_VALUES, example: "FEATURED" })
   planType!: "STANDARD" | "FEATURED" | "HANDS_ON";
 
   @ApiProperty({ example: 35000, description: "PLAN_PRICES[planType], in cents" })

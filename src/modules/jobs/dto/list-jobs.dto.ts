@@ -1,8 +1,7 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@/common/dto/pagination-query.schema";
+import { jobTypeSchema, experienceLevelSchema } from "@/common/dto/enums.schema";
 
-const jobTypeEnum = z.enum(["FULL_TIME", "PART_TIME", "CONTRACT", "FREELANCE"]);
-const levelEnum = z.enum(["ENTRY", "MID", "SENIOR", "LEAD", "EXECUTIVE"]);
 const timezoneKeyEnum = z.enum(["sea", "async", "SG", "AU", "US"]);
 
 // Accepts a single value (`?type=FULL_TIME`, the original single-select contract)
@@ -14,8 +13,8 @@ const toArray = <T extends z.ZodTypeAny>(schema: T) =>
 
 export const listJobsSchema = paginationQuerySchema.extend({
   q: z.string().optional(),
-  type: toArray(jobTypeEnum),
-  level: toArray(levelEnum),
+  type: toArray(jobTypeSchema),
+  level: toArray(experienceLevelSchema),
   country: z.string().optional(),
   category: toArray(z.string()),
   timezone: toArray(timezoneKeyEnum),

@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { jobTypeSchema, experienceLevelSchema } from "@/common/dto/enums.schema";
 
 export const createAlertSchema = z.object({
   name: z.string().min(1).max(100),
   keywords: z.string().max(200).optional(),
-  jobType: z.enum(["FULL_TIME", "PART_TIME", "CONTRACT", "FREELANCE"]).optional(),
-  level: z.enum(["ENTRY", "MID", "SENIOR", "LEAD", "EXECUTIVE"]).optional(),
+  jobType: jobTypeSchema.optional(),
+  level: experienceLevelSchema.optional(),
   salaryMin: z.number().int().positive().optional(),
   country: z.string().optional(),
   timezone: z.string().optional(),

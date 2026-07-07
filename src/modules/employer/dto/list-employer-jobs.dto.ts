@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { jobStatusSchema } from "@/common/dto/enums.schema";
 
 export const listEmployerJobsSchema = z.object({
-  status: z.enum(["DRAFT", "PENDING_REVIEW", "ACTIVE", "CLOSED", "REJECTED"]).optional(),
+  status: jobStatusSchema.optional(),
 });
 
 export type ListEmployerJobsDto = z.infer<typeof listEmployerJobsSchema>;

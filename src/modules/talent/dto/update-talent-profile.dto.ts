@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { experienceLevelSchema } from "@/common/dto/enums.schema";
 
 export const talentProfileSchema = z.object({
   headline: z.string().max(120).optional(),
@@ -7,7 +8,7 @@ export const talentProfileSchema = z.object({
   country: z.string().optional(),
   timezone: z.string().optional(),
   yearsExperience: z.number().int().min(0).optional(),
-  level: z.enum(["ENTRY", "MID", "SENIOR", "LEAD", "EXECUTIVE"]).optional(),
+  level: experienceLevelSchema.optional(),
   resumeUrl: z.string().url().optional(),
   portfolioUrl: z.string().url().optional(),
   githubUrl: z.string().url().optional(),

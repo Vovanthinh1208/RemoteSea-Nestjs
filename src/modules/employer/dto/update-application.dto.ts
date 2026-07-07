@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { applicationStatusSchema } from "@/common/dto/enums.schema";
 
 export const updateApplicationSchema = z.object({
-  status: z.enum(["PENDING", "REVIEWING", "SHORTLISTED", "INTERVIEW", "OFFERED", "REJECTED", "WITHDRAWN"]),
+  status: applicationStatusSchema,
   notes: z.string().max(2000).optional(),
 });
 

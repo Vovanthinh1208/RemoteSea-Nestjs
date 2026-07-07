@@ -1,4 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
+import { JOB_STATUS_VALUES } from "@/common/constants/enum-values.constants";
 
 /**
  * Swagger-only request/response shapes for the Saved Jobs module.
@@ -31,7 +32,7 @@ class SavedJobEmbeddedJobDto {
   @ApiProperty({ example: "senior-backend-engineer" })
   slug!: string;
 
-  @ApiProperty({ enum: ["DRAFT", "PENDING_REVIEW", "ACTIVE", "CLOSED", "REJECTED"], example: "ACTIVE" })
+  @ApiProperty({ enum: JOB_STATUS_VALUES, example: "ACTIVE" })
   status!: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED";
 
   @ApiProperty({ type: SavedJobEmployerSummaryDto })

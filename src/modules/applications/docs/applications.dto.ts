@@ -1,4 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import {
+  JOB_TYPE_VALUES,
+  EXPERIENCE_LEVEL_VALUES,
+  JOB_STATUS_VALUES,
+  APPLICATION_STATUS_VALUES,
+} from "@/common/constants/enum-values.constants";
 
 /**
  * Swagger-only request/response shapes for the Applications module.
@@ -53,10 +59,10 @@ class EmbeddedJobDto {
   @ApiProperty({ example: "senior-backend-engineer" })
   slug!: string;
 
-  @ApiProperty({ enum: ["FULL_TIME", "PART_TIME", "CONTRACT", "FREELANCE"], example: "FULL_TIME" })
+  @ApiProperty({ enum: JOB_TYPE_VALUES, example: "FULL_TIME" })
   jobType!: "FULL_TIME" | "PART_TIME" | "CONTRACT" | "FREELANCE";
 
-  @ApiProperty({ enum: ["ENTRY", "MID", "SENIOR", "LEAD", "EXECUTIVE"], example: "SENIOR" })
+  @ApiProperty({ enum: EXPERIENCE_LEVEL_VALUES, example: "SENIOR" })
   level!: "ENTRY" | "MID" | "SENIOR" | "LEAD" | "EXECUTIVE";
 
   @ApiPropertyOptional({ nullable: true, example: 90000 })
@@ -74,7 +80,7 @@ class EmbeddedJobDto {
   @ApiPropertyOptional({ nullable: true, example: "Vietnam" })
   country!: string | null;
 
-  @ApiProperty({ enum: ["DRAFT", "PENDING_REVIEW", "ACTIVE", "CLOSED", "REJECTED"], example: "ACTIVE" })
+  @ApiProperty({ enum: JOB_STATUS_VALUES, example: "ACTIVE" })
   status!: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED";
 
   @ApiProperty({ type: JobEmployerSummaryDto })
@@ -104,7 +110,7 @@ export class ApplicationResponseDto {
   resumeUrl!: string | null;
 
   @ApiProperty({
-    enum: ["PENDING", "REVIEWING", "SHORTLISTED", "INTERVIEW", "OFFERED", "REJECTED", "WITHDRAWN"],
+    enum: APPLICATION_STATUS_VALUES,
     example: "PENDING",
   })
   status!: "PENDING" | "REVIEWING" | "SHORTLISTED" | "INTERVIEW" | "OFFERED" | "REJECTED" | "WITHDRAWN";

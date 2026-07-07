@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { EmployerProfile, Job, JobStatus, PlanType } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
+import { jobWithEmployerEmailInclude } from "@/common/types/job-with-employer-email.type";
 
 type EmployerListItem = EmployerProfile & {
   user: { email: string };
@@ -76,7 +77,7 @@ export class AdminRepository {
   findJobWithEmployerEmail(id: string) {
     return this.prisma.job.findUnique({
       where: { id },
-      include: { employer: { include: { user: { select: { email: true } } } } },
+      include: jobWithEmployerEmailInclude,
     });
   }
 

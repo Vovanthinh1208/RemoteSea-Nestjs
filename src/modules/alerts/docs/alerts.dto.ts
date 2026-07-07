@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { JOB_TYPE_VALUES, EXPERIENCE_LEVEL_VALUES } from "@/common/constants/enum-values.constants";
 
 /**
  * Swagger-only request/response shapes for the Alerts module.
@@ -15,10 +16,10 @@ export class CreateAlertRequestDto {
   @ApiPropertyOptional({ maxLength: 200, example: "react typescript" })
   keywords?: string;
 
-  @ApiPropertyOptional({ enum: ["FULL_TIME", "PART_TIME", "CONTRACT", "FREELANCE"], example: "FULL_TIME" })
+  @ApiPropertyOptional({ enum: JOB_TYPE_VALUES, example: "FULL_TIME" })
   jobType?: "FULL_TIME" | "PART_TIME" | "CONTRACT" | "FREELANCE";
 
-  @ApiPropertyOptional({ enum: ["ENTRY", "MID", "SENIOR", "LEAD", "EXECUTIVE"], example: "SENIOR" })
+  @ApiPropertyOptional({ enum: EXPERIENCE_LEVEL_VALUES, example: "SENIOR" })
   level?: "ENTRY" | "MID" | "SENIOR" | "LEAD" | "EXECUTIVE";
 
   @ApiPropertyOptional({ type: Number, minimum: 1, example: 80000, description: "Matches jobs with salaryMin >= value" })
@@ -71,10 +72,10 @@ export class AlertResponseDto {
   @ApiPropertyOptional({ nullable: true, example: "react typescript" })
   keywords!: string | null;
 
-  @ApiPropertyOptional({ enum: ["FULL_TIME", "PART_TIME", "CONTRACT", "FREELANCE"], nullable: true, example: "FULL_TIME" })
+  @ApiPropertyOptional({ enum: JOB_TYPE_VALUES, nullable: true, example: "FULL_TIME" })
   jobType!: string | null;
 
-  @ApiPropertyOptional({ enum: ["ENTRY", "MID", "SENIOR", "LEAD", "EXECUTIVE"], nullable: true, example: "SENIOR" })
+  @ApiPropertyOptional({ enum: EXPERIENCE_LEVEL_VALUES, nullable: true, example: "SENIOR" })
   level!: string | null;
 
   @ApiPropertyOptional({ nullable: true, example: 80000 })

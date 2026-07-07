@@ -1,4 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import {
+  JOB_TYPE_VALUES,
+  EXPERIENCE_LEVEL_VALUES,
+  PLAN_TYPE_VALUES,
+  JOB_STATUS_VALUES,
+} from "@/common/constants/enum-values.constants";
 
 /**
  * Swagger-only request/response shapes for the Jobs module.
@@ -7,11 +13,6 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
  * not class-validator — these classes exist purely so Swagger can render a
  * typed schema in /docs. They are never imported outside this docs/ folder.
  */
-
-const JOB_TYPE_VALUES = ["FULL_TIME", "PART_TIME", "CONTRACT", "FREELANCE"] as const;
-const EXPERIENCE_LEVEL_VALUES = ["ENTRY", "MID", "SENIOR", "LEAD", "EXECUTIVE"] as const;
-const PLAN_TYPE_VALUES = ["STANDARD", "FEATURED", "HANDS_ON"] as const;
-const JOB_STATUS_VALUES = ["DRAFT", "PENDING_REVIEW", "ACTIVE", "CLOSED", "REJECTED"] as const;
 
 export class CreateJobRequestDto {
   @ApiProperty({ minLength: 5, maxLength: 120, example: "Senior Backend Engineer" })
