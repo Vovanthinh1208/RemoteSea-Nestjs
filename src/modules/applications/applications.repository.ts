@@ -42,22 +42,24 @@ export class ApplicationsRepository {
     });
   }
 
-  create(input: CreateApplicationInput): Promise<Application> {
-    return this.prisma.application.create({
-      data: {
-        jobId: input.jobId,
-        talentId: input.talentId,
-        coverLetter: input.coverLetter,
-        resumeUrl: input.resumeUrl,
-      },
-    });
-  }
-
-  incrementApplyCountAndGetEmployerEmail(jobId: string): Promise<JobWithEmployerEmail> {
-    return this.prisma.job.update({
-      where: { id: jobId },
-      data: { applyCount: { increment: 1 } },
-      include: jobWithEmployerEmailInclude,
-    });
+  async createAndIncrementApplyCount(
+    input: CreateApplicationInput
+  ): Promise<{ application: Application; job: JobWithEmployerEmail }> {
+    const [application, job] = await this.prisma.$transaction([
+      this.prisma.application.create({
+        data: {
+          jobId: input.jobId,
+          talentId: input.talentId,
+          coverLetter: input.coverLetter,
+          resumeUrl: input.resumeUrl,
+        },
+      }),
+      this.prisma.job.update({
+        where: { id: input.jobId },
+        data: { applyCount: { increment: 1 } },
+        include: jobWithEmployerEmailInclude,
+      }),
+    ]);
+    return { application, job };
   }
 }

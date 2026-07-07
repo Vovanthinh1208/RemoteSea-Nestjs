@@ -30,14 +30,12 @@ export class ApplicationsService {
       throw new ConflictApiException("Already applied");
     }
 
-    const application = await this.applicationsRepository.create({
+    const { application, job } = await this.applicationsRepository.createAndIncrementApplyCount({
       jobId: dto.jobId,
       talentId: talent.id,
       coverLetter: dto.coverLetter,
       resumeUrl: dto.resumeUrl,
     });
-
-    const job = await this.applicationsRepository.incrementApplyCountAndGetEmployerEmail(dto.jobId);
 
     await this.emailService.sendApplicationReceivedEmail(
       job.employer.user.email,

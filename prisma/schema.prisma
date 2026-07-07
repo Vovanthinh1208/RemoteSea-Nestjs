@@ -103,6 +103,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
   @@map("accounts")
 }
 
@@ -114,6 +115,7 @@ model Session {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("sessions")
 }
 
@@ -248,6 +250,7 @@ model Job {
   savedBy      SavedJob[]
 
   @@index([status, publishedAt])
+  @@index([status, isFeatured, publishedAt])
   @@index([employerId])
   @@index([planPaid, paidAt])
   @@map("jobs")
@@ -305,8 +308,8 @@ model Application {
   talent TalentProfile @relation(fields: [talentId], references: [id], onDelete: Cascade)
 
   @@unique([jobId, talentId])
-  @@index([talentId])
-  @@index([jobId])
+  @@index([talentId, appliedAt])
+  @@index([jobId, appliedAt])
   @@map("applications")
 }
 
