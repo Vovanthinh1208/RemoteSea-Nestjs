@@ -1,6 +1,6 @@
 import { applyDecorators } from "@nestjs/common";
 import { ApiBody, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { InternalServerErrorApiResponse } from "@/core/swagger/common.responses";
+import { InternalServerErrorApiResponse, rateLimitResponse } from "@/core/swagger/common.responses";
 import {
   ForgotPasswordRequestDto,
   LoginRequestDto,
@@ -28,7 +28,6 @@ import {
   InvalidCredentialsResponse,
   InvalidOrExpiredTokenResponse,
   ValidationErrorResponse,
-  registerRateLimitResponse,
 } from "./auth.responses";
 
 export const ApiAuthTag = () => applyDecorators(ApiTags("Auth"));
@@ -44,7 +43,7 @@ export const ApiRegister = () =>
     ApiCreatedResponse({ description: "User created", type: RegisterResponseDto, schema: { example: RegisterResponseExample } }),
     ValidationErrorResponse,
     EmailAlreadyRegisteredResponse,
-    registerRateLimitResponse("5 req/60s per IP"),
+    rateLimitResponse("5 req/60s per IP"),
     InternalServerErrorApiResponse
   );
 
@@ -124,7 +123,7 @@ export const ApiForgotPassword = () =>
     ApiBody({ type: ForgotPasswordRequestDto, examples: { default: { value: ForgotPasswordRequestExample } } }),
     ApiOkResponse({ description: "Request accepted", type: MessageResponseDto, schema: { example: ForgotPasswordResponseExample } }),
     ValidationErrorResponse,
-    registerRateLimitResponse("3 req/60s per IP"),
+    rateLimitResponse("3 req/60s per IP"),
     InternalServerErrorApiResponse
   );
 
@@ -135,6 +134,6 @@ export const ApiResetPassword = () =>
     ApiOkResponse({ description: "Password updated", type: MessageResponseDto, schema: { example: ResetPasswordResponseExample } }),
     ValidationErrorResponse,
     InvalidOrExpiredTokenResponse,
-    registerRateLimitResponse("5 req/60s per IP"),
+    rateLimitResponse("5 req/60s per IP"),
     InternalServerErrorApiResponse
   );

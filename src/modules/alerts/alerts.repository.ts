@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { JobAlert, Prisma } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
-import type { JobWithRelations } from "@/common/types/job-with-relations.type";
+import { jobWithRelationsInclude, type JobWithRelations } from "@/common/types/job-with-relations.type";
 
 const alertWithCategoriesInclude = {
   categories: { include: { category: true } },
@@ -65,11 +65,7 @@ export class AlertsRepository {
       where,
       take: 10,
       orderBy: { publishedAt: "desc" },
-      include: {
-        employer: { select: { companyName: true, logoUrl: true, slug: true } },
-        categories: { include: { category: true } },
-        skills: { include: { skill: true } },
-      },
+      include: jobWithRelationsInclude,
     }) as Promise<JobWithRelations[]>;
   }
 

@@ -2,12 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { SavedJob } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 import type { SavedJobWithJob } from "./interfaces";
-
-const JOB_INCLUDE = {
-  employer: { select: { companyName: true, logoUrl: true, slug: true } },
-  categories: { include: { category: true } },
-  skills: { include: { skill: true } },
-} as const;
+import { jobWithRelationsInclude } from "@/common/types/job-with-relations.type";
 
 @Injectable()
 export class SavedRepository {
@@ -17,7 +12,7 @@ export class SavedRepository {
     return this.prisma.savedJob.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
-      include: { job: { include: JOB_INCLUDE } },
+      include: { job: { include: jobWithRelationsInclude } },
     }) as Promise<SavedJobWithJob[]>;
   }
 

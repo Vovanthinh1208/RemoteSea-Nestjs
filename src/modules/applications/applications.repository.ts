@@ -1,13 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import type { Application, TalentProfile } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
-import type { ApplicationWithJob, CreateApplicationInput, JobWithEmployerEmail } from "./interfaces";
-
-const JOB_INCLUDE = {
-  employer: { select: { companyName: true, logoUrl: true, slug: true } },
-  categories: { include: { category: true } },
-  skills: { include: { skill: true } },
-} as const;
+import type { ApplicationWithJob, CreateApplicationInput } from "./interfaces";
+import { jobWithRelationsInclude } from "@/common/types/job-with-relations.type";
+import {
+  jobWithEmployerEmailInclude,
+  type JobWithEmployerEmail,
+} from "@/common/types/job-with-employer-email.type";
 
 @Injectable()
 export class ApplicationsRepository {
@@ -33,7 +32,7 @@ export class ApplicationsRepository {
     return this.prisma.application.findMany({
       where: { talentId },
       orderBy: { appliedAt: "desc" },
-      include: { job: { include: JOB_INCLUDE } },
+      include: { job: { include: jobWithRelationsInclude } },
     }) as Promise<ApplicationWithJob[]>;
   }
 
@@ -58,7 +57,7 @@ export class ApplicationsRepository {
     return this.prisma.job.update({
       where: { id: jobId },
       data: { applyCount: { increment: 1 } },
-      include: { employer: { include: { user: { select: { email: true } } } } },
+      include: jobWithEmployerEmailInclude,
     });
   }
 }

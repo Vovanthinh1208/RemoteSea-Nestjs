@@ -2,14 +2,13 @@ import { Injectable } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
-import { nanoid } from "nanoid";
 import { AuthRepository } from "./auth.repository";
 import { AuthMapper } from "./auth.mapper";
 import { RESET_TOKEN_TTL_MS } from "./constants";
 import type { RegisterDto } from "./dto/register.dto";
 import type { RegisteredUser, OAuthProfile } from "./interfaces";
 import { EmailService } from "@/common/services/email.service";
-import { slugify } from "@/common/utils/slugify";
+import { uniqueSlug } from "@/common/utils/slugify";
 import { BCRYPT_SALT_ROUNDS } from "@/common/constants/bcrypt.constants";
 import {
   BadRequestApiException,
@@ -38,7 +37,7 @@ export class AuthService {
       email: dto.email,
       passwordHash,
       role: dto.role,
-      talentSlug: dto.role === "TALENT" ? `${slugify(dto.name)}-${nanoid(6)}` : undefined,
+      talentSlug: dto.role === "TALENT" ? uniqueSlug(dto.name) : undefined,
     });
 
     await this.emailService.sendWelcomeEmail(user.email, user.name ?? "there");

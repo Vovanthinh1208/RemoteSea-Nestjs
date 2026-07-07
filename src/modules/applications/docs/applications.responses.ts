@@ -1,4 +1,4 @@
-import { ApiBadRequestResponse, ApiConflictResponse, ApiForbiddenResponse, ApiTooManyRequestsResponse } from "@nestjs/swagger";
+import { ApiBadRequestResponse, ApiConflictResponse, ApiForbiddenResponse } from "@nestjs/swagger";
 import { ValidationErrorExample } from "./applications.examples";
 
 /** Reusable, module-specific Swagger response decorators for the Applications module. */
@@ -17,9 +17,3 @@ export const AlreadyAppliedResponse = ApiConflictResponse({
   description: "A duplicate (jobId, talentId) application already exists",
   schema: { example: { error: "Already applied" } },
 });
-
-export const applyRateLimitResponse = (limit: string) =>
-  ApiTooManyRequestsResponse({
-    description: `Rate limit exceeded (${limit})`,
-    schema: { example: { error: "Too many requests. Please slow down and try again shortly." } },
-  });

@@ -1,4 +1,9 @@
-import { ApiForbiddenResponse, ApiInternalServerErrorResponse, ApiUnauthorizedResponse } from "@nestjs/swagger";
+import {
+  ApiForbiddenResponse,
+  ApiInternalServerErrorResponse,
+  ApiTooManyRequestsResponse,
+  ApiUnauthorizedResponse,
+} from "@nestjs/swagger";
 
 /**
  * Cross-cutting Swagger response decorators shared by every module.
@@ -22,3 +27,9 @@ export const InternalServerErrorApiResponse = ApiInternalServerErrorResponse({
   description: "Unhandled error (e.g. a database or upstream integration failure)",
   schema: { example: { error: "Internal server error" } },
 });
+
+export const rateLimitResponse = (limit: string) =>
+  ApiTooManyRequestsResponse({
+    description: `Rate limit exceeded (${limit})`,
+    schema: { example: { error: "Too many requests. Please slow down and try again shortly." } },
+  });

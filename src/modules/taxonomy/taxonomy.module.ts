@@ -7,6 +7,5 @@ import { TaxonomyRepository } from "./taxonomy.repository";
 @Module({
   controllers: [CategoriesController, SkillsController],
   providers: [TaxonomyService, TaxonomyRepository],
-  exports: [TaxonomyService],
 })
 export class TaxonomyModule {}

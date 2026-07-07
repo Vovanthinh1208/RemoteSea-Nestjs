@@ -1,10 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import type { Job } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
+import {
+  jobWithEmployerEmailInclude,
+  type JobWithEmployerEmail,
+} from "@/common/types/job-with-employer-email.type";
 
 type JobWithEmployerUserId = Job & { employer: { userId: string } };
-
-type JobWithEmployerEmail = Job & { employer: { user: { email: string } } };
 
 @Injectable()
 export class BillingRepository {
@@ -28,7 +30,7 @@ export class BillingRepository {
     return this.prisma.job.update({
       where: { id: jobId },
       data: { planPaid: true, paidAt: new Date(), status: "PENDING_REVIEW" },
-      include: { employer: { include: { user: { select: { email: true } } } } },
+      include: jobWithEmployerEmailInclude,
     });
   }
 }

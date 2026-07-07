@@ -1,12 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import type { Job } from "@prisma/client";
-import { nanoid } from "nanoid";
 import { JobsRepository } from "./jobs.repository";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
 import { buildJobOrderBy, buildJobWhere, computeFacets } from "./job-search.util";
-import { slugify } from "@/common/utils/slugify";
+import { uniqueSlug } from "@/common/utils/slugify";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 import {
   BadRequestApiException,
@@ -60,7 +59,7 @@ export class JobsService {
     return this.jobsRepository.create({
       ...jobData,
       employer: { connect: { id: employer.id } },
-      slug: `${slugify(jobData.title)}-${nanoid(6)}`,
+      slug: uniqueSlug(jobData.title),
       status: "DRAFT",
       categories: { create: categoryIds.map((categoryId) => ({ categoryId })) },
       ...(skillIds.length && { skills: { create: skillIds.map((skillId) => ({ skillId })) } }),

@@ -1,10 +1,9 @@
 import { Injectable } from "@nestjs/common";
-import { nanoid } from "nanoid";
 import { TalentRepository } from "./talent.repository";
 import { TalentMapper } from "./talent.mapper";
 import type { TalentProfileDto } from "./dto/update-talent-profile.dto";
 import type { OwnTalentProfile, TalentProfileWithSkills } from "./interfaces";
-import { slugify } from "@/common/utils/slugify";
+import { uniqueSlug } from "@/common/utils/slugify";
 import { NotFoundApiException } from "@/common/exceptions/api.exception";
 
 @Injectable()
@@ -30,7 +29,7 @@ export class TalentService {
   async upsertProfile(userId: string, dto: TalentProfileDto): Promise<TalentProfileWithSkills> {
     const { skills, ...profileData } = dto;
     const user = await this.talentRepository.findUserNameOrThrow(userId);
-    const slug = `${slugify(user.name ?? "talent")}-${nanoid(6)}`;
+    const slug = uniqueSlug(user.name ?? "talent");
 
     const profile = await this.talentRepository.upsertProfile(userId, slug, profileData);
 

@@ -1,6 +1,6 @@
 import { applyDecorators } from "@nestjs/common";
 import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { InternalServerErrorApiResponse, UnauthorizedApiResponse } from "@/core/swagger/common.responses";
+import { InternalServerErrorApiResponse, UnauthorizedApiResponse, rateLimitResponse } from "@/core/swagger/common.responses";
 import { ChangePasswordRequestDto, DeleteAccountResponseDto, MessageResponseDto, UpdateUserRequestDto, UpdateUserResponseDto } from "./users.dto";
 import {
   ChangePasswordRequestExample,
@@ -13,7 +13,6 @@ import {
   IncorrectCurrentPasswordResponse,
   SocialSignInNoPasswordResponse,
   ValidationErrorResponse,
-  changePasswordRateLimitResponse,
 } from "./users.responses";
 
 export const ApiUsersTag = () => applyDecorators(ApiTags("Users"), ApiBearerAuth("bearer"));
@@ -51,6 +50,6 @@ export const ApiChangePassword = () =>
     SocialSignInNoPasswordResponse,
     IncorrectCurrentPasswordResponse,
     UnauthorizedApiResponse,
-    changePasswordRateLimitResponse("5 req/60s per user"),
+    rateLimitResponse("5 req/60s per user"),
     InternalServerErrorApiResponse
   );

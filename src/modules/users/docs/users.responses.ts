@@ -1,4 +1,4 @@
-import { ApiBadRequestResponse, ApiTooManyRequestsResponse } from "@nestjs/swagger";
+import { ApiBadRequestResponse } from "@nestjs/swagger";
 import { IncorrectCurrentPasswordExample, SocialSignInNoPasswordExample, ValidationErrorExample } from "./users.examples";
 
 /** Reusable, module-specific Swagger response decorators for the Users module. */
@@ -17,9 +17,3 @@ export const IncorrectCurrentPasswordResponse = ApiBadRequestResponse({
   description: "The supplied `currentPassword` doesn't match",
   schema: { example: IncorrectCurrentPasswordExample },
 });
-
-export const changePasswordRateLimitResponse = (limit: string) =>
-  ApiTooManyRequestsResponse({
-    description: `Rate limit exceeded (${limit})`,
-    schema: { example: { error: "Too many requests. Please slow down and try again shortly." } },
-  });

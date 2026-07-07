@@ -2,12 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { Prisma, Job } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 import { activeJobBaseWhere, facetSelect, type FacetRow } from "./job-search.util";
-
-const jobListInclude = {
-  employer: { select: { companyName: true, logoUrl: true, slug: true } },
-  categories: { include: { category: true } },
-  skills: { include: { skill: true } },
-} satisfies Prisma.JobInclude;
+import { jobWithRelationsInclude } from "@/common/types/job-with-relations.type";
 
 const jobDetailInclude = {
   employer: {
@@ -40,7 +35,7 @@ export class JobsRepository {
       skip,
       take,
       orderBy,
-      include: jobListInclude,
+      include: jobWithRelationsInclude,
     });
   }
 

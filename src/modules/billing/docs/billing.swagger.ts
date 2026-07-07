@@ -1,6 +1,6 @@
 import { applyDecorators } from "@nestjs/common";
 import { ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiHeader, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { InternalServerErrorApiResponse, UnauthorizedApiResponse } from "@/core/swagger/common.responses";
+import { InternalServerErrorApiResponse, UnauthorizedApiResponse, rateLimitResponse } from "@/core/swagger/common.responses";
 import { CheckoutRequestDto, CheckoutResponseDto, WebhookResponseDto } from "./billing.dto";
 import { CheckoutRequestExample, CheckoutResponseExample, WebhookResponseExample } from "./billing.examples";
 import {
@@ -9,7 +9,6 @@ import {
   JobNotPayableResponse,
   MissingSignatureResponse,
   ValidationErrorResponse,
-  checkoutRateLimitResponse,
 } from "./billing.responses";
 
 export const ApiBillingTag = () => applyDecorators(ApiTags("Billing"));
@@ -29,7 +28,7 @@ export const ApiCheckout = () =>
     JobNotPayableResponse,
     UnauthorizedApiResponse,
     JobNotFoundResponse,
-    checkoutRateLimitResponse("10 req/60s per user"),
+    rateLimitResponse("10 req/60s per user"),
     InternalServerErrorApiResponse
   );
 

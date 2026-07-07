@@ -1,9 +1,9 @@
 import { applyDecorators } from "@nestjs/common";
 import { ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { InternalServerErrorApiResponse, UnauthorizedApiResponse } from "@/core/swagger/common.responses";
+import { InternalServerErrorApiResponse, UnauthorizedApiResponse, rateLimitResponse } from "@/core/swagger/common.responses";
 import { ApplicationResponseDto, ApplicationWithJobResponseDto, ApplyRequestDto } from "./applications.dto";
 import { ApplicationsListExample, ApplyRequestExample, ApplyResponseExample } from "./applications.examples";
-import { AlreadyAppliedResponse, TalentProfileRequiredResponse, ValidationErrorResponse, applyRateLimitResponse } from "./applications.responses";
+import { AlreadyAppliedResponse, TalentProfileRequiredResponse, ValidationErrorResponse } from "./applications.responses";
 
 export const ApiApplicationsTag = () => applyDecorators(ApiTags("Applications"));
 
@@ -39,6 +39,6 @@ export const ApiApply = () =>
     UnauthorizedApiResponse,
     TalentProfileRequiredResponse,
     AlreadyAppliedResponse,
-    applyRateLimitResponse("10 req/60s per user"),
+    rateLimitResponse("10 req/60s per user"),
     InternalServerErrorApiResponse
   );

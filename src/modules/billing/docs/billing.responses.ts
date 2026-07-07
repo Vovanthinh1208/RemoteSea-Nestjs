@@ -1,4 +1,4 @@
-import { ApiBadRequestResponse, ApiNotFoundResponse, ApiTooManyRequestsResponse } from "@nestjs/swagger";
+import { ApiBadRequestResponse, ApiNotFoundResponse } from "@nestjs/swagger";
 import { InvalidSignatureExample, JobNotFoundExample, JobNotPayableExample, MissingSignatureExample, ValidationErrorExample } from "./billing.examples";
 
 /** Reusable, module-specific Swagger response decorators for the Billing module. */
@@ -17,12 +17,6 @@ export const JobNotFoundResponse = ApiNotFoundResponse({
   description: "Job doesn't exist or isn't owned by the caller",
   schema: { example: JobNotFoundExample },
 });
-
-export const checkoutRateLimitResponse = (limit: string) =>
-  ApiTooManyRequestsResponse({
-    description: `Rate limit exceeded (${limit})`,
-    schema: { example: { error: "Too many requests. Please slow down and try again shortly." } },
-  });
 
 export const MissingSignatureResponse = ApiBadRequestResponse({
   description: "`stripe-signature` header absent, or `rawBody` missing (see `rawBody: true` in main.ts)",
