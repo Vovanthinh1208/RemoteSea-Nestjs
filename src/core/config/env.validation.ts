@@ -7,7 +7,6 @@ const envSchema = z.object({
   // Required — the app cannot run without these.
   DATABASE_URL: z.string().url(),
   AUTH_SECRET: z.string().min(1, "AUTH_SECRET is required"),
-  APP_URL: z.string().url().default("http://localhost:4000"),
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
   JWT_EXPIRES_IN: z.string().default("30d"),
 

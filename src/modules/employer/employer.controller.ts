@@ -23,12 +23,12 @@ import {
 
 @ApiEmployerTag()
 @Controller("employer")
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class EmployerController {
   constructor(private readonly employerService: EmployerService) {}
 
   @ApiCreateEmployerProfile()
   @Post("profile")
-  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
   async createProfile(
     @CurrentUser() user: AuthenticatedUser,
@@ -39,7 +39,6 @@ export class EmployerController {
 
   @ApiGetEmployerProfile()
   @Get("profile")
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("EMPLOYER")
   async getProfile(@CurrentUser() user: AuthenticatedUser) {
     return this.employerService.getProfile(user.id);
@@ -47,7 +46,6 @@ export class EmployerController {
 
   @ApiUpdateEmployerProfile()
   @Patch("profile")
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("EMPLOYER")
   async updateProfile(
     @CurrentUser() user: AuthenticatedUser,
@@ -58,7 +56,6 @@ export class EmployerController {
 
   @ApiListEmployerJobs()
   @Get("jobs")
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("EMPLOYER")
   async listJobs(
     @CurrentUser() user: AuthenticatedUser,
@@ -69,7 +66,6 @@ export class EmployerController {
 
   @ApiListJobApplications()
   @Get("jobs/:id/applications")
-  @UseGuards(JwtAuthGuard)
   async listJobApplications(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id") id: string,
@@ -80,7 +76,6 @@ export class EmployerController {
 
   @ApiUpdateApplication()
   @Patch("applications/:id")
-  @UseGuards(JwtAuthGuard)
   async updateApplication(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id") id: string,

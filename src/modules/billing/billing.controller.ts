@@ -35,10 +35,7 @@ export class BillingController {
   @Post("webhook")
   async webhook(@Req() req: RawBodyRequest<Request>) {
     const signature = req.headers["stripe-signature"];
-    if (!signature || Array.isArray(signature)) {
-      throw new BadRequestApiException("Missing signature");
-    }
-    if (!req.rawBody) {
+    if (!signature || Array.isArray(signature) || !req.rawBody) {
       throw new BadRequestApiException("Missing signature");
     }
     return this.billingService.handleWebhookEvent(req.rawBody, signature);

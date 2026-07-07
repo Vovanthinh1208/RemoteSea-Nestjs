@@ -32,6 +32,5 @@ const oauthProviders: Provider[] = [
   ],
   controllers: [AuthController],
   providers: [AuthService, AuthRepository, JwtStrategy, ...oauthProviders],
-  exports: [AuthService],
 })
 export class AuthModule {}
