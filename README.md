@@ -78,6 +78,8 @@ npm run start:dev         # http://localhost:4000
 
 This service is designed to share a PostgreSQL database with the original Next.js app (same Prisma schema, same migration history in `prisma/migrations`). Point `DATABASE_URL` at the same database, or run `docker compose up -d` from the sibling `remotesea` repo to start a local Postgres instance.
 
+Alternatively, this repo has its own `docker-compose.yml` (Postgres + migrate + app). Run it with `npm run docker:up` / `npm run docker:down` rather than calling `docker compose` directly — these pass `--env-file .env.docker`, which keeps Compose's local defaults isolated from whatever `DATABASE_URL` is in your real `.env` (which may point at a shared/remote database).
+
 ## Environment variables
 
 See `.env.example` for the full list. Required: `DATABASE_URL`, `AUTH_SECRET`. Everything else (Google/GitHub OAuth, Stripe, Resend, S3) is optional and the corresponding features degrade gracefully — routes for unconfigured OAuth providers simply aren't registered, and Stripe/S3/email calls only fail at request time if hit without credentials.
