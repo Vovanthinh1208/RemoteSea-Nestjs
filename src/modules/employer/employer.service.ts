@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { nanoid } from "nanoid";
+import { Prisma } from "@prisma/client";
 import {
   EmployerRepository,
   type ProfileWithApplicationCounts,
@@ -11,13 +11,13 @@ import type { UpdateEmployerProfileDto } from "./dto/update-employer-profile.dto
 import type { ListEmployerJobsDto } from "./dto/list-employer-jobs.dto";
 import type { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
 import type { UpdateApplicationDto } from "./dto/update-application.dto";
-import { slugify } from "@/common/utils/slugify";
+import { slugify, withUniqueSuffix } from "@/common/utils/slugify";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
+import { assertFound } from "@/common/utils/assert-found";
 import {
   BadRequestApiException,
   ConflictApiException,
   ForbiddenApiException,
-  NotFoundApiException,
 } from "@/common/exceptions/api.exception";
 
 @Injectable()
@@ -35,18 +35,26 @@ export class EmployerService {
 
     const base = slugify(dto.companyName);
     const taken = await this.employerRepository.findProfileBySlug(base);
-    const slug = taken ? `${base}-${nanoid(6)}` : base;
+    const slug = taken ? withUniqueSuffix(base) : base;
 
-    return this.employerRepository.createProfileForUser(userId, dto, slug);
+    try {
+      return await this.employerRepository.createProfileForUser(userId, dto, slug);
+    } catch (error) {
+      // Two concurrent signups for the same company name can both pass the
+      // findProfileBySlug check above before either writes — retry once with a
+      // guaranteed-unique slug instead of surfacing a raw conflict to the loser.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        return this.employerRepository.createProfileForUser(userId, dto, withUniqueSuffix(base));
+      }
+      throw error;
+    }
   }
 
   async getProfile(
     userId: string
   ): Promise<Omit<ProfileWithApplicationCounts, "jobs"> & { totalApplications: number }> {
     const profile = await this.employerRepository.findProfileWithApplicationCounts(userId);
-    if (!profile) {
-      throw new NotFoundApiException("Profile not found");
-    }
+    assertFound(profile, "Profile not found");
 
     const { jobs, ...rest } = profile;
     const totalApplications = jobs.reduce((sum, j) => sum + j._count.applications, 0);
@@ -56,9 +64,7 @@ export class EmployerService {
 
   async updateProfile(userId: string, dto: UpdateEmployerProfileDto): Promise<PublicEmployerProfile> {
     const profile = await this.employerRepository.findProfileByUserId(userId);
-    if (!profile) {
-      throw new NotFoundApiException("Profile not found");
-    }
+    assertFound(profile, "Profile not found");
 
     return this.employerRepository.updateProfile(profile.id, dto);
   }
@@ -93,9 +99,7 @@ export class EmployerService {
 
   async listJobApplications(userId: string, jobId: string, dto: ListJobApplicationsDto) {
     const job = await this.employerRepository.findJobWithEmployerOwner(jobId);
-    if (!job) {
-      throw new NotFoundApiException("Job not found");
-    }
+    assertFound(job, "Job not found");
     if (job.employer.userId !== userId) {
       throw new ForbiddenApiException();
     }
@@ -117,9 +121,7 @@ export class EmployerService {
 
   async updateApplication(userId: string, applicationId: string, dto: UpdateApplicationDto) {
     const application = await this.employerRepository.findApplicationWithJobOwner(applicationId);
-    if (!application) {
-      throw new NotFoundApiException("Application not found");
-    }
+    assertFound(application, "Application not found");
     if (application.job.employer.userId !== userId) {
       throw new ForbiddenApiException();
     }
@@ -129,6 +131,15 @@ export class EmployerService {
       throw new BadRequestApiException(`Cannot transition from ${application.status} to ${status}`);
     }
 
-    return this.employerRepository.updateApplication(applicationId, status, notes);
+    const updated = await this.employerRepository.updateApplication(
+      applicationId,
+      application.status,
+      status,
+      notes
+    );
+    if (!updated) {
+      throw new ConflictApiException("Application was updated concurrently — please refresh and try again");
+    }
+    return updated;
   }
 }

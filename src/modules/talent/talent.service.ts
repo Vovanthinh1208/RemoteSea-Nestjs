@@ -4,7 +4,7 @@ import { TalentMapper } from "./talent.mapper";
 import type { TalentProfileDto } from "./dto/update-talent-profile.dto";
 import type { OwnTalentProfile, TalentProfileWithSkills } from "./interfaces";
 import { uniqueSlug } from "@/common/utils/slugify";
-import { NotFoundApiException } from "@/common/exceptions/api.exception";
+import { assertFound } from "@/common/utils/assert-found";
 
 @Injectable()
 export class TalentService {
@@ -12,23 +12,20 @@ export class TalentService {
 
   async getOwnProfile(userId: string): Promise<OwnTalentProfile> {
     const profile = await this.talentRepository.findByUserId(userId);
-    if (!profile) {
-      throw new NotFoundApiException("Profile not found");
-    }
+    assertFound(profile, "Profile not found");
     return profile;
   }
 
   async getPublicProfile(slug: string): Promise<Record<string, unknown>> {
     const profile = await this.talentRepository.findBySlug(slug);
-    if (!profile) {
-      throw new NotFoundApiException("Profile not found");
-    }
+    assertFound(profile, "Profile not found");
     return TalentMapper.toPublicProfile(profile);
   }
 
   async upsertProfile(userId: string, dto: TalentProfileDto): Promise<TalentProfileWithSkills> {
     const { skills, ...profileData } = dto;
-    const user = await this.talentRepository.findUserNameOrThrow(userId);
+    const user = await this.talentRepository.findUserName(userId);
+    assertFound(user, "User not found");
     const slug = uniqueSlug(user.name ?? "talent");
 
     const profile = await this.talentRepository.upsertProfile(userId, slug, profileData);
@@ -37,6 +34,8 @@ export class TalentService {
       await this.talentRepository.replaceSkills(profile.id, skills);
     }
 
-    return this.talentRepository.findByIdWithSkillsOrThrow(profile.id);
+    const updated = await this.talentRepository.findByIdWithSkills(profile.id);
+    assertFound(updated, "Profile not found");
+    return updated;
   }
 }

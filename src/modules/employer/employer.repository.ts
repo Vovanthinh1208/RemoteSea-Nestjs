@@ -170,14 +170,21 @@ export class EmployerRepository {
     });
   }
 
-  updateApplication(
+  // Only writes if status still matches what the caller last read, so two
+  // concurrent PATCHes against the same application can't silently overwrite
+  // one another (last-write-wins). Returns null if the row moved underneath us.
+  async updateApplication(
     id: string,
+    expectedStatus: ApplicationStatus,
     status: ApplicationStatus,
     notes: string | undefined
-  ): Promise<Application> {
-    return this.prisma.application.update({
-      where: { id },
+  ): Promise<Application | null> {
+    const { count } = await this.prisma.application.updateMany({
+      where: { id, status: expectedStatus },
       data: { status, ...(notes !== undefined && { notes }) },
     });
+    if (count === 0) return null;
+
+    return this.prisma.application.findUnique({ where: { id } });
   }
 }

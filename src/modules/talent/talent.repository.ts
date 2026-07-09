@@ -25,8 +25,8 @@ export class TalentRepository {
     return this.prisma.talentProfile.findUnique({ where: { slug }, ...publicProfileArgs });
   }
 
-  findUserNameOrThrow(userId: string): Promise<Pick<User, "name">> {
-    return this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true } });
+  findUserName(userId: string): Promise<Pick<User, "name"> | null> {
+    return this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
   }
 
   upsertProfile(userId: string, slug: string, data: ProfileScalarData) {
@@ -49,7 +49,7 @@ export class TalentRepository {
     ]);
   }
 
-  findByIdWithSkillsOrThrow(id: string): Promise<TalentProfileWithSkills> {
-    return this.prisma.talentProfile.findUniqueOrThrow({ where: { id }, ...talentProfileWithSkillsArgs });
+  findByIdWithSkills(id: string): Promise<TalentProfileWithSkills | null> {
+    return this.prisma.talentProfile.findUnique({ where: { id }, ...talentProfileWithSkillsArgs });
   }
 }

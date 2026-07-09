@@ -37,12 +37,17 @@ export class EmailService {
     if (!this.enabled) return;
     // The Resend SDK has no built-in request timeout, so a slow/hung upstream
     // call would otherwise block the caller (e.g. the alerts cron loop) indefinitely.
-    await Promise.race([
-      this.resend.emails.send({ from: this.from, to, subject, html }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Email send timed out")), SEND_TIMEOUT_MS)
-      ),
-    ]);
+    let timer: ReturnType<typeof setTimeout>;
+    try {
+      await Promise.race([
+        this.resend.emails.send({ from: this.from, to, subject, html }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Email send timed out")), SEND_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer!);
+    }
   }
 
   async sendWelcomeEmail(to: string, name: string): Promise<void> {

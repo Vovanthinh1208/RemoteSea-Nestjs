@@ -25,12 +25,29 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       return;
     }
 
-    // Catches races that slip past an application-level check-then-write (e.g. two
-    // concurrent "apply to job" requests) — without this, a unique-constraint hit
-    // surfaces as a raw 500 instead of a normal 409.
-    if (exception instanceof Prisma.PrismaClientKnownRequestError && exception.code === "P2002") {
-      response.status(409).json({ error: "Conflict — this record already exists" });
-      return;
+    if (exception instanceof Prisma.PrismaClientKnownRequestError) {
+      switch (exception.code) {
+        // Catches races that slip past an application-level check-then-write (e.g.
+        // two concurrent "apply to job" requests) — without this, a unique-constraint
+        // hit surfaces as a raw 500 instead of a normal 409.
+        case "P2002":
+          response.status(409).json({ error: "Conflict — this record already exists" });
+          return;
+        // findUniqueOrThrow/findFirstOrThrow/deleteOrThrow-style calls throw this on
+        // no match — treat it the same as an application-level not-found.
+        case "P2025":
+          response.status(404).json({ error: "Not found" });
+          return;
+        // Foreign key violation — the request references a record that doesn't exist.
+        case "P2003":
+          response.status(400).json({ error: "Invalid reference — related record does not exist" });
+          return;
+        // Would violate a required relation (e.g. deleting a record another required
+        // relation still points to).
+        case "P2014":
+          response.status(409).json({ error: "Conflict — operation violates a required relation" });
+          return;
+      }
     }
 
     this.logger.error(exception instanceof Error ? exception.stack : exception);

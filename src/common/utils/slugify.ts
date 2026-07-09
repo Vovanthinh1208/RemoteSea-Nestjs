@@ -8,6 +8,6 @@ export const slugify = (text: string): string => {
     .replace(/^-+|-+$/g, "");
 };
 
-export const uniqueSlug = (text: string): string => {
-  return `${slugify(text)}-${nanoid(6)}`;
-};
+export const withUniqueSuffix = (base: string): string => `${base}-${nanoid(6)}`;
+
+export const uniqueSlug = (text: string): string => withUniqueSuffix(slugify(text));
