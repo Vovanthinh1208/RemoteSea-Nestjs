@@ -18,15 +18,24 @@ export class TalentRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   findByUserId(userId: string): Promise<OwnTalentProfile | null> {
-    return this.prisma.talentProfile.findUnique({ where: { userId }, ...ownProfileArgs });
+    return this.prisma.talentProfile.findUnique({
+      where: { userId },
+      ...ownProfileArgs,
+    });
   }
 
   findBySlug(slug: string): Promise<PublicTalentProfile | null> {
-    return this.prisma.talentProfile.findUnique({ where: { slug }, ...publicProfileArgs });
+    return this.prisma.talentProfile.findUnique({
+      where: { slug },
+      ...publicProfileArgs,
+    });
   }
 
   findUserName(userId: string): Promise<Pick<User, "name"> | null> {
-    return this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
   }
 
   // Upsert + skill replacement run in one transaction — previously two separate
@@ -36,7 +45,7 @@ export class TalentRepository {
     userId: string,
     slug: string,
     data: ProfileScalarData,
-    skills: { skillId: string; yearsExp?: number }[] | undefined
+    skills: { skillId: string; yearsExp?: number }[] | undefined,
   ) {
     return this.prisma.$transaction(async (tx) => {
       const profile = await tx.talentProfile.upsert({
@@ -48,7 +57,11 @@ export class TalentRepository {
       if (skills) {
         await tx.talentSkill.deleteMany({ where: { talentId: profile.id } });
         await tx.talentSkill.createMany({
-          data: skills.map((s) => ({ talentId: profile.id, skillId: s.skillId, yearsExp: s.yearsExp })),
+          data: skills.map((s) => ({
+            talentId: profile.id,
+            skillId: s.skillId,
+            yearsExp: s.yearsExp,
+          })),
         });
       }
 
@@ -57,6 +70,9 @@ export class TalentRepository {
   }
 
   findByIdWithSkills(id: string): Promise<TalentProfileWithSkills | null> {
-    return this.prisma.talentProfile.findUnique({ where: { id }, ...talentProfileWithSkillsArgs });
+    return this.prisma.talentProfile.findUnique({
+      where: { id },
+      ...talentProfileWithSkillsArgs,
+    });
   }
 }

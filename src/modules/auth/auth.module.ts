@@ -14,8 +14,12 @@ import type { EnvConfig } from "@/core/config/env.validation";
 // env.ts treating these as optional integrations — only register the
 // strategy (and therefore the route) when credentials are present.
 const oauthProviders: Provider[] = [
-  ...(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET ? [GoogleStrategy] : []),
-  ...(process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET ? [GithubStrategy] : []),
+  ...(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET
+    ? [GoogleStrategy]
+    : []),
+  ...(process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET
+    ? [GithubStrategy]
+    : []),
 ];
 
 @Module({
@@ -26,7 +30,9 @@ const oauthProviders: Provider[] = [
       inject: [ConfigService],
       useFactory: (config: ConfigService<EnvConfig, true>) => ({
         secret: config.get("AUTH_SECRET", { infer: true }),
-        signOptions: { expiresIn: config.get("JWT_EXPIRES_IN", { infer: true }) },
+        signOptions: {
+          expiresIn: config.get("JWT_EXPIRES_IN", { infer: true }),
+        },
       }),
     }),
   ],

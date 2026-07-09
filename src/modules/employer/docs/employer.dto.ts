@@ -49,7 +49,11 @@ export class CreateEmployerProfileResponseDto {
 }
 
 export class UpdateEmployerProfileRequestDto {
-  @ApiPropertyOptional({ minLength: 2, maxLength: 100, example: "RemoteSEA Ltd" })
+  @ApiPropertyOptional({
+    minLength: 2,
+    maxLength: 100,
+    example: "RemoteSEA Ltd",
+  })
   companyName?: string;
 
   @ApiPropertyOptional({ format: "url", example: "https://remotesea.io" })
@@ -73,7 +77,10 @@ export class UpdateEmployerProfileRequestDto {
   @ApiPropertyOptional({ example: "Ho Chi Minh City" })
   hqCity?: string;
 
-  @ApiPropertyOptional({ format: "url", example: "https://remotesea.io/logo.png" })
+  @ApiPropertyOptional({
+    format: "url",
+    example: "https://remotesea.io/logo.png",
+  })
   logoUrl?: string;
 }
 
@@ -87,13 +94,24 @@ export class EmployerProfileDto {
   @ApiProperty({ example: "remotesea-ltd" })
   slug!: string;
 
-  @ApiPropertyOptional({ format: "url", example: "https://remotesea.io/logo.png", nullable: true })
+  @ApiPropertyOptional({
+    format: "url",
+    example: "https://remotesea.io/logo.png",
+    nullable: true,
+  })
   logoUrl?: string | null;
 
-  @ApiPropertyOptional({ format: "url", example: "https://remotesea.io", nullable: true })
+  @ApiPropertyOptional({
+    format: "url",
+    example: "https://remotesea.io",
+    nullable: true,
+  })
   websiteUrl?: string | null;
 
-  @ApiPropertyOptional({ example: "We help remote teams hire across SEA.", nullable: true })
+  @ApiPropertyOptional({
+    example: "We help remote teams hire across SEA.",
+    nullable: true,
+  })
   description?: string | null;
 
   @ApiPropertyOptional({ example: "Technology", nullable: true })
@@ -181,7 +199,10 @@ export class EmployerJobStatsDto {
   @ApiProperty({ example: 5 })
   shortlisted!: number;
 
-  @ApiProperty({ example: 6.4, description: "Computed only over OFFERED applications; 0 if none" })
+  @ApiProperty({
+    example: 6.4,
+    description: "Computed only over OFFERED applications; 0 if none",
+  })
   avgTimeToHireInDays!: number;
 }
 
@@ -239,7 +260,10 @@ export class JobApplicationListItemDto {
   @ApiProperty({ example: "2026-06-10T12:00:00.000Z" })
   appliedAt!: string;
 
-  @ApiPropertyOptional({ example: "I would love to join your team...", nullable: true })
+  @ApiPropertyOptional({
+    example: "I would love to join your team...",
+    nullable: true,
+  })
   coverLetter?: string | null;
 
   @ApiProperty({ type: ApplicationTalentDto })
@@ -272,7 +296,10 @@ export class UpdateApplicationRequestDto {
   @ApiProperty({ enum: APPLICATION_STATUS_VALUES, example: "REVIEWING" })
   status!: (typeof APPLICATION_STATUS_VALUES)[number];
 
-  @ApiPropertyOptional({ maxLength: 2000, example: "Strong candidate, moving to interview." })
+  @ApiPropertyOptional({
+    maxLength: 2000,
+    example: "Strong candidate, moving to interview.",
+  })
   notes?: string;
 }
 
@@ -286,7 +313,10 @@ export class ApplicationResponseDto {
   @ApiProperty({ example: "cltal1a2b3c4d5e6f7g8h9i0" })
   talentId!: string;
 
-  @ApiPropertyOptional({ example: "I would love to join your team...", nullable: true })
+  @ApiPropertyOptional({
+    example: "I would love to join your team...",
+    nullable: true,
+  })
   coverLetter?: string | null;
 
   @ApiPropertyOptional({ format: "url", nullable: true })
@@ -295,7 +325,11 @@ export class ApplicationResponseDto {
   @ApiProperty({ enum: APPLICATION_STATUS_VALUES, example: "REVIEWING" })
   status!: (typeof APPLICATION_STATUS_VALUES)[number];
 
-  @ApiPropertyOptional({ maxLength: 2000, example: "Strong candidate, moving to interview.", nullable: true })
+  @ApiPropertyOptional({
+    maxLength: 2000,
+    example: "Strong candidate, moving to interview.",
+    nullable: true,
+  })
   notes?: string | null;
 
   @ApiProperty({ example: "2026-06-10T12:00:00.000Z" })

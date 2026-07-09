@@ -20,11 +20,15 @@ import type { EnvConfig } from "@/core/config/env.validation";
         // handler, which only failed when that specific route was hit). Fall back
         // to a placeholder so the app boots; billing calls fail at request time
         // instead, matching env.ts treating STRIPE_SECRET_KEY as optional.
-        new Stripe(config.get("STRIPE_SECRET_KEY", { infer: true }) || "sk_test_unconfigured", {
-          apiVersion: "2026-05-27.dahlia" as Stripe.LatestApiVersion,
-          timeout: 10_000,
-          maxNetworkRetries: 2,
-        }),
+        new Stripe(
+          config.get("STRIPE_SECRET_KEY", { infer: true }) ||
+            "sk_test_unconfigured",
+          {
+            apiVersion: "2026-05-27.dahlia" as Stripe.LatestApiVersion,
+            timeout: 10_000,
+            maxNetworkRetries: 2,
+          },
+        ),
       inject: [ConfigService],
     },
   ],

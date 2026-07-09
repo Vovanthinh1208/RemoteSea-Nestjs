@@ -38,7 +38,10 @@ const baseTalentProfile = {
   ],
 };
 
-export const OwnTalentProfileExample = { ...baseTalentProfile, user: { name: "Jane Doe" } };
+export const OwnTalentProfileExample = {
+  ...baseTalentProfile,
+  user: { name: "Jane Doe" },
+};
 
 export const UpsertTalentProfileExample = { ...baseTalentProfile };
 
@@ -59,7 +62,10 @@ export const PublicTalentProfileClosedExample = (() => {
 })();
 
 export const ValidationErrorExample = {
-  error: { formErrors: [], fieldErrors: { headline: ["String must contain at most 120 character(s)"] } },
+  error: {
+    formErrors: [],
+    fieldErrors: { headline: ["String must contain at most 120 character(s)"] },
+  },
 };
 
 export const ProfileNotFoundExample = { error: "Profile not found" };

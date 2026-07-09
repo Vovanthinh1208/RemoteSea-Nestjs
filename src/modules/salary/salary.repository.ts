@@ -10,7 +10,9 @@ export type CategoryWithActiveJobSalaries = {
 export class SalaryRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findCategoriesWithActiveJobSalaries(): Promise<CategoryWithActiveJobSalaries[]> {
+  findCategoriesWithActiveJobSalaries(): Promise<
+    CategoryWithActiveJobSalaries[]
+  > {
     return this.prisma.category.findMany({
       select: {
         name: true,

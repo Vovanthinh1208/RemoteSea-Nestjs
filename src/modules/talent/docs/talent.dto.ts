@@ -11,7 +11,10 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 const LEVELS = ["ENTRY", "MID", "SENIOR", "LEAD", "EXECUTIVE"] as const;
 
 export class TalentSkillRequestDto {
-  @ApiProperty({ description: "CUID of an existing Skill", example: "clx4skill0001node" })
+  @ApiProperty({
+    description: "CUID of an existing Skill",
+    example: "clx4skill0001node",
+  })
   skillId!: string;
 
   @ApiPropertyOptional({ type: Number, minimum: 0, example: 6 })
@@ -22,7 +25,10 @@ export class TalentProfileRequestDto {
   @ApiPropertyOptional({ maxLength: 120, example: "Senior Backend Engineer" })
   headline?: string;
 
-  @ApiPropertyOptional({ maxLength: 2000, example: "8 years building distributed systems in Go and TypeScript." })
+  @ApiPropertyOptional({
+    maxLength: 2000,
+    example: "8 years building distributed systems in Go and TypeScript.",
+  })
   bio?: string;
 
   @ApiPropertyOptional({ example: "Ho Chi Minh City" })
@@ -40,7 +46,10 @@ export class TalentProfileRequestDto {
   @ApiPropertyOptional({ enum: LEVELS, example: "SENIOR" })
   level?: (typeof LEVELS)[number];
 
-  @ApiPropertyOptional({ format: "uri", example: "https://example.com/resume.pdf" })
+  @ApiPropertyOptional({
+    format: "uri",
+    example: "https://example.com/resume.pdf",
+  })
   resumeUrl?: string;
 
   @ApiPropertyOptional({ format: "uri", example: "https://janedoe.dev" })
@@ -49,7 +58,10 @@ export class TalentProfileRequestDto {
   @ApiPropertyOptional({ format: "uri", example: "https://github.com/janedoe" })
   githubUrl?: string;
 
-  @ApiPropertyOptional({ format: "uri", example: "https://linkedin.com/in/janedoe" })
+  @ApiPropertyOptional({
+    format: "uri",
+    example: "https://linkedin.com/in/janedoe",
+  })
   linkedinUrl?: string;
 
   @ApiPropertyOptional({ example: true })
@@ -63,7 +75,8 @@ export class TalentProfileRequestDto {
 
   @ApiPropertyOptional({
     type: [TalentSkillRequestDto],
-    description: "Provided → replaces the entire skill set; omitted → untouched; `[]` → clears",
+    description:
+      "Provided → replaces the entire skill set; omitted → untouched; `[]` → clears",
   })
   skills?: TalentSkillRequestDto[];
 }
@@ -102,7 +115,10 @@ export class PublicTalentOwnerDto {
   @ApiProperty({ example: "Jane Doe" })
   name!: string;
 
-  @ApiPropertyOptional({ example: "https://example.com/avatar.jpg", nullable: true })
+  @ApiPropertyOptional({
+    example: "https://example.com/avatar.jpg",
+    nullable: true,
+  })
   image!: string | null;
 }
 
@@ -119,7 +135,10 @@ export class TalentProfileResponseDto {
   @ApiPropertyOptional({ example: "Senior Backend Engineer", nullable: true })
   headline?: string | null;
 
-  @ApiPropertyOptional({ example: "8 years building distributed systems in Go and TypeScript.", nullable: true })
+  @ApiPropertyOptional({
+    example: "8 years building distributed systems in Go and TypeScript.",
+    nullable: true,
+  })
   bio?: string | null;
 
   @ApiPropertyOptional({ example: "Ho Chi Minh City", nullable: true })
@@ -137,16 +156,25 @@ export class TalentProfileResponseDto {
   @ApiProperty({ enum: LEVELS, example: "SENIOR" })
   level!: (typeof LEVELS)[number];
 
-  @ApiPropertyOptional({ example: "https://example.com/resume.pdf", nullable: true })
+  @ApiPropertyOptional({
+    example: "https://example.com/resume.pdf",
+    nullable: true,
+  })
   resumeUrl?: string | null;
 
   @ApiPropertyOptional({ example: "https://janedoe.dev", nullable: true })
   portfolioUrl?: string | null;
 
-  @ApiPropertyOptional({ example: "https://github.com/janedoe", nullable: true })
+  @ApiPropertyOptional({
+    example: "https://github.com/janedoe",
+    nullable: true,
+  })
   githubUrl?: string | null;
 
-  @ApiPropertyOptional({ example: "https://linkedin.com/in/janedoe", nullable: true })
+  @ApiPropertyOptional({
+    example: "https://linkedin.com/in/janedoe",
+    nullable: true,
+  })
   linkedinUrl?: string | null;
 
   @ApiProperty({ example: true })
@@ -155,14 +183,16 @@ export class TalentProfileResponseDto {
   @ApiPropertyOptional({
     example: 90000,
     nullable: true,
-    description: "Omitted entirely (not null) from the public `GET /talent/:slug` response when `isOpenToWork` is false",
+    description:
+      "Omitted entirely (not null) from the public `GET /talent/:slug` response when `isOpenToWork` is false",
   })
   desiredSalaryMin?: number | null;
 
   @ApiPropertyOptional({
     example: 130000,
     nullable: true,
-    description: "Omitted entirely (not null) from the public `GET /talent/:slug` response when `isOpenToWork` is false",
+    description:
+      "Omitted entirely (not null) from the public `GET /talent/:slug` response when `isOpenToWork` is false",
   })
   desiredSalaryMax?: number | null;
 
@@ -178,7 +208,10 @@ export class TalentProfileResponseDto {
   @ApiProperty({ type: [TalentSkillDto] })
   skills!: TalentSkillDto[];
 
-  @ApiPropertyOptional({ type: TalentOwnerDto, description: "Only present on `GET /talent/me`" })
+  @ApiPropertyOptional({
+    type: TalentOwnerDto,
+    description: "Only present on `GET /talent/me`",
+  })
   user?: TalentOwnerDto;
 }
 
@@ -195,7 +228,10 @@ export class PublicTalentProfileResponseDto {
   @ApiPropertyOptional({ example: "Senior Backend Engineer", nullable: true })
   headline?: string | null;
 
-  @ApiPropertyOptional({ example: "8 years building distributed systems in Go and TypeScript.", nullable: true })
+  @ApiPropertyOptional({
+    example: "8 years building distributed systems in Go and TypeScript.",
+    nullable: true,
+  })
   bio?: string | null;
 
   @ApiPropertyOptional({ example: "Ho Chi Minh City", nullable: true })
@@ -213,16 +249,25 @@ export class PublicTalentProfileResponseDto {
   @ApiProperty({ enum: LEVELS, example: "SENIOR" })
   level!: (typeof LEVELS)[number];
 
-  @ApiPropertyOptional({ example: "https://example.com/resume.pdf", nullable: true })
+  @ApiPropertyOptional({
+    example: "https://example.com/resume.pdf",
+    nullable: true,
+  })
   resumeUrl?: string | null;
 
   @ApiPropertyOptional({ example: "https://janedoe.dev", nullable: true })
   portfolioUrl?: string | null;
 
-  @ApiPropertyOptional({ example: "https://github.com/janedoe", nullable: true })
+  @ApiPropertyOptional({
+    example: "https://github.com/janedoe",
+    nullable: true,
+  })
   githubUrl?: string | null;
 
-  @ApiPropertyOptional({ example: "https://linkedin.com/in/janedoe", nullable: true })
+  @ApiPropertyOptional({
+    example: "https://linkedin.com/in/janedoe",
+    nullable: true,
+  })
   linkedinUrl?: string | null;
 
   @ApiProperty({ example: true })
@@ -230,13 +275,15 @@ export class PublicTalentProfileResponseDto {
 
   @ApiPropertyOptional({
     example: 90000,
-    description: "Present only when `isOpenToWork` is true; omitted entirely (key absent, not null) otherwise",
+    description:
+      "Present only when `isOpenToWork` is true; omitted entirely (key absent, not null) otherwise",
   })
   desiredSalaryMin?: number;
 
   @ApiPropertyOptional({
     example: 130000,
-    description: "Present only when `isOpenToWork` is true; omitted entirely (key absent, not null) otherwise",
+    description:
+      "Present only when `isOpenToWork` is true; omitted entirely (key absent, not null) otherwise",
   })
   desiredSalaryMax?: number;
 

@@ -29,13 +29,18 @@ export class BillingRepository {
   // Guards against Stripe redelivering the same "checkout.session.completed"
   // event: only the first delivery actually flips planPaid, so a replay is a
   // no-op instead of re-sending the "payment received" email.
-  async markJobPaidAndSubmitted(jobId: string): Promise<JobWithEmployerEmail | null> {
+  async markJobPaidAndSubmitted(
+    jobId: string,
+  ): Promise<JobWithEmployerEmail | null> {
     const { count } = await this.prisma.job.updateMany({
       where: { id: jobId, planPaid: false },
       data: { planPaid: true, paidAt: new Date(), status: "PENDING_REVIEW" },
     });
     if (count === 0) return null;
 
-    return this.prisma.job.findUnique({ where: { id: jobId }, include: jobWithEmployerEmailInclude });
+    return this.prisma.job.findUnique({
+      where: { id: jobId },
+      include: jobWithEmployerEmailInclude,
+    });
   }
 }

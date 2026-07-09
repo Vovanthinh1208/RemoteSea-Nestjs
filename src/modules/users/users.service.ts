@@ -11,7 +11,10 @@ import { BCRYPT_SALT_ROUNDS } from "@/common/constants/bcrypt.constants";
 export class UsersService {
   constructor(private readonly usersRepository: UsersRepository) {}
 
-  updateName(userId: string, dto: UpdateUserDto): Promise<Pick<User, "id" | "name" | "email">> {
+  updateName(
+    userId: string,
+    dto: UpdateUserDto,
+  ): Promise<Pick<User, "id" | "name" | "email">> {
     return this.usersRepository.updateName(userId, dto.name);
   }
 
@@ -19,10 +22,15 @@ export class UsersService {
     await this.usersRepository.deleteUser(userId);
   }
 
-  async changePassword(userId: string, dto: ChangePasswordDto): Promise<{ message: string }> {
+  async changePassword(
+    userId: string,
+    dto: ChangePasswordDto,
+  ): Promise<{ message: string }> {
     const user = await this.usersRepository.findPasswordHash(userId);
     if (!user?.passwordHash) {
-      throw new BadRequestApiException("Password change is not available for social sign-in accounts.");
+      throw new BadRequestApiException(
+        "Password change is not available for social sign-in accounts.",
+      );
     }
 
     const valid = await bcrypt.compare(dto.currentPassword, user.passwordHash);

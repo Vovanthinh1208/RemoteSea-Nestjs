@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 import {
   EmployerRepository,
@@ -14,6 +15,9 @@ import type { UpdateApplicationDto } from "./dto/update-application.dto";
 import { slugify, withUniqueSuffix } from "@/common/utils/slugify";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 import { assertFound } from "@/common/utils/assert-found";
+import { isOwnedUploadUrl } from "@/modules/uploads/upload-url.util";
+import { UploadsService } from "@/modules/uploads/uploads.service";
+import type { EnvConfig } from "@/core/config/env.validation";
 import {
   BadRequestApiException,
   ConflictApiException,
@@ -22,51 +26,110 @@ import {
 
 @Injectable()
 export class EmployerService {
-  constructor(private readonly employerRepository: EmployerRepository) {}
+  constructor(
+    private readonly employerRepository: EmployerRepository,
+    private readonly config: ConfigService<EnvConfig, true>,
+    private readonly uploadsService: UploadsService,
+  ) {}
 
   async createProfile(
     userId: string,
-    dto: CreateEmployerProfileDto
+    dto: CreateEmployerProfileDto,
   ): Promise<{ id: string; slug: string; companyName: string }> {
     const existing = await this.employerRepository.findProfileByUserId(userId);
     if (existing) {
       throw new ConflictApiException("Employer profile already exists");
     }
 
+    // A company name made entirely of characters slugify can't transliterate
+    // (e.g. CJK, or Vietnamese with no plain-Latin fallback) reduces to an empty
+    // base — previously the *first* such employer got that empty string written
+    // straight to the DB as their slug, breaking their public profile URL.
     const base = slugify(dto.companyName);
-    const taken = await this.employerRepository.findProfileBySlug(base);
-    const slug = taken ? withUniqueSuffix(base) : base;
+    const taken = base
+      ? await this.employerRepository.findProfileBySlug(base)
+      : true;
+    const slug = taken ? withUniqueSuffix(base || "company") : base;
 
     try {
-      return await this.employerRepository.createProfileForUser(userId, dto, slug);
+      return await this.employerRepository.createProfileForUser(
+        userId,
+        dto,
+        slug,
+      );
     } catch (error) {
       // Two concurrent signups for the same company name can both pass the
       // findProfileBySlug check above before either writes — retry once with a
       // guaranteed-unique slug instead of surfacing a raw conflict to the loser.
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        return this.employerRepository.createProfileForUser(userId, dto, withUniqueSuffix(base));
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return this.employerRepository.createProfileForUser(
+          userId,
+          dto,
+          withUniqueSuffix(base || "company"),
+        );
       }
       throw error;
     }
   }
 
   async getProfile(
-    userId: string
-  ): Promise<Omit<ProfileWithApplicationCounts, "jobs"> & { totalApplications: number }> {
-    const profile = await this.employerRepository.findProfileWithApplicationCounts(userId);
+    userId: string,
+  ): Promise<
+    Omit<ProfileWithApplicationCounts, "jobs"> & { totalApplications: number }
+  > {
+    const profile =
+      await this.employerRepository.findProfileWithApplicationCounts(userId);
     assertFound(profile, "Profile not found");
 
     const { jobs, ...rest } = profile;
-    const totalApplications = jobs.reduce((sum, j) => sum + j._count.applications, 0);
+    const totalApplications = jobs.reduce(
+      (sum, j) => sum + j._count.applications,
+      0,
+    );
 
     return { ...rest, totalApplications };
   }
 
-  async updateProfile(userId: string, dto: UpdateEmployerProfileDto): Promise<PublicEmployerProfile> {
+  async updateProfile(
+    userId: string,
+    dto: UpdateEmployerProfileDto,
+  ): Promise<PublicEmployerProfile> {
     const profile = await this.employerRepository.findProfileByUserId(userId);
     assertFound(profile, "Profile not found");
 
-    return this.employerRepository.updateProfile(profile.id, dto);
+    // logoUrl was only checked with z.string().url() — any URL passed the DTO,
+    // completely bypassing the presign flow's content-type allowlist, size cap,
+    // and rate limit. Only accept a URL this user could actually have obtained
+    // from their own POST /uploads/presign call.
+    if (
+      dto.logoUrl &&
+      !isOwnedUploadUrl(
+        dto.logoUrl,
+        this.config.get("CDN_URL", { infer: true }),
+        userId,
+        "logo",
+      )
+    ) {
+      throw new BadRequestApiException(
+        "logoUrl must be an uploaded file from this account",
+      );
+    }
+
+    const updated = await this.employerRepository.updateProfile(
+      profile.id,
+      dto,
+    );
+
+    // Best-effort — a previous logo being replaced would otherwise sit orphaned
+    // in the bucket forever, since nothing else in the app ever cleans it up.
+    if (dto.logoUrl && profile.logoUrl && profile.logoUrl !== dto.logoUrl) {
+      void this.uploadsService.deleteObjectByUrl(profile.logoUrl);
+    }
+
+    return updated;
   }
 
   async listJobs(userId: string, dto: ListEmployerJobsDto) {
@@ -82,8 +145,9 @@ export class EmployerService {
 
     const avgTimeToHireInDays = offered.length
       ? offered.reduce(
-          (sum, a) => sum + (a.updatedAt.getTime() - a.appliedAt.getTime()) / 86_400_000,
-          0
+          (sum, a) =>
+            sum + (a.updatedAt.getTime() - a.appliedAt.getTime()) / 86_400_000,
+          0,
         ) / offered.length
       : 0;
 
@@ -97,7 +161,11 @@ export class EmployerService {
     };
   }
 
-  async listJobApplications(userId: string, jobId: string, dto: ListJobApplicationsDto) {
+  async listJobApplications(
+    userId: string,
+    jobId: string,
+    dto: ListJobApplicationsDto,
+  ) {
     const job = await this.employerRepository.findJobWithEmployerOwner(jobId);
     assertFound(job, "Job not found");
     if (job.employer.userId !== userId) {
@@ -106,12 +174,13 @@ export class EmployerService {
 
     const { status, page, limit } = dto;
     const skip = paginationSkip(page, limit);
-    const { applications, total } = await this.employerRepository.findApplicationsForJob(
-      jobId,
-      status,
-      skip,
-      limit
-    );
+    const { applications, total } =
+      await this.employerRepository.findApplicationsForJob(
+        jobId,
+        status,
+        skip,
+        limit,
+      );
 
     return {
       applications,
@@ -119,26 +188,38 @@ export class EmployerService {
     };
   }
 
-  async updateApplication(userId: string, applicationId: string, dto: UpdateApplicationDto) {
-    const application = await this.employerRepository.findApplicationWithJobOwner(applicationId);
+  async updateApplication(
+    userId: string,
+    applicationId: string,
+    dto: UpdateApplicationDto,
+  ) {
+    const application =
+      await this.employerRepository.findApplicationWithJobOwner(applicationId);
     assertFound(application, "Application not found");
     if (application.job.employer.userId !== userId) {
       throw new ForbiddenApiException();
     }
 
     const { status, notes } = dto;
-    if (status !== application.status && !ALLOWED_TRANSITIONS[application.status].includes(status)) {
-      throw new BadRequestApiException(`Cannot transition from ${application.status} to ${status}`);
+    if (
+      status !== application.status &&
+      !ALLOWED_TRANSITIONS[application.status].includes(status)
+    ) {
+      throw new BadRequestApiException(
+        `Cannot transition from ${application.status} to ${status}`,
+      );
     }
 
     const updated = await this.employerRepository.updateApplication(
       applicationId,
       application.status,
       status,
-      notes
+      notes,
     );
     if (!updated) {
-      throw new ConflictApiException("Application was updated concurrently — please refresh and try again");
+      throw new ConflictApiException(
+        "Application was updated concurrently — please refresh and try again",
+      );
     }
     return updated;
   }

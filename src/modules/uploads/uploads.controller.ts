@@ -15,19 +15,19 @@ import { ApiPresign, ApiUploadsTag } from "./docs/uploads.swagger";
 export class UploadsController {
   constructor(
     private readonly uploadsService: UploadsService,
-    private readonly rateLimitService: RateLimitService
+    private readonly rateLimitService: RateLimitService,
   ) {}
 
   @ApiPresign()
   @Post("presign")
   async presign(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new ZodValidationPipe(presignSchema)) body: PresignDto
+    @Body(new ZodValidationPipe(presignSchema)) body: PresignDto,
   ) {
     this.rateLimitService.enforce(
       `presign:${user.id}`,
       RATE_LIMITS.PRESIGN.limit,
-      RATE_LIMITS.PRESIGN.windowMs
+      RATE_LIMITS.PRESIGN.windowMs,
     );
     return this.uploadsService.createPresignedUpload(user.id, body);
   }

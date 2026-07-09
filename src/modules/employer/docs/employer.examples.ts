@@ -102,5 +102,10 @@ export const ApplicationResponseExample = {
 };
 
 export const EmployerValidationErrorExample = {
-  error: { formErrors: [], fieldErrors: { companyName: ["String must contain at least 2 character(s)"] } },
+  error: {
+    formErrors: [],
+    fieldErrors: {
+      companyName: ["String must contain at least 2 character(s)"],
+    },
+  },
 };

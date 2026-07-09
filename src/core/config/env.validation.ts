@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 const envSchema = z.object({
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  NODE_ENV: z
+    .enum(["development", "test", "production"])
+    .default("development"),
   PORT: z.coerce.number().default(4000),
 
   // Required — the app cannot run without these.
@@ -36,7 +38,9 @@ export function validateEnv(config: Record<string, unknown>): EnvConfig {
   const parsed = envSchema.safeParse(config);
   if (!parsed.success) {
     const issues = parsed.error.flatten().fieldErrors;
-    throw new Error(`Invalid environment variables:\n${JSON.stringify(issues, null, 2)}`);
+    throw new Error(
+      `Invalid environment variables:\n${JSON.stringify(issues, null, 2)}`,
+    );
   }
   return parsed.data;
 }

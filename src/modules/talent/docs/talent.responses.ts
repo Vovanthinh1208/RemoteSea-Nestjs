@@ -1,5 +1,8 @@
 import { ApiBadRequestResponse, ApiNotFoundResponse } from "@nestjs/swagger";
-import { ProfileNotFoundExample, ValidationErrorExample } from "./talent.examples";
+import {
+  ProfileNotFoundExample,
+  ValidationErrorExample,
+} from "./talent.examples";
 
 /** Reusable, module-specific Swagger response decorators for the Talent module. */
 

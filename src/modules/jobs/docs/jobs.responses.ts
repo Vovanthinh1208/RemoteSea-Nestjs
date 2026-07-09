@@ -1,4 +1,8 @@
-import { ApiBadRequestResponse, ApiForbiddenResponse, ApiNotFoundResponse } from "@nestjs/swagger";
+import {
+  ApiBadRequestResponse,
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
+} from "@nestjs/swagger";
 import { JobsValidationErrorExample } from "./jobs.examples";
 
 /** Reusable, module-specific Swagger response decorators for the Jobs module. */
@@ -13,7 +17,11 @@ export const InvalidSalaryRangeResponse = ApiBadRequestResponse({
   schema: {
     examples: {
       validation: { value: JobsValidationErrorExample },
-      salaryRange: { value: { error: "salaryMax must be greater than or equal to salaryMin" } },
+      salaryRange: {
+        value: {
+          error: "salaryMax must be greater than or equal to salaryMin",
+        },
+      },
     },
   },
 });
@@ -29,11 +37,14 @@ export const JobNotFoundResponse = ApiNotFoundResponse({
 });
 
 export const NotOwnerOrNotEditableResponse = ApiForbiddenResponse({
-  description: "Caller is not ADMIN, doesn't own the job, or the job isn't DRAFT/REJECTED",
+  description:
+    "Caller is not ADMIN, doesn't own the job, or the job isn't DRAFT/REJECTED",
   schema: {
     examples: {
       notOwner: { value: { error: "Forbidden" } },
-      notEditable: { value: { error: "Only draft or rejected jobs can be edited" } },
+      notEditable: {
+        value: { error: "Only draft or rejected jobs can be edited" },
+      },
     },
   },
 });

@@ -16,9 +16,10 @@ export const ApiListBenchmarks = () =>
         "Sorted by sample count, descending. No authentication required.",
     }),
     ApiOkResponse({
-      description: "Salary benchmarks, one entry per category with at least one matching active job",
+      description:
+        "Salary benchmarks, one entry per category with at least one matching active job",
       type: [SalaryBenchmarkDto],
       schema: { example: ListBenchmarksResponseExample },
     }),
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );

@@ -18,7 +18,13 @@ import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
-import { ApiCreateJob, ApiGetJobById, ApiJobsTag, ApiListJobs, ApiUpdateJob } from "./docs/jobs.swagger";
+import {
+  ApiCreateJob,
+  ApiGetJobById,
+  ApiJobsTag,
+  ApiListJobs,
+  ApiUpdateJob,
+} from "./docs/jobs.swagger";
 
 @ApiJobsTag()
 @Controller("jobs")
@@ -37,7 +43,7 @@ export class JobsController {
   @HttpCode(HttpStatus.CREATED)
   create(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new ZodValidationPipe(createJobSchema)) body: CreateJobDto
+    @Body(new ZodValidationPipe(createJobSchema)) body: CreateJobDto,
   ) {
     return this.jobsService.create(user.id, body);
   }
@@ -54,7 +60,7 @@ export class JobsController {
   update(
     @Param("id") id: string,
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new ZodValidationPipe(updateJobSchema)) body: UpdateJobDto
+    @Body(new ZodValidationPipe(updateJobSchema)) body: UpdateJobDto,
   ) {
     return this.jobsService.update(id, user, body);
   }

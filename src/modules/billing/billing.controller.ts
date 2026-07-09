@@ -17,7 +17,7 @@ import { ApiBillingTag, ApiCheckout, ApiWebhook } from "./docs/billing.swagger";
 export class BillingController {
   constructor(
     private readonly billingService: BillingService,
-    private readonly rateLimitService: RateLimitService
+    private readonly rateLimitService: RateLimitService,
   ) {}
 
   @ApiCheckout()
@@ -25,9 +25,13 @@ export class BillingController {
   @UseGuards(JwtAuthGuard)
   async checkout(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new ZodValidationPipe(checkoutSchema)) body: CheckoutDto
+    @Body(new ZodValidationPipe(checkoutSchema)) body: CheckoutDto,
   ) {
-    this.rateLimitService.enforce(`checkout:${user.id}`, RATE_LIMITS.CHECKOUT.limit, RATE_LIMITS.CHECKOUT.windowMs);
+    this.rateLimitService.enforce(
+      `checkout:${user.id}`,
+      RATE_LIMITS.CHECKOUT.limit,
+      RATE_LIMITS.CHECKOUT.windowMs,
+    );
     return this.billingService.createCheckoutSession(user.id, body);
   }
 

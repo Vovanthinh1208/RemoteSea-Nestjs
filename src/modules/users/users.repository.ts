@@ -6,7 +6,10 @@ import { PrismaService } from "@/core/database/prisma.service";
 export class UsersRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  updateName(id: string, name: string): Promise<Pick<User, "id" | "name" | "email">> {
+  updateName(
+    id: string,
+    name: string,
+  ): Promise<Pick<User, "id" | "name" | "email">> {
     return this.prisma.user.update({
       where: { id },
       data: { name },
@@ -19,7 +22,10 @@ export class UsersRepository {
   }
 
   findPasswordHash(id: string): Promise<Pick<User, "passwordHash"> | null> {
-    return this.prisma.user.findUnique({ where: { id }, select: { passwordHash: true } });
+    return this.prisma.user.findUnique({
+      where: { id },
+      select: { passwordHash: true },
+    });
   }
 
   updatePasswordHash(id: string, passwordHash: string): Promise<User> {

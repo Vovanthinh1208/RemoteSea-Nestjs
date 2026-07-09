@@ -1,6 +1,9 @@
 import type { ApplicationStatus } from "@prisma/client";
 
-export const ALLOWED_TRANSITIONS: Record<ApplicationStatus, ApplicationStatus[]> = {
+export const ALLOWED_TRANSITIONS: Record<
+  ApplicationStatus,
+  ApplicationStatus[]
+> = {
   PENDING: ["REVIEWING", "REJECTED"],
   REVIEWING: ["SHORTLISTED", "REJECTED"],
   SHORTLISTED: ["INTERVIEW", "REJECTED"],

@@ -4,7 +4,8 @@ const jobListItemExample = {
   id: "cljob1a2b3c4d5e6f7g8h9i0",
   title: "Senior Backend Engineer",
   slug: "senior-backend-engineer-a1b2c3",
-  description: "We are looking for a senior backend engineer to join our remote team...",
+  description:
+    "We are looking for a senior backend engineer to join our remote team...",
   jobType: "FULL_TIME",
   level: "SENIOR",
   salaryMin: 60000,
@@ -21,9 +22,31 @@ const jobListItemExample = {
   applyCount: 12,
   publishedAt: "2026-05-01T08:00:00.000Z",
   createdAt: "2026-04-20T08:00:00.000Z",
-  employer: { companyName: "RemoteSEA Ltd", logoUrl: null, slug: "remotesea-ltd" },
-  categories: [{ category: { id: "clcat1a2b3c4d5e6f7g8h9i0", name: "Engineering", slug: "engineering", icon: "code" } }],
-  skills: [{ skill: { id: "clskl1a2b3c4d5e6f7g8h9i0", name: "TypeScript", slug: "typescript" }, isRequired: true }],
+  employer: {
+    companyName: "RemoteSEA Ltd",
+    logoUrl: null,
+    slug: "remotesea-ltd",
+  },
+  categories: [
+    {
+      category: {
+        id: "clcat1a2b3c4d5e6f7g8h9i0",
+        name: "Engineering",
+        slug: "engineering",
+        icon: "code",
+      },
+    },
+  ],
+  skills: [
+    {
+      skill: {
+        id: "clskl1a2b3c4d5e6f7g8h9i0",
+        name: "TypeScript",
+        slug: "typescript",
+      },
+      isRequired: true,
+    },
+  ],
 };
 
 export const ListJobsResponseExample = {
@@ -33,7 +56,13 @@ export const ListJobsResponseExample = {
     jobType: { "Full-time": 41, Contract: 12, "Part-time": 4 },
     timezone: { sea: 30, async: 9, SG: 14, AU: 8, US: 5 },
     seniority: { Entry: 9, Mid: 28, Senior: 20 },
-    category: { Engineering: 24, Design: 10, Data: 7, Product: 9, Marketing: 7 },
+    category: {
+      Engineering: 24,
+      Design: 10,
+      Data: 7,
+      Product: 9,
+      Marketing: 7,
+    },
   },
 };
 
@@ -85,5 +114,8 @@ export const UpdateJobRequestExample = {
 };
 
 export const JobsValidationErrorExample = {
-  error: { formErrors: [], fieldErrors: { title: ["String must contain at least 5 character(s)"] } },
+  error: {
+    formErrors: [],
+    fieldErrors: { title: ["String must contain at least 5 character(s)"] },
+  },
 };

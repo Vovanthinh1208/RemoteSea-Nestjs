@@ -1,4 +1,10 @@
-import type { Job, EmployerProfile, Skill, Category, Prisma } from "@prisma/client";
+import type {
+  Job,
+  EmployerProfile,
+  Skill,
+  Category,
+  Prisma,
+} from "@prisma/client";
 
 export type JobWithRelations = Job & {
   employer: Pick<EmployerProfile, "companyName" | "logoUrl" | "slug">;

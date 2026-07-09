@@ -12,7 +12,12 @@ export class PresignRequestDto {
   @ApiProperty({ enum: ["avatar", "logo", "resume"], example: "resume" })
   type!: "avatar" | "logo" | "resume";
 
-  @ApiProperty({ minLength: 1, maxLength: 200, example: "resume.pdf", description: "Sanitized before use in the S3 key" })
+  @ApiProperty({
+    minLength: 1,
+    maxLength: 200,
+    example: "resume.pdf",
+    description: "Sanitized before use in the S3 key",
+  })
   filename!: string;
 
   @ApiProperty({
@@ -32,12 +37,16 @@ export class PresignRequestDto {
 
 export class PresignResponseDto {
   @ApiProperty({
-    example: "https://s3.amazonaws.com/bucket-name/uploads/resume/.../1751443200000-resume.pdf?X-Amz-Signature=...",
+    example:
+      "https://s3.amazonaws.com/bucket-name/uploads/resume/.../1751443200000-resume.pdf?X-Amz-Signature=...",
     description: "Presigned S3 PUT URL, expires in 300s",
   })
   uploadUrl!: string;
 
-  @ApiProperty({ example: "https://cdn.remotesea.io/uploads/resume/.../1751443200000-resume.pdf" })
+  @ApiProperty({
+    example:
+      "https://cdn.remotesea.io/uploads/resume/.../1751443200000-resume.pdf",
+  })
   publicUrl!: string;
 
   @ApiProperty({ example: "uploads/resume/.../1751443200000-resume.pdf" })

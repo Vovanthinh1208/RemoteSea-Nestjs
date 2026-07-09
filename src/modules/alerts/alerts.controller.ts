@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
 import { AlertsService } from "./alerts.service";
 import { createAlertSchema, type CreateAlertDto } from "./dto/create-alert.dto";
 import { updateAlertSchema, type UpdateAlertDto } from "./dto/update-alert.dto";
@@ -33,7 +42,7 @@ export class AlertsController {
   @UseGuards(JwtAuthGuard)
   async create(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new ZodValidationPipe(createAlertSchema)) body: CreateAlertDto
+    @Body(new ZodValidationPipe(createAlertSchema)) body: CreateAlertDto,
   ) {
     return this.alertsService.create(user.id, body);
   }
@@ -44,7 +53,7 @@ export class AlertsController {
   async update(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id") id: string,
-    @Body(new ZodValidationPipe(updateAlertSchema)) body: UpdateAlertDto
+    @Body(new ZodValidationPipe(updateAlertSchema)) body: UpdateAlertDto,
   ) {
     return this.alertsService.update(user.id, id, body);
   }
@@ -52,7 +61,10 @@ export class AlertsController {
   @ApiDeleteAlert()
   @Delete(":id")
   @UseGuards(JwtAuthGuard)
-  async remove(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+  async remove(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+  ) {
     return this.alertsService.remove(user.id, id);
   }
 

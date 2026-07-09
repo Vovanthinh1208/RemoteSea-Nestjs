@@ -15,6 +15,10 @@ export const ApiHealthCheck = () =>
         "Writes the response directly via @Res() — the one route that fully bypasses GlobalExceptionFilter and never throws, " +
         "so both the success and failure bodies below use a `{ status, ... }` shape instead of the app-wide `{ error }` convention.",
     }),
-    ApiOkResponse({ description: "Database reachable", type: HealthOkResponseDto, schema: { example: HealthOkExample } }),
-    HealthUnavailableResponse
+    ApiOkResponse({
+      description: "Database reachable",
+      type: HealthOkResponseDto,
+      schema: { example: HealthOkExample },
+    }),
+    HealthUnavailableResponse,
   );

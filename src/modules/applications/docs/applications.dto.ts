@@ -15,13 +15,22 @@ import {
  */
 
 export class ApplyRequestDto {
-  @ApiProperty({ example: "cme8f1a2b0000ug0h9x1n1a2", description: "CUID of the job being applied to" })
+  @ApiProperty({
+    example: "cme8f1a2b0000ug0h9x1n1a2",
+    description: "CUID of the job being applied to",
+  })
   jobId!: string;
 
-  @ApiPropertyOptional({ maxLength: 5000, example: "I'd love to bring my remote QA experience to this role." })
+  @ApiPropertyOptional({
+    maxLength: 5000,
+    example: "I'd love to bring my remote QA experience to this role.",
+  })
   coverLetter?: string;
 
-  @ApiPropertyOptional({ format: "uri", example: "https://cdn.remotesea.com/resumes/jane-doe.pdf" })
+  @ApiPropertyOptional({
+    format: "uri",
+    example: "https://cdn.remotesea.com/resumes/jane-doe.pdf",
+  })
   resumeUrl?: string;
 }
 
@@ -29,7 +38,10 @@ class JobEmployerSummaryDto {
   @ApiProperty({ example: "Acme Corp" })
   companyName!: string;
 
-  @ApiPropertyOptional({ nullable: true, example: "https://cdn.remotesea.com/logos/acme.png" })
+  @ApiPropertyOptional({
+    nullable: true,
+    example: "https://cdn.remotesea.com/logos/acme.png",
+  })
   logoUrl!: string | null;
 
   @ApiProperty({ example: "acme-corp" })
@@ -37,7 +49,13 @@ class JobEmployerSummaryDto {
 }
 
 class JobSkillSummaryDto {
-  @ApiProperty({ example: { id: "cskl1a2b0000ug0h9x1n1a2", name: "TypeScript", slug: "typescript" } })
+  @ApiProperty({
+    example: {
+      id: "cskl1a2b0000ug0h9x1n1a2",
+      name: "TypeScript",
+      slug: "typescript",
+    },
+  })
   skill!: { id: string; name: string; slug: string };
 
   @ApiProperty({ example: true })
@@ -45,7 +63,13 @@ class JobSkillSummaryDto {
 }
 
 class JobCategorySummaryDto {
-  @ApiProperty({ example: { id: "ccat1a2b0000ug0h9x1n1a2", name: "Engineering", slug: "engineering" } })
+  @ApiProperty({
+    example: {
+      id: "ccat1a2b0000ug0h9x1n1a2",
+      name: "Engineering",
+      slug: "engineering",
+    },
+  })
   category!: { id: string; name: string; slug: string };
 }
 
@@ -103,17 +127,30 @@ export class ApplicationResponseDto {
   @ApiProperty({ example: "ctal1a2b0000ug0h9x1n1a2" })
   talentId!: string;
 
-  @ApiPropertyOptional({ nullable: true, example: "I'd love to bring my remote QA experience to this role." })
+  @ApiPropertyOptional({
+    nullable: true,
+    example: "I'd love to bring my remote QA experience to this role.",
+  })
   coverLetter!: string | null;
 
-  @ApiPropertyOptional({ nullable: true, example: "https://cdn.remotesea.com/resumes/jane-doe.pdf" })
+  @ApiPropertyOptional({
+    nullable: true,
+    example: "https://cdn.remotesea.com/resumes/jane-doe.pdf",
+  })
   resumeUrl!: string | null;
 
   @ApiProperty({
     enum: APPLICATION_STATUS_VALUES,
     example: "PENDING",
   })
-  status!: "PENDING" | "REVIEWING" | "SHORTLISTED" | "INTERVIEW" | "OFFERED" | "REJECTED" | "WITHDRAWN";
+  status!:
+    | "PENDING"
+    | "REVIEWING"
+    | "SHORTLISTED"
+    | "INTERVIEW"
+    | "OFFERED"
+    | "REJECTED"
+    | "WITHDRAWN";
 
   @ApiPropertyOptional({ nullable: true, example: null })
   notes!: string | null;

@@ -8,12 +8,16 @@ import { ApiProperty } from "@nestjs/swagger";
  * schema in /docs. It is never imported outside this docs/ folder.
  */
 export class SalaryBenchmarkDto {
-  @ApiProperty({ example: "Engineering", description: "Category name the benchmark is aggregated over." })
+  @ApiProperty({
+    example: "Engineering",
+    description: "Category name the benchmark is aggregated over.",
+  })
   role!: string;
 
   @ApiProperty({
     example: 1800,
-    description: "Average of salaryMin across matching active jobs, rounded to the nearest integer.",
+    description:
+      "Average of salaryMin across matching active jobs, rounded to the nearest integer.",
   })
   min!: number;
 
@@ -26,13 +30,15 @@ export class SalaryBenchmarkDto {
 
   @ApiProperty({
     example: 3000,
-    description: "Average of each job's own (salaryMin + salaryMax) / 2 midpoint.",
+    description:
+      "Average of each job's own (salaryMin + salaryMax) / 2 midpoint.",
   })
   mid!: number;
 
   @ApiProperty({
     example: 12,
-    description: "Number of active jobs with a salaryMin set that contributed to this benchmark.",
+    description:
+      "Number of active jobs with a salaryMin set that contributed to this benchmark.",
   })
   count!: number;
 }

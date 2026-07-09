@@ -1,6 +1,14 @@
 import { Injectable } from "@nestjs/common";
-import type { Application, ApplicationStatus, EmployerProfile, JobStatus, Prisma } from "@prisma/client";
+import type {
+  Application,
+  ApplicationStatus,
+  EmployerProfile,
+  JobStatus,
+  Prisma,
+} from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
+
+const EMPLOYER_JOBS_LIST_CAP = 200;
 
 const profileSelect = {
   id: true,
@@ -19,7 +27,9 @@ const profileSelect = {
   updatedAt: true,
 } satisfies Prisma.EmployerProfileSelect;
 
-export type PublicEmployerProfile = Prisma.EmployerProfileGetPayload<{ select: typeof profileSelect }>;
+export type PublicEmployerProfile = Prisma.EmployerProfileGetPayload<{
+  select: typeof profileSelect;
+}>;
 
 const profileWithApplicationCountsSelect = {
   ...profileSelect,
@@ -35,10 +45,12 @@ export type ProfileWithApplicationCounts = Prisma.EmployerProfileGetPayload<{
 export class EmployerRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findProfileByUserId(userId: string): Promise<{ id: string } | null> {
+  findProfileByUserId(
+    userId: string,
+  ): Promise<{ id: string; logoUrl: string | null } | null> {
     return this.prisma.employerProfile.findUnique({
       where: { userId },
-      select: { id: true },
+      select: { id: true, logoUrl: true },
     });
   }
 
@@ -57,7 +69,7 @@ export class EmployerRepository {
       hqCountry?: string;
       hqCity?: string;
     },
-    slug: string
+    slug: string,
   ): Promise<{ id: string; slug: string; companyName: string }> {
     const [, profile] = await this.prisma.$transaction([
       this.prisma.user.update({
@@ -72,21 +84,35 @@ export class EmployerRepository {
     return profile;
   }
 
-  findProfileWithApplicationCounts(userId: string): Promise<ProfileWithApplicationCounts | null> {
+  findProfileWithApplicationCounts(
+    userId: string,
+  ): Promise<ProfileWithApplicationCounts | null> {
     return this.prisma.employerProfile.findUnique({
       where: { userId },
       select: profileWithApplicationCountsSelect,
     });
   }
 
-  updateProfile(id: string, data: Prisma.EmployerProfileUpdateInput): Promise<PublicEmployerProfile> {
-    return this.prisma.employerProfile.update({ where: { id }, data, select: profileSelect });
+  updateProfile(
+    id: string,
+    data: Prisma.EmployerProfileUpdateInput,
+  ): Promise<PublicEmployerProfile> {
+    return this.prisma.employerProfile.update({
+      where: { id },
+      data,
+      select: profileSelect,
+    });
   }
 
   findJobsByEmployer(employerId: string, status?: JobStatus) {
     return this.prisma.job.findMany({
       where: { employerId, ...(status && { status }) },
       orderBy: { createdAt: "desc" },
+      // Scoped to one employer's own jobs (not attacker-scalable across the DB),
+      // but unlike every other list endpoint this one has no pagination at all —
+      // a hard cap avoids an unbounded query for an employer with a very long
+      // posting history, without changing the response shape the frontend expects.
+      take: EMPLOYER_JOBS_LIST_CAP,
       select: {
         id: true,
         title: true,
@@ -132,9 +158,12 @@ export class EmployerRepository {
     jobId: string,
     status: ApplicationStatus | undefined,
     skip: number,
-    take: number
+    take: number,
   ) {
-    const where: Prisma.ApplicationWhereInput = { jobId, ...(status && { status }) };
+    const where: Prisma.ApplicationWhereInput = {
+      jobId,
+      ...(status && { status }),
+    };
     const [applications, total] = await Promise.all([
       this.prisma.application.findMany({
         where,
@@ -166,7 +195,10 @@ export class EmployerRepository {
   findApplicationWithJobOwner(id: string) {
     return this.prisma.application.findUnique({
       where: { id },
-      select: { status: true, job: { select: { employer: { select: { userId: true } } } } },
+      select: {
+        status: true,
+        job: { select: { employer: { select: { userId: true } } } },
+      },
     });
   }
 
@@ -177,7 +209,7 @@ export class EmployerRepository {
     id: string,
     expectedStatus: ApplicationStatus,
     status: ApplicationStatus,
-    notes: string | undefined
+    notes: string | undefined,
   ): Promise<Application | null> {
     const { count } = await this.prisma.application.updateMany({
       where: { id, status: expectedStatus },

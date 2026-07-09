@@ -1,5 +1,9 @@
 import { ApiBadRequestResponse, ApiNotFoundResponse } from "@nestjs/swagger";
-import { EmployerNotFoundExample, JobNotFoundExample, ValidationErrorExample } from "./admin.examples";
+import {
+  EmployerNotFoundExample,
+  JobNotFoundExample,
+  ValidationErrorExample,
+} from "./admin.examples";
 
 /** Reusable, module-specific Swagger response decorators for the Admin module. */
 

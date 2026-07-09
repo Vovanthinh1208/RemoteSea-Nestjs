@@ -1,7 +1,21 @@
 import { applyDecorators } from "@nestjs/common";
-import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
-import { InternalServerErrorApiResponse, UnauthorizedApiResponse } from "@/core/swagger/common.responses";
-import { PublicTalentProfileResponseDto, TalentProfileRequestDto, TalentProfileResponseDto } from "./talent.dto";
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from "@nestjs/swagger";
+import {
+  InternalServerErrorApiResponse,
+  UnauthorizedApiResponse,
+} from "@/core/swagger/common.responses";
+import {
+  PublicTalentProfileResponseDto,
+  TalentProfileRequestDto,
+  TalentProfileResponseDto,
+} from "./talent.dto";
 import {
   OwnTalentProfileExample,
   PublicTalentProfileClosedExample,
@@ -9,7 +23,10 @@ import {
   TalentProfileRequestExample,
   UpsertTalentProfileExample,
 } from "./talent.examples";
-import { ProfileNotFoundResponse, ValidationErrorResponse } from "./talent.responses";
+import {
+  ProfileNotFoundResponse,
+  ValidationErrorResponse,
+} from "./talent.responses";
 
 export const ApiTalentTag = () => applyDecorators(ApiTags("Talent"));
 
@@ -18,7 +35,8 @@ export const ApiGetOwnProfile = () =>
     ApiBearerAuth("bearer"),
     ApiOperation({
       summary: "Get own talent profile",
-      description: "Returns the authenticated user's own talent profile with skills and their name.",
+      description:
+        "Returns the authenticated user's own talent profile with skills and their name.",
     }),
     ApiOkResponse({
       description: "The caller's talent profile",
@@ -27,7 +45,7 @@ export const ApiGetOwnProfile = () =>
     }),
     UnauthorizedApiResponse,
     ProfileNotFoundResponse,
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );
 
 export const ApiUpsertProfile = () =>
@@ -38,15 +56,19 @@ export const ApiUpsertProfile = () =>
       description:
         "Upserts the authenticated user's talent profile; if `skills` is provided, fully replaces the skill list (transactional delete-then-insert). `slug` is only set on first creation — later PUTs never change it. `level` defaults to `MID` and `currency` always defaults to `USD` on first creation; `currency` cannot be set via this endpoint.",
     }),
-    ApiBody({ type: TalentProfileRequestDto, examples: { default: { value: TalentProfileRequestExample } } }),
+    ApiBody({
+      type: TalentProfileRequestDto,
+      examples: { default: { value: TalentProfileRequestExample } },
+    }),
     ApiOkResponse({
-      description: "Profile created/updated — same shape as `GET /talent/me` but without the `user` field",
+      description:
+        "Profile created/updated — same shape as `GET /talent/me` but without the `user` field",
       type: TalentProfileResponseDto,
       schema: { example: UpsertTalentProfileExample },
     }),
     ValidationErrorResponse,
     UnauthorizedApiResponse,
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );
 
 export const ApiGetPublicProfile = () =>
@@ -58,7 +80,8 @@ export const ApiGetPublicProfile = () =>
     }),
     ApiParam({ name: "slug", type: String, example: "jane-doe-a1b2c3" }),
     ApiOkResponse({
-      description: "Public talent profile; compensation fields present only when open to work",
+      description:
+        "Public talent profile; compensation fields present only when open to work",
       type: PublicTalentProfileResponseDto,
       schema: {
         examples: {
@@ -68,5 +91,5 @@ export const ApiGetPublicProfile = () =>
       },
     }),
     ProfileNotFoundResponse,
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );

@@ -15,13 +15,23 @@ import {
  */
 
 export class CreateJobRequestDto {
-  @ApiProperty({ minLength: 5, maxLength: 120, example: "Senior Backend Engineer" })
+  @ApiProperty({
+    minLength: 5,
+    maxLength: 120,
+    example: "Senior Backend Engineer",
+  })
   title!: string;
 
-  @ApiProperty({ minLength: 100, example: "We are looking for a senior backend engineer to join our remote team..." })
+  @ApiProperty({
+    minLength: 100,
+    example:
+      "We are looking for a senior backend engineer to join our remote team...",
+  })
   description!: string;
 
-  @ApiPropertyOptional({ example: "5+ years with Node.js, PostgreSQL, and distributed systems." })
+  @ApiPropertyOptional({
+    example: "5+ years with Node.js, PostgreSQL, and distributed systems.",
+  })
   requirements?: string;
 
   @ApiProperty({ enum: JOB_TYPE_VALUES, example: "FULL_TIME" })
@@ -30,10 +40,18 @@ export class CreateJobRequestDto {
   @ApiProperty({ enum: EXPERIENCE_LEVEL_VALUES, example: "SENIOR" })
   level!: (typeof EXPERIENCE_LEVEL_VALUES)[number];
 
-  @ApiProperty({ type: "integer", example: 60000, description: "Positive integer" })
+  @ApiProperty({
+    type: "integer",
+    example: 60000,
+    description: "Positive integer",
+  })
   salaryMin!: number;
 
-  @ApiProperty({ type: "integer", example: 90000, description: "Positive integer; must be >= salaryMin (service-checked)" })
+  @ApiProperty({
+    type: "integer",
+    example: 90000,
+    description: "Positive integer; must be >= salaryMin (service-checked)",
+  })
   salaryMax!: number;
 
   @ApiPropertyOptional({ example: "UTC+7" })
@@ -42,7 +60,12 @@ export class CreateJobRequestDto {
   @ApiPropertyOptional({ example: "Vietnam" })
   country?: string;
 
-  @ApiPropertyOptional({ type: [String], maxItems: 10, default: [], example: ["Health insurance", "Remote stipend"] })
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: 10,
+    default: [],
+    example: ["Health insurance", "Remote stipend"],
+  })
   benefits?: string[];
 
   @ApiProperty({ enum: PLAN_TYPE_VALUES, example: "STANDARD" })
@@ -79,13 +102,23 @@ export class CreateJobResponseDto {
 }
 
 export class UpdateJobRequestDto {
-  @ApiPropertyOptional({ minLength: 5, maxLength: 120, example: "Senior Backend Engineer" })
+  @ApiPropertyOptional({
+    minLength: 5,
+    maxLength: 120,
+    example: "Senior Backend Engineer",
+  })
   title?: string;
 
-  @ApiPropertyOptional({ minLength: 100, example: "We are looking for a senior backend engineer to join our remote team..." })
+  @ApiPropertyOptional({
+    minLength: 100,
+    example:
+      "We are looking for a senior backend engineer to join our remote team...",
+  })
   description?: string;
 
-  @ApiPropertyOptional({ example: "5+ years with Node.js, PostgreSQL, and distributed systems." })
+  @ApiPropertyOptional({
+    example: "5+ years with Node.js, PostgreSQL, and distributed systems.",
+  })
   requirements?: string;
 
   @ApiPropertyOptional({ enum: JOB_TYPE_VALUES, example: "FULL_TIME" })
@@ -106,7 +139,11 @@ export class UpdateJobRequestDto {
   @ApiPropertyOptional({ example: "Vietnam" })
   country?: string;
 
-  @ApiPropertyOptional({ type: [String], maxItems: 10, example: ["Health insurance", "Remote stipend"] })
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: 10,
+    example: ["Health insurance", "Remote stipend"],
+  })
   benefits?: string[];
 
   @ApiPropertyOptional({ enum: PLAN_TYPE_VALUES, example: "STANDARD" })
@@ -155,7 +192,11 @@ export class JobListEmployerDto {
   @ApiProperty({ example: "RemoteSEA Ltd" })
   companyName!: string;
 
-  @ApiPropertyOptional({ format: "url", example: "https://remotesea.io/logo.png", nullable: true })
+  @ApiPropertyOptional({
+    format: "url",
+    example: "https://remotesea.io/logo.png",
+    nullable: true,
+  })
   logoUrl?: string | null;
 
   @ApiProperty({ example: "remotesea-ltd" })
@@ -169,7 +210,10 @@ export class JobDetailEmployerDto extends JobListEmployerDto {
   @ApiPropertyOptional({ example: "51-200", nullable: true })
   size?: string | null;
 
-  @ApiPropertyOptional({ example: "We build tools for remote teams across Southeast Asia.", nullable: true })
+  @ApiPropertyOptional({
+    example: "We build tools for remote teams across Southeast Asia.",
+    nullable: true,
+  })
   description?: string | null;
 
   @ApiPropertyOptional({ example: "Singapore", nullable: true })
@@ -186,7 +230,10 @@ export class JobListItemDto {
   @ApiProperty({ example: "senior-backend-engineer-a1b2c3" })
   slug!: string;
 
-  @ApiProperty({ example: "We are looking for a senior backend engineer to join our remote team..." })
+  @ApiProperty({
+    example:
+      "We are looking for a senior backend engineer to join our remote team...",
+  })
   description!: string;
 
   @ApiProperty({ enum: JOB_TYPE_VALUES, example: "FULL_TIME" })
@@ -219,7 +266,10 @@ export class JobListItemDto {
   @ApiProperty({ enum: PLAN_TYPE_VALUES, example: "STANDARD" })
   planType!: (typeof PLAN_TYPE_VALUES)[number];
 
-  @ApiProperty({ type: [String], example: ["Health insurance", "Remote stipend"] })
+  @ApiProperty({
+    type: [String],
+    example: ["Health insurance", "Remote stipend"],
+  })
   benefits!: string[];
 
   @ApiProperty({ example: false })
@@ -264,25 +314,29 @@ export class PaginationDto {
 export class JobFacetsDto {
   @ApiProperty({
     example: { "Full-time": 41, Contract: 12, "Part-time": 4 },
-    description: "Count of active jobs per job-type bucket, ignoring the caller's own filters (computed over all active jobs).",
+    description:
+      "Count of active jobs per job-type bucket, ignoring the caller's own filters (computed over all active jobs).",
   })
   jobType!: Record<string, number>;
 
   @ApiProperty({
     example: { sea: 30, async: 9, SG: 14, AU: 8, US: 5 },
-    description: "Count of active jobs per timezone bucket (sea/async/SG/AU/US), ignoring the caller's own filters.",
+    description:
+      "Count of active jobs per timezone bucket (sea/async/SG/AU/US), ignoring the caller's own filters.",
   })
   timezone!: Record<string, number>;
 
   @ApiProperty({
     example: { Entry: 9, Mid: 28, Senior: 20 },
-    description: "Count of active jobs per seniority bucket (Senior folds in LEAD/EXECUTIVE), ignoring the caller's own filters.",
+    description:
+      "Count of active jobs per seniority bucket (Senior folds in LEAD/EXECUTIVE), ignoring the caller's own filters.",
   })
   seniority!: Record<string, number>;
 
   @ApiProperty({
     example: { Engineering: 24, Design: 10, Data: 7, Product: 9, Marketing: 7 },
-    description: "Count of active jobs per named category, ignoring the caller's own filters.",
+    description:
+      "Count of active jobs per named category, ignoring the caller's own filters.",
   })
   category!: Record<string, number>;
 }
@@ -312,10 +366,16 @@ export class JobDetailResponseDto {
   @ApiProperty({ example: "senior-backend-engineer-a1b2c3" })
   slug!: string;
 
-  @ApiProperty({ example: "We are looking for a senior backend engineer to join our remote team..." })
+  @ApiProperty({
+    example:
+      "We are looking for a senior backend engineer to join our remote team...",
+  })
   description!: string;
 
-  @ApiPropertyOptional({ example: "5+ years with Node.js, PostgreSQL, and distributed systems.", nullable: true })
+  @ApiPropertyOptional({
+    example: "5+ years with Node.js, PostgreSQL, and distributed systems.",
+    nullable: true,
+  })
   requirements?: string | null;
 
   @ApiPropertyOptional({ nullable: true })
@@ -354,7 +414,10 @@ export class JobDetailResponseDto {
   @ApiProperty({ enum: PLAN_TYPE_VALUES, example: "STANDARD" })
   planType!: (typeof PLAN_TYPE_VALUES)[number];
 
-  @ApiProperty({ type: [String], example: ["Health insurance", "Remote stipend"] })
+  @ApiProperty({
+    type: [String],
+    example: ["Health insurance", "Remote stipend"],
+  })
   benefits!: string[];
 
   @ApiPropertyOptional({ nullable: true })

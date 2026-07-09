@@ -1,4 +1,8 @@
-import { ApiBadRequestResponse, ApiConflictResponse, ApiUnauthorizedResponse } from "@nestjs/swagger";
+import {
+  ApiBadRequestResponse,
+  ApiConflictResponse,
+  ApiUnauthorizedResponse,
+} from "@nestjs/swagger";
 import { ValidationErrorExample } from "./auth.examples";
 
 /** Reusable, module-specific Swagger response decorators for the Auth module. */
@@ -9,7 +13,8 @@ export const ValidationErrorResponse = ApiBadRequestResponse({
 });
 
 export const InvalidCredentialsResponse = ApiUnauthorizedResponse({
-  description: "No user with that email, an OAuth-only account with no password, or a wrong password",
+  description:
+    "No user with that email, an OAuth-only account with no password, or a wrong password",
   schema: { example: { error: "Invalid email or password" } },
 });
 

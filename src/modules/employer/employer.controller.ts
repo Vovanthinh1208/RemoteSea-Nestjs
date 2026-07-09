@@ -1,10 +1,36 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
 import { EmployerService } from "./employer.service";
-import { createEmployerProfileSchema, type CreateEmployerProfileDto } from "./dto/create-employer-profile.dto";
-import { updateEmployerProfileSchema, type UpdateEmployerProfileDto } from "./dto/update-employer-profile.dto";
-import { listEmployerJobsSchema, type ListEmployerJobsDto } from "./dto/list-employer-jobs.dto";
-import { listJobApplicationsSchema, type ListJobApplicationsDto } from "./dto/list-job-applications.dto";
-import { updateApplicationSchema, type UpdateApplicationDto } from "./dto/update-application.dto";
+import {
+  createEmployerProfileSchema,
+  type CreateEmployerProfileDto,
+} from "./dto/create-employer-profile.dto";
+import {
+  updateEmployerProfileSchema,
+  type UpdateEmployerProfileDto,
+} from "./dto/update-employer-profile.dto";
+import {
+  listEmployerJobsSchema,
+  type ListEmployerJobsDto,
+} from "./dto/list-employer-jobs.dto";
+import {
+  listJobApplicationsSchema,
+  type ListJobApplicationsDto,
+} from "./dto/list-job-applications.dto";
+import {
+  updateApplicationSchema,
+  type UpdateApplicationDto,
+} from "./dto/update-application.dto";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
@@ -32,7 +58,8 @@ export class EmployerController {
   @HttpCode(HttpStatus.CREATED)
   async createProfile(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new ZodValidationPipe(createEmployerProfileSchema)) body: CreateEmployerProfileDto
+    @Body(new ZodValidationPipe(createEmployerProfileSchema))
+    body: CreateEmployerProfileDto,
   ) {
     return this.employerService.createProfile(user.id, body);
   }
@@ -49,7 +76,8 @@ export class EmployerController {
   @Roles("EMPLOYER")
   async updateProfile(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new ZodValidationPipe(updateEmployerProfileSchema)) body: UpdateEmployerProfileDto
+    @Body(new ZodValidationPipe(updateEmployerProfileSchema))
+    body: UpdateEmployerProfileDto,
   ) {
     return this.employerService.updateProfile(user.id, body);
   }
@@ -59,7 +87,8 @@ export class EmployerController {
   @Roles("EMPLOYER")
   async listJobs(
     @CurrentUser() user: AuthenticatedUser,
-    @Query(new ZodValidationPipe(listEmployerJobsSchema)) query: ListEmployerJobsDto
+    @Query(new ZodValidationPipe(listEmployerJobsSchema))
+    query: ListEmployerJobsDto,
   ) {
     return this.employerService.listJobs(user.id, query);
   }
@@ -70,7 +99,8 @@ export class EmployerController {
   async listJobApplications(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id") id: string,
-    @Query(new ZodValidationPipe(listJobApplicationsSchema)) query: ListJobApplicationsDto
+    @Query(new ZodValidationPipe(listJobApplicationsSchema))
+    query: ListJobApplicationsDto,
   ) {
     return this.employerService.listJobApplications(user.id, id, query);
   }
@@ -81,7 +111,8 @@ export class EmployerController {
   async updateApplication(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id") id: string,
-    @Body(new ZodValidationPipe(updateApplicationSchema)) body: UpdateApplicationDto
+    @Body(new ZodValidationPipe(updateApplicationSchema))
+    body: UpdateApplicationDto,
   ) {
     return this.employerService.updateApplication(user.id, id, body);
   }

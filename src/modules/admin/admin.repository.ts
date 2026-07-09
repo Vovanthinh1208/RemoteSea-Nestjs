@@ -9,12 +9,15 @@ type EmployerListItem = EmployerProfile & {
   jobs: { planType: PlanType }[];
 };
 
-type JobListItem = Job & {
+type JobListItem = Omit<Job, "stripeSessionId" | "reviewNote"> & {
   employer: { companyName: string; isVerified: boolean; slug: string };
   categories: { category: unknown }[];
 };
 
-export type PaidJobRevenueRow = Pick<Job, "id" | "title" | "planType" | "paidAt" | "createdAt"> & {
+export type PaidJobRevenueRow = Pick<
+  Job,
+  "id" | "title" | "planType" | "paidAt" | "createdAt"
+> & {
   employer: { companyName: string };
 };
 
@@ -25,7 +28,7 @@ export class AdminRepository {
   findEmployers(
     where: { isVerified?: boolean },
     skip: number,
-    take: number
+    take: number,
   ): Promise<[EmployerListItem[], number]> {
     return Promise.all([
       this.prisma.employerProfile.findMany({
@@ -44,34 +47,62 @@ export class AdminRepository {
   }
 
   findEmployerById(id: string): Promise<Pick<EmployerProfile, "id"> | null> {
-    return this.prisma.employerProfile.findUnique({ where: { id }, select: { id: true } });
+    return this.prisma.employerProfile.findUnique({
+      where: { id },
+      select: { id: true },
+    });
   }
 
   verifyEmployer(id: string): Promise<EmployerProfile> {
-    return this.prisma.employerProfile.update({ where: { id }, data: { isVerified: true } });
+    return this.prisma.employerProfile.update({
+      where: { id },
+      data: { isVerified: true },
+    });
   }
 
   async suspendEmployer(id: string): Promise<void> {
     await this.prisma.$transaction([
-      this.prisma.employerProfile.update({ where: { id }, data: { isVerified: false } }),
-      this.prisma.job.updateMany({ where: { employerId: id, status: "ACTIVE" }, data: { status: "CLOSED" } }),
+      this.prisma.employerProfile.update({
+        where: { id },
+        data: { isVerified: false },
+      }),
+      this.prisma.job.updateMany({
+        where: { employerId: id, status: "ACTIVE" },
+        data: { status: "CLOSED" },
+      }),
     ]);
   }
 
-  findJobs(where: { status: JobStatus }, skip: number, take: number): Promise<[JobListItem[], number]> {
-    return Promise.all([
+  async findJobs(
+    where: { status: JobStatus },
+    skip: number,
+    take: number,
+  ): Promise<[JobListItem[], number]> {
+    const [jobs, total] = await Promise.all([
       this.prisma.job.findMany({
         where,
         skip,
         take,
         orderBy: { createdAt: "asc" },
         include: {
-          employer: { select: { companyName: true, isVerified: true, slug: true } },
+          employer: {
+            select: { companyName: true, isVerified: true, slug: true },
+          },
           categories: { include: { category: true } },
         },
       }),
       this.prisma.job.count({ where }),
     ]);
+
+    // stripeSessionId/reviewNote are internal — strip before this reaches a response.
+    const publicJobs = jobs.map(
+      ({
+        stripeSessionId: _stripeSessionId,
+        reviewNote: _reviewNote,
+        ...rest
+      }) => rest,
+    );
+    return [publicJobs, total];
   }
 
   findJobWithEmployerEmail(id: string) {
@@ -89,7 +120,10 @@ export class AdminRepository {
     });
   }
 
-  rejectJob(id: string, note: string | null): Promise<Pick<Job, "status" | "publishedAt">> {
+  rejectJob(
+    id: string,
+    note: string | null,
+  ): Promise<Pick<Job, "status" | "publishedAt">> {
     return this.prisma.job.update({
       where: { id },
       data: { status: "REJECTED", reviewNote: note },
@@ -97,7 +131,9 @@ export class AdminRepository {
     });
   }
 
-  async countPaidJobsByPlan(): Promise<Array<{ planType: PlanType; count: number }>> {
+  async countPaidJobsByPlan(): Promise<
+    Array<{ planType: PlanType; count: number }>
+  > {
     const rows = await this.prisma.job.groupBy({
       by: ["planType"],
       where: { planPaid: true },
@@ -106,11 +142,16 @@ export class AdminRepository {
     return rows.map((row) => ({ planType: row.planType, count: row._count }));
   }
 
-  findPaidJobsSince(since: Date): Promise<Array<Pick<Job, "planType" | "paidAt" | "createdAt">>> {
+  findPaidJobsSince(
+    since: Date,
+  ): Promise<Array<Pick<Job, "planType" | "paidAt" | "createdAt">>> {
     return this.prisma.job.findMany({
       where: {
         planPaid: true,
-        OR: [{ paidAt: { gte: since } }, { paidAt: null, createdAt: { gte: since } }],
+        OR: [
+          { paidAt: { gte: since } },
+          { paidAt: null, createdAt: { gte: since } },
+        ],
       },
       select: { planType: true, paidAt: true, createdAt: true },
     });

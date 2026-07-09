@@ -41,9 +41,30 @@ export const ApplicationsListExample = [
       isRemote: true,
       country: "Vietnam",
       status: "ACTIVE",
-      employer: { companyName: "Acme Corp", logoUrl: "https://cdn.remotesea.com/logos/acme.png", slug: "acme-corp" },
-      skills: [{ skill: { id: "cskl1a2b0000ug0h9x1n1a2", name: "TypeScript", slug: "typescript" }, isRequired: true }],
-      categories: [{ category: { id: "ccat1a2b0000ug0h9x1n1a2", name: "Engineering", slug: "engineering" } }],
+      employer: {
+        companyName: "Acme Corp",
+        logoUrl: "https://cdn.remotesea.com/logos/acme.png",
+        slug: "acme-corp",
+      },
+      skills: [
+        {
+          skill: {
+            id: "cskl1a2b0000ug0h9x1n1a2",
+            name: "TypeScript",
+            slug: "typescript",
+          },
+          isRequired: true,
+        },
+      ],
+      categories: [
+        {
+          category: {
+            id: "ccat1a2b0000ug0h9x1n1a2",
+            name: "Engineering",
+            slug: "engineering",
+          },
+        },
+      ],
     },
   },
 ];

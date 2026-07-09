@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { jobTypeSchema, experienceLevelSchema, planTypeSchema } from "@/common/dto/enums.schema";
+import {
+  jobTypeSchema,
+  experienceLevelSchema,
+  planTypeSchema,
+} from "@/common/dto/enums.schema";
 
 export const createJobSchema = z.object({
   title: z.string().min(5).max(120),
@@ -7,8 +11,8 @@ export const createJobSchema = z.object({
   requirements: z.string().max(10_000).optional(),
   jobType: jobTypeSchema,
   level: experienceLevelSchema,
-  salaryMin: z.number().int().positive(),
-  salaryMax: z.number().int().positive(),
+  salaryMin: z.number().int().positive().max(10_000_000),
+  salaryMax: z.number().int().positive().max(10_000_000),
   timezone: z.string().optional(),
   country: z.string().optional(),
   benefits: z.array(z.string()).max(10).default([]),

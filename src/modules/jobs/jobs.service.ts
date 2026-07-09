@@ -1,10 +1,13 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { Job } from "@prisma/client";
-import { JobsRepository } from "./jobs.repository";
+import { JobsRepository, type PublicJob } from "./jobs.repository";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
-import { buildJobOrderBy, buildJobWhere, computeFacets } from "./job-search.util";
+import {
+  buildJobOrderBy,
+  buildJobWhere,
+  computeFacets,
+} from "./job-search.util";
 import { uniqueSlug } from "@/common/utils/slugify";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 import {
@@ -32,7 +35,11 @@ export class JobsService {
       this.jobsRepository.findFacetRows(),
     ]);
 
-    return { jobs, pagination: buildPagination(page, limit, total), facets: computeFacets(facetRows) };
+    return {
+      jobs,
+      pagination: buildPagination(page, limit, total),
+      facets: computeFacets(facetRows),
+    };
   }
 
   async getActiveById(id: string) {
@@ -41,22 +48,27 @@ export class JobsService {
       throw new NotFoundApiException("Job not found");
     }
 
-    void this.jobsRepository.incrementViewCount(job.id).catch((error: unknown) => {
-      this.logger.warn(
-        `Failed to increment view count for job ${job.id}`,
-        error instanceof Error ? error.stack : error
-      );
-    });
+    void this.jobsRepository
+      .incrementViewCount(job.id)
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `Failed to increment view count for job ${job.id}`,
+          error instanceof Error ? error.stack : error,
+        );
+      });
 
     return job;
   }
 
   async create(userId: string, dto: CreateJobDto) {
     if (dto.salaryMax < dto.salaryMin) {
-      throw new BadRequestApiException("salaryMax must be greater than or equal to salaryMin");
+      throw new BadRequestApiException(
+        "salaryMax must be greater than or equal to salaryMin",
+      );
     }
 
-    const employer = await this.jobsRepository.findEmployerProfileByUserId(userId);
+    const employer =
+      await this.jobsRepository.findEmployerProfileByUserId(userId);
     if (!employer) {
       throw new ForbiddenApiException("Employer profile required");
     }
@@ -69,11 +81,17 @@ export class JobsService {
       slug: uniqueSlug(jobData.title),
       status: "DRAFT",
       categories: { create: categoryIds.map((categoryId) => ({ categoryId })) },
-      ...(skillIds.length && { skills: { create: skillIds.map((skillId) => ({ skillId })) } }),
+      ...(skillIds.length && {
+        skills: { create: skillIds.map((skillId) => ({ skillId })) },
+      }),
     });
   }
 
-  async update(id: string, user: AuthenticatedUser, dto: UpdateJobDto): Promise<Job> {
+  async update(
+    id: string,
+    user: AuthenticatedUser,
+    dto: UpdateJobDto,
+  ): Promise<PublicJob> {
     const job = await this.jobsRepository.findById(id);
     if (!job) {
       throw new NotFoundApiException("Job not found");
@@ -90,7 +108,24 @@ export class JobsService {
       throw new ForbiddenApiException();
     }
     if (job.status !== "DRAFT" && job.status !== "REJECTED") {
-      throw new ForbiddenApiException("Only draft or rejected jobs can be edited");
+      throw new ForbiddenApiException(
+        "Only draft or rejected jobs can be edited",
+      );
+    }
+
+    // create() rejects salaryMax < salaryMin, but a PATCH can change just one of
+    // the two — re-check against the *effective* post-update values, not just
+    // whichever field happens to be present in this request.
+    const effectiveMin = dto.salaryMin ?? job.salaryMin;
+    const effectiveMax = dto.salaryMax ?? job.salaryMax;
+    if (
+      effectiveMin != null &&
+      effectiveMax != null &&
+      effectiveMax < effectiveMin
+    ) {
+      throw new BadRequestApiException(
+        "salaryMax must be greater than or equal to salaryMin",
+      );
     }
 
     // Re-checks the DRAFT/REJECTED condition atomically at write time: the read
@@ -99,7 +134,9 @@ export class JobsService {
     // land on a job that's no longer editable with no error at all.
     const updated = await this.jobsRepository.updateIfEditable(id, dto);
     if (!updated) {
-      throw new ForbiddenApiException("Only draft or rejected jobs can be edited");
+      throw new ForbiddenApiException(
+        "Only draft or rejected jobs can be edited",
+      );
     }
     return updated;
   }

@@ -15,7 +15,10 @@ import {
   ConflictApiException,
   UnauthorizedApiException,
 } from "@/common/exceptions/api.exception";
-import type { AuthenticatedUser, JwtPayload } from "@/common/interfaces/authenticated-user.interface";
+import type {
+  AuthenticatedUser,
+  JwtPayload,
+} from "@/common/interfaces/authenticated-user.interface";
 
 @Injectable()
 export class AuthService {
@@ -24,7 +27,7 @@ export class AuthService {
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly jwtService: JwtService,
-    private readonly emailService: EmailService
+    private readonly emailService: EmailService,
   ) {}
 
   async register(dto: RegisterDto): Promise<RegisteredUser> {
@@ -46,18 +49,24 @@ export class AuthService {
     // turn a successful signup into a 500 (a retry would then wrongly hit
     // "Email already registered").
     try {
-      await this.emailService.sendWelcomeEmail(user.email, user.name ?? "there");
+      await this.emailService.sendWelcomeEmail(
+        user.email,
+        user.name ?? "there",
+      );
     } catch (error) {
       this.logger.error(
         `Failed to send welcome email for user ${user.id}`,
-        error instanceof Error ? error.stack : error
+        error instanceof Error ? error.stack : error,
       );
     }
 
     return user;
   }
 
-  async validateCredentials(email: string, password: string): Promise<AuthenticatedUser> {
+  async validateCredentials(
+    email: string,
+    password: string,
+  ): Promise<AuthenticatedUser> {
     const user = await this.authRepository.findUserByEmail(email);
     if (!user?.passwordHash) {
       throw new UnauthorizedApiException("Invalid email or password");
@@ -70,7 +79,12 @@ export class AuthService {
   }
 
   issueToken(user: AuthenticatedUser): { accessToken: string } {
-    const payload: JwtPayload = { sub: user.id, email: user.email, name: user.name, role: user.role };
+    const payload: JwtPayload = {
+      sub: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+    };
     return { accessToken: this.jwtService.sign(payload) };
   }
 
@@ -87,12 +101,15 @@ export class AuthService {
     await this.authRepository.createVerificationToken(
       email,
       token,
-      new Date(Date.now() + RESET_TOKEN_TTL_MS)
+      new Date(Date.now() + RESET_TOKEN_TTL_MS),
     );
     try {
       await this.emailService.sendPasswordResetEmail(email, token);
     } catch (error) {
-      this.logger.error(`Failed to send password-reset email`, error instanceof Error ? error.stack : error);
+      this.logger.error(
+        `Failed to send password-reset email`,
+        error instanceof Error ? error.stack : error,
+      );
     }
   }
 
@@ -103,6 +120,10 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
-    await this.authRepository.consumePasswordReset(record.identifier, token, passwordHash);
+    await this.authRepository.consumePasswordReset(
+      record.identifier,
+      token,
+      passwordHash,
+    );
   }
 }

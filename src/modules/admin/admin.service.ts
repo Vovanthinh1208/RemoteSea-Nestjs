@@ -6,7 +6,10 @@ import type { ListJobsDto } from "./dto/list-jobs.dto";
 import type { ReviewJobDto } from "./dto/review-job.dto";
 import type { RevenuePlanMix, RevenueSummary } from "./interfaces";
 import { buildRecentMonthKeys, monthKeyOf } from "./revenue.util";
-import { BadRequestApiException, NotFoundApiException } from "@/common/exceptions/api.exception";
+import {
+  BadRequestApiException,
+  NotFoundApiException,
+} from "@/common/exceptions/api.exception";
 import { PLAN_LABELS, PLAN_PRICES } from "@/common/constants/plan.constants";
 import { PLAN_TYPE_VALUES } from "@/common/constants/enum-values.constants";
 import { EmailService } from "@/common/services/email.service";
@@ -21,26 +24,37 @@ export class AdminService {
 
   constructor(
     private readonly adminRepository: AdminRepository,
-    private readonly emailService: EmailService
+    private readonly emailService: EmailService,
   ) {}
 
   async listEmployers(query: ListEmployersDto) {
     const { verified, page, limit } = query;
     const skip = paginationSkip(page, limit);
-    const where = verified === undefined ? {} : { isVerified: verified === "true" };
+    const where =
+      verified === undefined ? {} : { isVerified: verified === "true" };
 
-    const [employers, total] = await this.adminRepository.findEmployers(where, skip, limit);
+    const [employers, total] = await this.adminRepository.findEmployers(
+      where,
+      skip,
+      limit,
+    );
 
     const data = employers.map(({ jobs, ...rest }) => ({
       ...rest,
       jobCount: rest._count.jobs,
-      totalSpend: jobs.reduce((sum, j) => sum + (PLAN_PRICES[j.planType] ?? 0), 0),
+      totalSpend: jobs.reduce(
+        (sum, j) => sum + (PLAN_PRICES[j.planType] ?? 0),
+        0,
+      ),
     }));
 
     return { employers: data, pagination: buildPagination(page, limit, total) };
   }
 
-  async updateEmployer(id: string, dto: UpdateEmployerDto): Promise<{ success: true }> {
+  async updateEmployer(
+    id: string,
+    dto: UpdateEmployerDto,
+  ): Promise<{ success: true }> {
     const employer = await this.adminRepository.findEmployerById(id);
     if (!employer) {
       throw new NotFoundApiException("Employer not found");
@@ -60,7 +74,11 @@ export class AdminService {
     const skip = paginationSkip(page, limit);
     const where = { status };
 
-    const [jobs, total] = await this.adminRepository.findJobs(where, skip, limit);
+    const [jobs, total] = await this.adminRepository.findJobs(
+      where,
+      skip,
+      limit,
+    );
 
     return { jobs, pagination: buildPagination(page, limit, total) };
   }
@@ -71,7 +89,9 @@ export class AdminService {
       throw new NotFoundApiException("Job not found");
     }
     if (job.status !== "PENDING_REVIEW") {
-      throw new BadRequestApiException(`Job is ${job.status}, not pending review`);
+      throw new BadRequestApiException(
+        `Job is ${job.status}, not pending review`,
+      );
     }
 
     const { action, note } = dto;
@@ -83,11 +103,15 @@ export class AdminService {
     if (action === "approve") {
       const updated = await this.adminRepository.approveJob(id);
       try {
-        await this.emailService.sendJobLiveEmail(employerEmail, job.title, job.slug);
+        await this.emailService.sendJobLiveEmail(
+          employerEmail,
+          job.title,
+          job.slug,
+        );
       } catch (error) {
         this.logger.error(
           `Failed to send job-live email for job ${id}`,
-          error instanceof Error ? error.stack : error
+          error instanceof Error ? error.stack : error,
         );
       }
       return updated;
@@ -95,11 +119,15 @@ export class AdminService {
 
     const updated = await this.adminRepository.rejectJob(id, note ?? null);
     try {
-      await this.emailService.sendJobRejectedEmail(employerEmail, job.title, note ?? "");
+      await this.emailService.sendJobRejectedEmail(
+        employerEmail,
+        job.title,
+        note ?? "",
+      );
     } catch (error) {
       this.logger.error(
         `Failed to send job-rejected email for job ${id}`,
-        error instanceof Error ? error.stack : error
+        error instanceof Error ? error.stack : error,
       );
     }
     return updated;
@@ -109,7 +137,11 @@ export class AdminService {
     const now = new Date();
     const monthKeys = buildRecentMonthKeys(REVENUE_MONTHS_WINDOW, now);
     const windowStart = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (REVENUE_MONTHS_WINDOW - 1), 1)
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth() - (REVENUE_MONTHS_WINDOW - 1),
+        1,
+      ),
     );
 
     const [planCounts, recentPaidJobs, transactionJobs] = await Promise.all([
@@ -118,8 +150,16 @@ export class AdminService {
       this.adminRepository.findRecentPaidJobs(RECENT_TRANSACTIONS_LIMIT),
     ]);
 
-    const months = monthKeys.map(({ key, label }) => ({ key, label, standard: 0, featured: 0, handsOn: 0 }));
-    const monthIndexByKey = new Map(months.map((month, index) => [month.key, index]));
+    const months = monthKeys.map(({ key, label }) => ({
+      key,
+      label,
+      standard: 0,
+      featured: 0,
+      handsOn: 0,
+    }));
+    const monthIndexByKey = new Map(
+      months.map((month, index) => [month.key, index]),
+    );
 
     for (const job of recentPaidJobs) {
       const amount = PLAN_PRICES[job.planType];
@@ -134,7 +174,9 @@ export class AdminService {
       else bucket.handsOn += amount;
     }
 
-    const countByPlan = new Map(planCounts.map(({ planType, count }) => [planType, count]));
+    const countByPlan = new Map(
+      planCounts.map(({ planType, count }) => [planType, count]),
+    );
     const mix: RevenuePlanMix[] = PLAN_TYPE_VALUES.map((planType) => {
       const count = countByPlan.get(planType) ?? 0;
       return {
@@ -156,9 +198,11 @@ export class AdminService {
     }));
 
     const allTime = mix.reduce((sum, m) => sum + m.amount, 0);
-    const currentMonthIndex = monthIndexByKey.get(monthKeyOf(now)) ?? months.length - 1;
+    const currentMonthIndex =
+      monthIndexByKey.get(monthKeyOf(now)) ?? months.length - 1;
     const currentMonth = months[currentMonthIndex];
-    const thisMonth = currentMonth.standard + currentMonth.featured + currentMonth.handsOn;
+    const thisMonth =
+      currentMonth.standard + currentMonth.featured + currentMonth.handsOn;
 
     return { months, mix, transactions, totals: { allTime, thisMonth } };
   }

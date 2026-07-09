@@ -10,6 +10,8 @@ export class TaxonomyService {
   }
 
   listSkills(q?: string) {
-    return this.taxonomyRepository.findSkills(q ? { name: { contains: q, mode: "insensitive" } } : undefined);
+    return this.taxonomyRepository.findSkills(
+      q ? { name: { contains: q, mode: "insensitive" } } : undefined,
+    );
   }
 }

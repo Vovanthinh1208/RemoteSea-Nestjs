@@ -17,12 +17,17 @@ import type { EnvConfig } from "@/core/config/env.validation";
           region: config.get("S3_REGION", { infer: true }) ?? "auto",
           endpoint: config.get("S3_ENDPOINT", { infer: true }),
           credentials: {
-            accessKeyId: config.get("S3_ACCESS_KEY_ID", { infer: true }) as string,
-            secretAccessKey: config.get("S3_SECRET_ACCESS_KEY", { infer: true }) as string,
+            accessKeyId: config.get("S3_ACCESS_KEY_ID", {
+              infer: true,
+            }) as string,
+            secretAccessKey: config.get("S3_SECRET_ACCESS_KEY", {
+              infer: true,
+            }) as string,
           },
         }),
       inject: [ConfigService],
     },
   ],
+  exports: [UploadsService],
 })
 export class UploadsModule {}

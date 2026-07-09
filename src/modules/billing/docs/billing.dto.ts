@@ -9,12 +9,18 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
  */
 
 export class CheckoutRequestDto {
-  @ApiProperty({ description: "CUID of a DRAFT, unpaid job owned by the current user", example: "cme8f1a2b0000ug0h9x1n1a2" })
+  @ApiProperty({
+    description: "CUID of a DRAFT, unpaid job owned by the current user",
+    example: "cme8f1a2b0000ug0h9x1n1a2",
+  })
   jobId!: string;
 }
 
 export class CheckoutResponseDto {
-  @ApiPropertyOptional({ nullable: true, example: "https://checkout.stripe.com/c/pay/cs_test_a1b2c3..." })
+  @ApiPropertyOptional({
+    nullable: true,
+    example: "https://checkout.stripe.com/c/pay/cs_test_a1b2c3...",
+  })
   url!: string | null;
 }
 

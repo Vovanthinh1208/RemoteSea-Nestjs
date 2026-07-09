@@ -9,8 +9,15 @@ import {
   ApiQuery,
   ApiTags,
 } from "@nestjs/swagger";
-import { ForbiddenApiResponse, InternalServerErrorApiResponse, UnauthorizedApiResponse } from "@/core/swagger/common.responses";
-import { JOB_STATUS_VALUES, APPLICATION_STATUS_VALUES } from "@/common/constants/enum-values.constants";
+import {
+  ForbiddenApiResponse,
+  InternalServerErrorApiResponse,
+  UnauthorizedApiResponse,
+} from "@/core/swagger/common.responses";
+import {
+  JOB_STATUS_VALUES,
+  APPLICATION_STATUS_VALUES,
+} from "@/common/constants/enum-values.constants";
 import {
   ApplicationResponseDto,
   CreateEmployerProfileRequestDto,
@@ -55,7 +62,10 @@ export const ApiCreateEmployerProfile = () =>
       description:
         "Creates an EmployerProfile for the authenticated user and promotes their User.role to EMPLOYER. Slug collisions get a random 6-char suffix. Any authenticated role may call this.",
     }),
-    ApiBody({ type: CreateEmployerProfileRequestDto, examples: { default: { value: CreateEmployerProfileRequestExample } } }),
+    ApiBody({
+      type: CreateEmployerProfileRequestDto,
+      examples: { default: { value: CreateEmployerProfileRequestExample } },
+    }),
     ApiCreatedResponse({
       description: "Employer profile created",
       type: CreateEmployerProfileResponseDto,
@@ -64,7 +74,7 @@ export const ApiCreateEmployerProfile = () =>
     ValidationErrorResponse,
     UnauthorizedApiResponse,
     EmployerProfileAlreadyExistsResponse,
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );
 
 export const ApiGetEmployerProfile = () =>
@@ -83,7 +93,7 @@ export const ApiGetEmployerProfile = () =>
     UnauthorizedApiResponse,
     ForbiddenApiResponse,
     EmployerProfileNotFoundResponse,
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );
 
 export const ApiUpdateEmployerProfile = () =>
@@ -91,9 +101,13 @@ export const ApiUpdateEmployerProfile = () =>
     ApiBearerAuth("bearer"),
     ApiOperation({
       summary: "Update the authenticated employer's profile",
-      description: "Updates fields on the authenticated employer's profile. All fields optional. Requires the EMPLOYER role (RolesGuard).",
+      description:
+        "Updates fields on the authenticated employer's profile. All fields optional. Requires the EMPLOYER role (RolesGuard).",
     }),
-    ApiBody({ type: UpdateEmployerProfileRequestDto, examples: { default: { value: UpdateEmployerProfileRequestExample } } }),
+    ApiBody({
+      type: UpdateEmployerProfileRequestDto,
+      examples: { default: { value: UpdateEmployerProfileRequestExample } },
+    }),
     ApiOkResponse({
       description: "Updated employer profile",
       type: EmployerProfileDto,
@@ -103,7 +117,7 @@ export const ApiUpdateEmployerProfile = () =>
     UnauthorizedApiResponse,
     ForbiddenApiResponse,
     EmployerProfileNotFoundResponse,
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );
 
 export const ApiListEmployerJobs = () =>
@@ -129,7 +143,7 @@ export const ApiListEmployerJobs = () =>
     UnauthorizedApiResponse,
     ForbiddenApiResponse,
     EmployerProfileRequiredResponse,
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );
 
 export const ApiListJobApplications = () =>
@@ -140,7 +154,11 @@ export const ApiListJobApplications = () =>
       description:
         "Lists paginated applications for a job owned by the caller. Requires the EMPLOYER role (RolesGuard) and ownership is additionally enforced in the service via `job.employer.userId === user.id`, which surfaces as a 403 (not owning) or 404 (job not found).",
     }),
-    ApiParam({ name: "id", description: "Job id", example: "cljob1a2b3c4d5e6f7g8h9i0" }),
+    ApiParam({
+      name: "id",
+      description: "Job id",
+      example: "cljob1a2b3c4d5e6f7g8h9i0",
+    }),
     ApiQuery({
       name: "status",
       required: false,
@@ -158,7 +176,7 @@ export const ApiListJobApplications = () =>
     UnauthorizedApiResponse,
     NotOwningEmployerResponse,
     JobNotFoundResponse,
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );
 
 export const ApiUpdateApplication = () =>
@@ -178,8 +196,15 @@ export const ApiUpdateApplication = () =>
         "- WITHDRAWN → (none)\n\n" +
         "Setting the same status the application already has is always a no-op allowed, regardless of the table above.",
     }),
-    ApiParam({ name: "id", description: "Application id", example: "clapp1a2b3c4d5e6f7g8h9i0" }),
-    ApiBody({ type: UpdateApplicationRequestDto, examples: { default: { value: UpdateApplicationRequestExample } } }),
+    ApiParam({
+      name: "id",
+      description: "Application id",
+      example: "clapp1a2b3c4d5e6f7g8h9i0",
+    }),
+    ApiBody({
+      type: UpdateApplicationRequestDto,
+      examples: { default: { value: UpdateApplicationRequestExample } },
+    }),
     ApiOkResponse({
       description: "Updated application",
       type: ApplicationResponseDto,
@@ -190,5 +215,5 @@ export const ApiUpdateApplication = () =>
     NotOwningEmployerResponse,
     ApplicationNotFoundResponse,
     ApplicationConflictResponse,
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );

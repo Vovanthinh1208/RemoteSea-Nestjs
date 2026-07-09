@@ -26,24 +26,42 @@ export class CreateAlertRequestDto {
   @ApiPropertyOptional({ enum: EXPERIENCE_LEVEL_VALUES, example: "SENIOR" })
   level?: "ENTRY" | "MID" | "SENIOR" | "LEAD" | "EXECUTIVE";
 
-  @ApiPropertyOptional({ type: Number, minimum: 1, example: 80000, description: "Matches jobs with salaryMin >= value" })
+  @ApiPropertyOptional({
+    type: Number,
+    minimum: 1,
+    example: 80000,
+    description: "Matches jobs with salaryMin >= value",
+  })
   salaryMin?: number;
 
   @ApiPropertyOptional({ example: "United States" })
   country?: string;
 
-  @ApiPropertyOptional({ example: "America/New_York", description: "Stored only, not used in matching" })
+  @ApiPropertyOptional({
+    example: "America/New_York",
+    description: "Stored only, not used in matching",
+  })
   timezone?: string;
 
-  @ApiPropertyOptional({ enum: ALERT_FREQUENCY_VALUES, default: "DAILY", example: "DAILY" })
+  @ApiPropertyOptional({
+    enum: ALERT_FREQUENCY_VALUES,
+    default: "DAILY",
+    example: "DAILY",
+  })
   frequency?: "IMMEDIATE" | "DAILY" | "WEEKLY";
 
-  @ApiPropertyOptional({ type: [String], example: ["cme8f1a2b0000ug0h9x1n1a2"] })
+  @ApiPropertyOptional({
+    type: [String],
+    example: ["cme8f1a2b0000ug0h9x1n1a2"],
+  })
   categoryIds?: string[];
 }
 
 export class UpdateAlertRequestDto {
-  @ApiProperty({ example: true, description: "The only mutable field on this route" })
+  @ApiProperty({
+    example: true,
+    description: "The only mutable field on this route",
+  })
   isActive!: boolean;
 }
 
@@ -76,10 +94,18 @@ export class AlertResponseDto {
   @ApiPropertyOptional({ nullable: true, example: "react typescript" })
   keywords!: string | null;
 
-  @ApiPropertyOptional({ enum: JOB_TYPE_VALUES, nullable: true, example: "FULL_TIME" })
+  @ApiPropertyOptional({
+    enum: JOB_TYPE_VALUES,
+    nullable: true,
+    example: "FULL_TIME",
+  })
   jobType!: string | null;
 
-  @ApiPropertyOptional({ enum: EXPERIENCE_LEVEL_VALUES, nullable: true, example: "SENIOR" })
+  @ApiPropertyOptional({
+    enum: EXPERIENCE_LEVEL_VALUES,
+    nullable: true,
+    example: "SENIOR",
+  })
   level!: string | null;
 
   @ApiPropertyOptional({ nullable: true, example: 80000 })
@@ -106,7 +132,10 @@ export class AlertResponseDto {
   @ApiProperty({ example: "2026-06-01T10:00:00.000Z" })
   updatedAt!: string;
 
-  @ApiPropertyOptional({ type: [AlertCategoryLinkDto], description: "Only included on GET/POST /alerts, not on PATCH" })
+  @ApiPropertyOptional({
+    type: [AlertCategoryLinkDto],
+    description: "Only included on GET/POST /alerts, not on PATCH",
+  })
   categories?: AlertCategoryLinkDto[];
 }
 
@@ -119,6 +148,9 @@ export class CronDispatchResponseDto {
   @ApiProperty({ example: 42, description: "Number of active alerts scanned" })
   processed!: number;
 
-  @ApiProperty({ example: 7, description: "Number of alerts that had matches and were emailed" })
+  @ApiProperty({
+    example: 7,
+    description: "Number of alerts that had matches and were emailed",
+  })
   sent!: number;
 }

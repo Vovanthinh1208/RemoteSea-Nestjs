@@ -1,6 +1,18 @@
 import { applyDecorators } from "@nestjs/common";
-import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiParam, ApiQuery, ApiTags } from "@nestjs/swagger";
-import { ForbiddenApiResponse, InternalServerErrorApiResponse, UnauthorizedApiResponse } from "@/core/swagger/common.responses";
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiTags,
+} from "@nestjs/swagger";
+import {
+  ForbiddenApiResponse,
+  InternalServerErrorApiResponse,
+  UnauthorizedApiResponse,
+} from "@/core/swagger/common.responses";
 import { JOB_STATUS_VALUES } from "@/common/constants/enum-values.constants";
 import {
   ListEmployersResponseDto,
@@ -21,9 +33,14 @@ import {
   UpdateEmployerRequestExample,
   UpdateEmployerResponseExample,
 } from "./admin.examples";
-import { EmployerNotFoundResponse, JobNotFoundResponse, ValidationErrorResponse } from "./admin.responses";
+import {
+  EmployerNotFoundResponse,
+  JobNotFoundResponse,
+  ValidationErrorResponse,
+} from "./admin.responses";
 
-export const ApiAdminTag = () => applyDecorators(ApiTags("Admin"), ApiBearerAuth("bearer"));
+export const ApiAdminTag = () =>
+  applyDecorators(ApiTags("Admin"), ApiBearerAuth("bearer"));
 
 export const ApiListEmployers = () =>
   applyDecorators(
@@ -32,7 +49,12 @@ export const ApiListEmployers = () =>
       description:
         "Lists employer profiles for moderation with computed job count and total ad spend, paginated. Requires ADMIN role.",
     }),
-    ApiQuery({ name: "verified", required: false, enum: ["true", "false"], description: "Filters on EmployerProfile.isVerified" }),
+    ApiQuery({
+      name: "verified",
+      required: false,
+      enum: ["true", "false"],
+      description: "Filters on EmployerProfile.isVerified",
+    }),
     ApiQuery({ name: "page", required: false, type: Number, example: 1 }),
     ApiQuery({ name: "limit", required: false, type: Number, example: 20 }),
     ApiOkResponse({
@@ -44,7 +66,7 @@ export const ApiListEmployers = () =>
     ValidationErrorResponse,
     UnauthorizedApiResponse,
     ForbiddenApiResponse,
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );
 
 export const ApiUpdateEmployer = () =>
@@ -55,20 +77,28 @@ export const ApiUpdateEmployer = () =>
         "Verifies or suspends an employer. Suspending force-closes (status: CLOSED) all of that employer's ACTIVE jobs, transactionally. Requires ADMIN role.",
     }),
     ApiParam({ name: "id", description: "EmployerProfile id" }),
-    ApiBody({ type: UpdateEmployerRequestDto, examples: { default: { value: UpdateEmployerRequestExample } } }),
-    ApiOkResponse({ description: "Employer updated", type: UpdateEmployerResponseDto, schema: { example: UpdateEmployerResponseExample } }),
+    ApiBody({
+      type: UpdateEmployerRequestDto,
+      examples: { default: { value: UpdateEmployerRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "Employer updated",
+      type: UpdateEmployerResponseDto,
+      schema: { example: UpdateEmployerResponseExample },
+    }),
     ValidationErrorResponse,
     UnauthorizedApiResponse,
     ForbiddenApiResponse,
     EmployerNotFoundResponse,
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );
 
 export const ApiListJobs = () =>
   applyDecorators(
     ApiOperation({
       summary: "List jobs for moderation",
-      description: "Lists jobs for moderation review, filtered by status, paginated, oldest first (FIFO review queue). Requires ADMIN role.",
+      description:
+        "Lists jobs for moderation review, filtered by status, paginated, oldest first (FIFO review queue). Requires ADMIN role.",
     }),
     ApiQuery({
       name: "status",
@@ -79,14 +109,15 @@ export const ApiListJobs = () =>
     ApiQuery({ name: "page", required: false, type: Number, example: 1 }),
     ApiQuery({ name: "limit", required: false, type: Number, example: 20 }),
     ApiOkResponse({
-      description: "Paginated job list with partial `employer` and `categories` (no `skills` include)",
+      description:
+        "Paginated job list with partial `employer` and `categories` (no `skills` include)",
       type: ListJobsResponseDto,
       schema: { example: ListJobsResponseExample },
     }),
     ValidationErrorResponse,
     UnauthorizedApiResponse,
     ForbiddenApiResponse,
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );
 
 export const ApiReviewJob = () =>
@@ -105,7 +136,8 @@ export const ApiReviewJob = () =>
       },
     }),
     ApiOkResponse({
-      description: "Job reviewed — partial Job object (`status` and `publishedAt` only)",
+      description:
+        "Job reviewed — partial Job object (`status` and `publishedAt` only)",
       type: ReviewJobResponseDto,
       schema: { example: ReviewJobApprovedResponseExample },
     }),
@@ -113,7 +145,7 @@ export const ApiReviewJob = () =>
     UnauthorizedApiResponse,
     ForbiddenApiResponse,
     JobNotFoundResponse,
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );
 
 export const ApiGetRevenue = () =>
@@ -130,5 +162,5 @@ export const ApiGetRevenue = () =>
     }),
     UnauthorizedApiResponse,
     ForbiddenApiResponse,
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );

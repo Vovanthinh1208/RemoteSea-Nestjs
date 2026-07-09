@@ -14,7 +14,7 @@ export class AlertsService {
 
   constructor(
     private readonly alertsRepository: AlertsRepository,
-    private readonly emailService: EmailService
+    private readonly emailService: EmailService,
   ) {}
 
   listForUser(userId: string) {
@@ -54,7 +54,9 @@ export class AlertsService {
     // fire hundreds of simultaneous outbound email requests in one burst.
     for (let i = 0; i < alerts.length; i += SEND_CONCURRENCY) {
       const chunk = alerts.slice(i, i + SEND_CONCURRENCY);
-      const results = await Promise.all(chunk.map((alert) => this.dispatchOne(alert, now)));
+      const results = await Promise.all(
+        chunk.map((alert) => this.dispatchOne(alert, now)),
+      );
       sent += results.filter(Boolean).length;
     }
 
@@ -63,12 +65,14 @@ export class AlertsService {
 
   private async dispatchOne(
     alert: Awaited<ReturnType<AlertsRepository["findActiveAlerts"]>>[number],
-    now: number
+    now: number,
   ): Promise<boolean> {
     const gap = FREQUENCY_GAP_MS[alert.frequency];
-    if (alert.lastSentAt && now - alert.lastSentAt.getTime() < gap) return false;
+    if (alert.lastSentAt && now - alert.lastSentAt.getTime() < gap)
+      return false;
 
-    const since = alert.lastSentAt ?? new Date(now - gap || now - FREQUENCY_GAP_MS.DAILY);
+    const since =
+      alert.lastSentAt ?? new Date(now - gap || now - FREQUENCY_GAP_MS.DAILY);
 
     const where: Prisma.JobWhereInput = {
       status: "ACTIVE",
@@ -84,7 +88,11 @@ export class AlertsService {
         ],
       }),
       ...(alert.categories.length && {
-        categories: { some: { categoryId: { in: alert.categories.map((c) => c.categoryId) } } },
+        categories: {
+          some: {
+            categoryId: { in: alert.categories.map((c) => c.categoryId) },
+          },
+        },
       }),
     };
 
@@ -96,7 +104,10 @@ export class AlertsService {
     // read the same stale lastSentAt and double-send. A crash/failure after the
     // claim just means that alert waits for the next window instead of retrying,
     // which is the safer failure mode for a non-critical notification email.
-    const claimed = await this.alertsRepository.claimForSend(alert.id, alert.lastSentAt);
+    const claimed = await this.alertsRepository.claimForSend(
+      alert.id,
+      alert.lastSentAt,
+    );
     if (!claimed) return false;
 
     try {
@@ -105,7 +116,7 @@ export class AlertsService {
     } catch (error) {
       this.logger.error(
         `Failed to send alert email for alert ${alert.id}`,
-        error instanceof Error ? error.stack : error
+        error instanceof Error ? error.stack : error,
       );
       return false;
     }

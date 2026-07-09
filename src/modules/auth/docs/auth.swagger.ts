@@ -1,6 +1,16 @@
 import { applyDecorators } from "@nestjs/common";
-import { ApiBody, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { InternalServerErrorApiResponse, rateLimitResponse } from "@/core/swagger/common.responses";
+import {
+  ApiBody,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
+import {
+  InternalServerErrorApiResponse,
+  rateLimitResponse,
+} from "@/core/swagger/common.responses";
 import {
   ForgotPasswordRequestDto,
   LoginRequestDto,
@@ -39,23 +49,41 @@ export const ApiRegister = () =>
       description:
         "Creates a TALENT or EMPLOYER account with a bcrypt-hashed password. Auto-provisions a TalentProfile (with a generated slug) for TALENT signups and sends a welcome email (no-op without RESEND_API_KEY).",
     }),
-    ApiBody({ type: RegisterRequestDto, examples: { default: { value: RegisterRequestExample } } }),
-    ApiCreatedResponse({ description: "User created", type: RegisterResponseDto, schema: { example: RegisterResponseExample } }),
+    ApiBody({
+      type: RegisterRequestDto,
+      examples: { default: { value: RegisterRequestExample } },
+    }),
+    ApiCreatedResponse({
+      description: "User created",
+      type: RegisterResponseDto,
+      schema: { example: RegisterResponseExample },
+    }),
     ValidationErrorResponse,
     EmailAlreadyRegisteredResponse,
     rateLimitResponse("5 req/60s per IP"),
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );
 
 export const ApiLogin = () =>
   applyDecorators(
-    ApiOperation({ summary: "Log in", description: "Validates email/password credentials and issues a signed JWT access token." }),
-    ApiBody({ type: LoginRequestDto, examples: { default: { value: LoginRequestExample } } }),
-    ApiOkResponse({ description: "Login succeeded", type: TokenResponseDto, schema: { example: TokenResponseExample } }),
+    ApiOperation({
+      summary: "Log in",
+      description:
+        "Validates email/password credentials and issues a signed JWT access token.",
+    }),
+    ApiBody({
+      type: LoginRequestDto,
+      examples: { default: { value: LoginRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "Login succeeded",
+      type: TokenResponseDto,
+      schema: { example: TokenResponseExample },
+    }),
     ValidationErrorResponse,
     InvalidCredentialsResponse,
     rateLimitResponse("10 req/60s per IP, 10 req/60s per email"),
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );
 
 export const ApiSession = () =>
@@ -68,8 +96,13 @@ export const ApiSession = () =>
     ApiOkResponse({
       description: "Current user, or null if not authenticated",
       type: SessionResponseDto,
-      schema: { examples: { authenticated: { value: SessionAuthenticatedExample }, anonymous: { value: SessionAnonymousExample } } },
-    })
+      schema: {
+        examples: {
+          authenticated: { value: SessionAuthenticatedExample },
+          anonymous: { value: SessionAnonymousExample },
+        },
+      },
+    }),
   );
 
 export const ApiGoogleLogin = () =>
@@ -79,7 +112,10 @@ export const ApiGoogleLogin = () =>
       description:
         "Redirects the browser to Google's consent screen. Only registered when AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET are configured — otherwise this route doesn't exist / throws at the Passport layer (500).",
     }),
-    ApiResponse({ status: 302, description: "Redirects to Google's OAuth consent screen" })
+    ApiResponse({
+      status: 302,
+      description: "Redirects to Google's OAuth consent screen",
+    }),
   );
 
 export const ApiGoogleCallback = () =>
@@ -89,8 +125,12 @@ export const ApiGoogleCallback = () =>
       description:
         "Google's OAuth redirect target. Looks up or creates the user from the Google profile, issues a JWT, and redirects to `<FRONTEND_URL>/auth/callback?token=<accessToken>`. A profile with no email surfaces as a 500 (raw Error, not an ApiException) rather than a 401.",
     }),
-    ApiResponse({ status: 302, description: "Redirects to `<FRONTEND_URL>/auth/callback?token=<accessToken>`" }),
-    InternalServerErrorApiResponse
+    ApiResponse({
+      status: 302,
+      description:
+        "Redirects to `<FRONTEND_URL>/auth/callback?token=<accessToken>`",
+    }),
+    InternalServerErrorApiResponse,
   );
 
 export const ApiGithubLogin = () =>
@@ -100,7 +140,10 @@ export const ApiGithubLogin = () =>
       description:
         "Redirects the browser to GitHub's consent screen. Only registered when AUTH_GITHUB_ID and AUTH_GITHUB_SECRET are configured.",
     }),
-    ApiResponse({ status: 302, description: "Redirects to GitHub's OAuth consent screen" })
+    ApiResponse({
+      status: 302,
+      description: "Redirects to GitHub's OAuth consent screen",
+    }),
   );
 
 export const ApiGithubCallback = () =>
@@ -110,8 +153,12 @@ export const ApiGithubCallback = () =>
       description:
         "GitHub's OAuth redirect target; same flow as the Google callback. A profile with no public email surfaces as a 500 rather than a 401.",
     }),
-    ApiResponse({ status: 302, description: "Redirects to `<FRONTEND_URL>/auth/callback?token=<accessToken>`" }),
-    InternalServerErrorApiResponse
+    ApiResponse({
+      status: 302,
+      description:
+        "Redirects to `<FRONTEND_URL>/auth/callback?token=<accessToken>`",
+    }),
+    InternalServerErrorApiResponse,
   );
 
 export const ApiForgotPassword = () =>
@@ -121,20 +168,37 @@ export const ApiForgotPassword = () =>
       description:
         "Issues a password-reset token (TTL 1h) if the email exists and emails a reset link. Always returns the same generic message to prevent user enumeration.",
     }),
-    ApiBody({ type: ForgotPasswordRequestDto, examples: { default: { value: ForgotPasswordRequestExample } } }),
-    ApiOkResponse({ description: "Request accepted", type: MessageResponseDto, schema: { example: ForgotPasswordResponseExample } }),
+    ApiBody({
+      type: ForgotPasswordRequestDto,
+      examples: { default: { value: ForgotPasswordRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "Request accepted",
+      type: MessageResponseDto,
+      schema: { example: ForgotPasswordResponseExample },
+    }),
     ValidationErrorResponse,
     rateLimitResponse("3 req/60s per IP"),
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );
 
 export const ApiResetPassword = () =>
   applyDecorators(
-    ApiOperation({ summary: "Reset password", description: "Consumes a password-reset token and sets a new password." }),
-    ApiBody({ type: ResetPasswordRequestDto, examples: { default: { value: ResetPasswordRequestExample } } }),
-    ApiOkResponse({ description: "Password updated", type: MessageResponseDto, schema: { example: ResetPasswordResponseExample } }),
+    ApiOperation({
+      summary: "Reset password",
+      description: "Consumes a password-reset token and sets a new password.",
+    }),
+    ApiBody({
+      type: ResetPasswordRequestDto,
+      examples: { default: { value: ResetPasswordRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "Password updated",
+      type: MessageResponseDto,
+      schema: { example: ResetPasswordResponseExample },
+    }),
     ValidationErrorResponse,
     InvalidOrExpiredTokenResponse,
     rateLimitResponse("5 req/60s per IP"),
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );

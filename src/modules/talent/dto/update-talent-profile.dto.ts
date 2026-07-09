@@ -14,10 +14,15 @@ export const talentProfileSchema = z.object({
   githubUrl: z.string().url().optional(),
   linkedinUrl: z.string().url().optional(),
   isOpenToWork: z.boolean().optional(),
-  desiredSalaryMin: z.number().int().positive().optional(),
-  desiredSalaryMax: z.number().int().positive().optional(),
+  desiredSalaryMin: z.number().int().positive().max(10_000_000).optional(),
+  desiredSalaryMax: z.number().int().positive().max(10_000_000).optional(),
   skills: z
-    .array(z.object({ skillId: z.string().cuid(), yearsExp: z.number().int().min(0).optional() }))
+    .array(
+      z.object({
+        skillId: z.string().cuid(),
+        yearsExp: z.number().int().min(0).optional(),
+      }),
+    )
     .optional(),
 });
 

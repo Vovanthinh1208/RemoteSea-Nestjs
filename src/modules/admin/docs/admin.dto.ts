@@ -1,5 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { JOB_STATUS_VALUES, PLAN_TYPE_VALUES } from "@/common/constants/enum-values.constants";
+import {
+  JOB_STATUS_VALUES,
+  PLAN_TYPE_VALUES,
+} from "@/common/constants/enum-values.constants";
 
 /**
  * Swagger-only request/response shapes for the Admin module.
@@ -10,7 +13,10 @@ import { JOB_STATUS_VALUES, PLAN_TYPE_VALUES } from "@/common/constants/enum-val
  */
 
 export class ListEmployersQueryDto {
-  @ApiPropertyOptional({ enum: ["true", "false"], description: "Filters on EmployerProfile.isVerified" })
+  @ApiPropertyOptional({
+    enum: ["true", "false"],
+    description: "Filters on EmployerProfile.isVerified",
+  })
   verified?: "true" | "false";
 
   @ApiPropertyOptional({ minimum: 1, default: 1, example: 1 })
@@ -43,13 +49,24 @@ export class EmployerListItemDto {
   @ApiProperty({ type: EmployerListItemUserDto })
   user!: EmployerListItemUserDto;
 
-  @ApiProperty({ type: EmployerJobCountDto, description: "Raw Prisma `_count.jobs`" })
+  @ApiProperty({
+    type: EmployerJobCountDto,
+    description: "Raw Prisma `_count.jobs`",
+  })
   _count!: EmployerJobCountDto;
 
-  @ApiProperty({ example: 4, description: "Duplicate of `_count.jobs`, exposed as a top-level convenience field" })
+  @ApiProperty({
+    example: 4,
+    description:
+      "Duplicate of `_count.jobs`, exposed as a top-level convenience field",
+  })
   jobCount!: number;
 
-  @ApiProperty({ example: 50000, description: "Sum of PLAN_PRICES[planType] over this employer's planPaid jobs" })
+  @ApiProperty({
+    example: 50000,
+    description:
+      "Sum of PLAN_PRICES[planType] over this employer's planPaid jobs",
+  })
   totalSpend!: number;
 }
 
@@ -112,7 +129,13 @@ class JobListItemEmployerDto {
 }
 
 class JobListItemCategoryDto {
-  @ApiProperty({ example: { id: "ccat1a2b0000ug0h9x1n1a2", name: "Engineering", slug: "engineering" } })
+  @ApiProperty({
+    example: {
+      id: "ccat1a2b0000ug0h9x1n1a2",
+      name: "Engineering",
+      slug: "engineering",
+    },
+  })
   category!: { id: string; name: string; slug: string };
 }
 
@@ -129,10 +152,16 @@ export class JobListItemDto {
   @ApiProperty({ enum: JOB_STATUS_VALUES, example: "PENDING_REVIEW" })
   status!: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED";
 
-  @ApiProperty({ type: JobListItemEmployerDto, description: "Partial employer (no full profile)" })
+  @ApiProperty({
+    type: JobListItemEmployerDto,
+    description: "Partial employer (no full profile)",
+  })
   employer!: JobListItemEmployerDto;
 
-  @ApiProperty({ type: [JobListItemCategoryDto], description: "No `skills` include on this endpoint" })
+  @ApiProperty({
+    type: [JobListItemCategoryDto],
+    description: "No `skills` include on this endpoint",
+  })
   categories!: JobListItemCategoryDto[];
 }
 
@@ -148,7 +177,10 @@ export class ReviewJobRequestDto {
   @ApiProperty({ enum: ["approve", "reject"], example: "approve" })
   action!: "approve" | "reject";
 
-  @ApiPropertyOptional({ maxLength: 2000, example: "Missing salary range and job description is too vague." })
+  @ApiPropertyOptional({
+    maxLength: 2000,
+    example: "Missing salary range and job description is too vague.",
+  })
   note?: string;
 }
 
@@ -156,7 +188,8 @@ export class ReviewJobResponseDto {
   @ApiProperty({
     enum: JOB_STATUS_VALUES,
     example: "ACTIVE",
-    description: "Intentionally partial response — the repository only selects `status` and `publishedAt`, not a full Job object",
+    description:
+      "Intentionally partial response — the repository only selects `status` and `publishedAt`, not a full Job object",
   })
   status!: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED";
 
@@ -171,13 +204,25 @@ export class RevenueMonthBucketDto {
   @ApiProperty({ example: "Jul" })
   label!: string;
 
-  @ApiProperty({ example: 45000, description: "Sum of PLAN_PRICES for STANDARD jobs paid this month, in cents" })
+  @ApiProperty({
+    example: 45000,
+    description:
+      "Sum of PLAN_PRICES for STANDARD jobs paid this month, in cents",
+  })
   standard!: number;
 
-  @ApiProperty({ example: 70000, description: "Sum of PLAN_PRICES for FEATURED jobs paid this month, in cents" })
+  @ApiProperty({
+    example: 70000,
+    description:
+      "Sum of PLAN_PRICES for FEATURED jobs paid this month, in cents",
+  })
   featured!: number;
 
-  @ApiProperty({ example: 120000, description: "Sum of PLAN_PRICES for HANDS_ON jobs paid this month, in cents" })
+  @ApiProperty({
+    example: 120000,
+    description:
+      "Sum of PLAN_PRICES for HANDS_ON jobs paid this month, in cents",
+  })
   handsOn!: number;
 }
 
@@ -188,10 +233,16 @@ export class RevenuePlanMixDto {
   @ApiProperty({ example: "Featured listing" })
   label!: string;
 
-  @ApiProperty({ example: 35000, description: "PLAN_PRICES[planType], in cents" })
+  @ApiProperty({
+    example: 35000,
+    description: "PLAN_PRICES[planType], in cents",
+  })
   price!: number;
 
-  @ApiProperty({ example: 12, description: "Count of planPaid jobs with this planType, all time" })
+  @ApiProperty({
+    example: 12,
+    description: "Count of planPaid jobs with this planType, all time",
+  })
   count!: number;
 
   @ApiProperty({ example: 420000, description: "price * count, in cents" })
@@ -211,32 +262,52 @@ export class RevenueTransactionDto {
   @ApiProperty({ enum: PLAN_TYPE_VALUES, example: "FEATURED" })
   planType!: "STANDARD" | "FEATURED" | "HANDS_ON";
 
-  @ApiProperty({ example: 35000, description: "PLAN_PRICES[planType], in cents" })
+  @ApiProperty({
+    example: 35000,
+    description: "PLAN_PRICES[planType], in cents",
+  })
   amount!: number;
 
   @ApiProperty({
     example: "2026-07-02T10:05:00.000Z",
-    description: "Job.paidAt when available, else Job.createdAt as a fallback for jobs paid before that column existed",
+    description:
+      "Job.paidAt when available, else Job.createdAt as a fallback for jobs paid before that column existed",
   })
   paidAt!: string;
 }
 
 export class RevenueTotalsDto {
-  @ApiProperty({ example: 655000, description: "Sum of PLAN_PRICES over every planPaid job, in cents" })
+  @ApiProperty({
+    example: 655000,
+    description: "Sum of PLAN_PRICES over every planPaid job, in cents",
+  })
   allTime!: number;
 
-  @ApiProperty({ example: 85000, description: "Sum of PLAN_PRICES for jobs paid in the current calendar month, in cents" })
+  @ApiProperty({
+    example: 85000,
+    description:
+      "Sum of PLAN_PRICES for jobs paid in the current calendar month, in cents",
+  })
   thisMonth!: number;
 }
 
 export class RevenueResponseDto {
-  @ApiProperty({ type: [RevenueMonthBucketDto], description: "Last 8 calendar months, oldest first" })
+  @ApiProperty({
+    type: [RevenueMonthBucketDto],
+    description: "Last 8 calendar months, oldest first",
+  })
   months!: RevenueMonthBucketDto[];
 
-  @ApiProperty({ type: [RevenuePlanMixDto], description: "All-time breakdown by plan, one entry per PlanType" })
+  @ApiProperty({
+    type: [RevenuePlanMixDto],
+    description: "All-time breakdown by plan, one entry per PlanType",
+  })
   mix!: RevenuePlanMixDto[];
 
-  @ApiProperty({ type: [RevenueTransactionDto], description: "Most recent 10 paidAt jobs, newest first" })
+  @ApiProperty({
+    type: [RevenueTransactionDto],
+    description: "Most recent 10 paidAt jobs, newest first",
+  })
   transactions!: RevenueTransactionDto[];
 
   @ApiProperty({ type: RevenueTotalsDto })

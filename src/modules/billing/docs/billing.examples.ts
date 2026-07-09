@@ -2,7 +2,9 @@
 
 export const CheckoutRequestExample = { jobId: "cme8f1a2b0000ug0h9x1n1a2" };
 
-export const CheckoutResponseExample = { url: "https://checkout.stripe.com/c/pay/cs_test_a1b2c3..." };
+export const CheckoutResponseExample = {
+  url: "https://checkout.stripe.com/c/pay/cs_test_a1b2c3...",
+};
 
 export const WebhookResponseExample = { received: true };
 

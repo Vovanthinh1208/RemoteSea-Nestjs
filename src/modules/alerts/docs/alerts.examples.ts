@@ -27,7 +27,15 @@ export const AlertResponseExample = {
   lastSentAt: null,
   createdAt: "2026-06-01T10:00:00.000Z",
   updatedAt: "2026-06-01T10:00:00.000Z",
-  categories: [{ category: { id: "cme8f1a2b0000ug0h9x1n1a4", name: "Engineering", slug: "engineering" } }],
+  categories: [
+    {
+      category: {
+        id: "cme8f1a2b0000ug0h9x1n1a4",
+        name: "Engineering",
+        slug: "engineering",
+      },
+    },
+  ],
 };
 
 export const AlertListResponseExample = [AlertResponseExample];

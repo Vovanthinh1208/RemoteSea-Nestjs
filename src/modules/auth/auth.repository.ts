@@ -32,13 +32,22 @@ export class AuthRepository {
   }
 
   updateUserPassword(email: string, passwordHash: string): Promise<User> {
-    return this.prisma.user.update({ where: { email }, data: { passwordHash } });
+    return this.prisma.user.update({
+      where: { email },
+      data: { passwordHash },
+    });
   }
 
-  async createVerificationToken(identifier: string, token: string, expires: Date) {
+  async createVerificationToken(
+    identifier: string,
+    token: string,
+    expires: Date,
+  ) {
     const [, created] = await this.prisma.$transaction([
       this.prisma.verificationToken.deleteMany({ where: { identifier } }),
-      this.prisma.verificationToken.create({ data: { identifier, token, expires } }),
+      this.prisma.verificationToken.create({
+        data: { identifier, token, expires },
+      }),
     ]);
     return created;
   }
@@ -47,9 +56,16 @@ export class AuthRepository {
     return this.prisma.verificationToken.findUnique({ where: { token } });
   }
 
-  async consumePasswordReset(identifier: string, token: string, passwordHash: string): Promise<void> {
+  async consumePasswordReset(
+    identifier: string,
+    token: string,
+    passwordHash: string,
+  ): Promise<void> {
     await this.prisma.$transaction([
-      this.prisma.user.update({ where: { email: identifier }, data: { passwordHash } }),
+      this.prisma.user.update({
+        where: { email: identifier },
+        data: { passwordHash },
+      }),
       this.prisma.verificationToken.delete({ where: { token } }),
     ]);
   }

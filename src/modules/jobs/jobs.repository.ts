@@ -1,8 +1,26 @@
 import { Injectable } from "@nestjs/common";
 import type { Prisma, Job } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
-import { activeJobBaseWhere, facetSelect, type FacetRow } from "./job-search.util";
+import {
+  activeJobBaseWhere,
+  facetSelect,
+  type FacetRow,
+} from "./job-search.util";
 import { jobWithRelationsInclude } from "@/common/types/job-with-relations.type";
+
+// stripeSessionId (a payment identifier) and reviewNote (the admin's internal
+// rejection note) are never meant to reach a client response. Prisma's `omit`
+// option isn't usable here (this client's generated types reject it), so strip
+// them manually instead.
+export type PublicJob = Omit<Job, "stripeSessionId" | "reviewNote">;
+
+function toPublicJob({
+  stripeSessionId: _stripeSessionId,
+  reviewNote: _reviewNote,
+  ...publicJob
+}: Job): PublicJob {
+  return publicJob;
+}
 
 const jobDetailInclude = {
   employer: {
@@ -28,7 +46,10 @@ export class JobsRepository {
     where: Prisma.JobWhereInput,
     skip: number,
     take: number,
-    orderBy: Prisma.JobOrderByWithRelationInput[] = [{ isFeatured: "desc" }, { publishedAt: "desc" }]
+    orderBy: Prisma.JobOrderByWithRelationInput[] = [
+      { isFeatured: "desc" },
+      { publishedAt: "desc" },
+    ],
   ) {
     return this.prisma.job.findMany({
       where,
@@ -44,7 +65,10 @@ export class JobsRepository {
   }
 
   findFacetRows(): Promise<FacetRow[]> {
-    return this.prisma.job.findMany({ where: activeJobBaseWhere(), select: facetSelect });
+    return this.prisma.job.findMany({
+      where: activeJobBaseWhere(),
+      select: facetSelect,
+    });
   }
 
   findActiveById(id: string) {
@@ -62,11 +86,17 @@ export class JobsRepository {
   }
 
   incrementViewCount(id: string): Promise<Job> {
-    return this.prisma.job.update({ where: { id }, data: { viewCount: { increment: 1 } } });
+    return this.prisma.job.update({
+      where: { id },
+      data: { viewCount: { increment: 1 } },
+    });
   }
 
   findEmployerProfileByUserId(userId: string) {
-    return this.prisma.employerProfile.findUnique({ where: { userId }, select: { id: true } });
+    return this.prisma.employerProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
   }
 
   create(data: Prisma.JobCreateInput) {
@@ -76,19 +106,24 @@ export class JobsRepository {
     });
   }
 
-  update(id: string, data: Prisma.JobUpdateInput): Promise<Job> {
-    return this.prisma.job.update({ where: { id }, data });
+  async update(id: string, data: Prisma.JobUpdateInput): Promise<PublicJob> {
+    const job = await this.prisma.job.update({ where: { id }, data });
+    return toPublicJob(job);
   }
 
   // Only writes if the job is still DRAFT/REJECTED, so an owner's edit can't
   // silently land on a job an admin concurrently approved/rejected in between.
-  async updateIfEditable(id: string, data: Prisma.JobUpdateInput): Promise<Job | null> {
+  async updateIfEditable(
+    id: string,
+    data: Prisma.JobUpdateInput,
+  ): Promise<PublicJob | null> {
     const { count } = await this.prisma.job.updateMany({
       where: { id, status: { in: ["DRAFT", "REJECTED"] } },
       data,
     });
     if (count === 0) return null;
 
-    return this.prisma.job.findUnique({ where: { id } });
+    const job = await this.prisma.job.findUnique({ where: { id } });
+    return job && toPublicJob(job);
   }
 }

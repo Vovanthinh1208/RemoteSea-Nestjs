@@ -1,9 +1,14 @@
 import { Injectable } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { ConfigService } from "@nestjs/config";
-import { Strategy, type Profile, type VerifyCallback } from "passport-google-oauth20";
+import {
+  Strategy,
+  type Profile,
+  type VerifyCallback,
+} from "passport-google-oauth20";
 import type { EnvConfig } from "@/core/config/env.validation";
 import type { OAuthProfile } from "../interfaces";
+import { normalizeEmail } from "@/common/utils/normalize-email";
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, "google") {
@@ -20,17 +25,18 @@ export class GoogleStrategy extends PassportStrategy(Strategy, "google") {
     _accessToken: string,
     _refreshToken: string,
     profile: Profile,
-    done: VerifyCallback
+    done: VerifyCallback,
   ): void {
     // passport-google-oauth20 exposes `verified` on the primary email (from Google's
     // email_verified claim) even though the @types/passport base type omits it —
     // an unverified email must never be used to look up/link a User account.
-    const primaryEmail = profile.emails?.[0] as { value?: string; verified?: boolean } | undefined;
+    const primaryEmail = profile.emails?.[0] as
+      { value?: string; verified?: boolean } | undefined;
     if (!primaryEmail?.value || primaryEmail.verified !== true) {
       done(new Error("Google account has no verified email"), undefined);
       return;
     }
-    const email = primaryEmail.value;
+    const email = normalizeEmail(primaryEmail.value);
     const oauthProfile: OAuthProfile = {
       provider: "google",
       providerAccountId: profile.id,

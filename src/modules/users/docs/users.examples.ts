@@ -18,11 +18,16 @@ export const ChangePasswordRequestExample = {
 export const ChangePasswordResponseExample = { message: "Password updated" };
 
 export const ValidationErrorExample = {
-  error: { formErrors: [], fieldErrors: { name: ["String must contain at least 1 character(s)"] } },
+  error: {
+    formErrors: [],
+    fieldErrors: { name: ["String must contain at least 1 character(s)"] },
+  },
 };
 
 export const SocialSignInNoPasswordExample = {
   error: "Password change is not available for social sign-in accounts.",
 };
 
-export const IncorrectCurrentPasswordExample = { error: "Current password is incorrect" };
+export const IncorrectCurrentPasswordExample = {
+  error: "Current password is incorrect",
+};

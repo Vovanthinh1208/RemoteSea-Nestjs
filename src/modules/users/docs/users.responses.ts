@@ -1,5 +1,9 @@
 import { ApiBadRequestResponse } from "@nestjs/swagger";
-import { IncorrectCurrentPasswordExample, SocialSignInNoPasswordExample, ValidationErrorExample } from "./users.examples";
+import {
+  IncorrectCurrentPasswordExample,
+  SocialSignInNoPasswordExample,
+  ValidationErrorExample,
+} from "./users.examples";
 
 /** Reusable, module-specific Swagger response decorators for the Users module. */
 

@@ -49,6 +49,9 @@ export class SavedJobResponseDto {
 }
 
 export class ToggleSavedResponseDto {
-  @ApiProperty({ example: true, description: "true if the job is now saved, false if it was just un-saved" })
+  @ApiProperty({
+    example: true,
+    description: "true if the job is now saved, false if it was just un-saved",
+  })
   saved!: boolean;
 }

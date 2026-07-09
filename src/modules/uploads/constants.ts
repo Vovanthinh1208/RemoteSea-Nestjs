@@ -1,3 +1,5 @@
+import { transliterate } from "@/common/utils/transliterate";
+
 export const S3_CLIENT = "S3_CLIENT";
 
 // Each presigned URL is a real, usable upload grant against paid S3 storage/egress —
@@ -18,6 +20,10 @@ export const MAX_FILE_SIZE_BYTES = {
   resume: 10 * 1024 * 1024,
 } as const;
 
-export function sanitize(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, "_");
-}
+// The S3 key is already made unique by a timestamp prefix at the call site, so
+// this is purely about keeping the downloaded filename meaningful — without
+// transliterating first, a Vietnamese résumé filename like "sơ yếu lý lịch.pdf"
+// became "s__y_u_l__l_ch.pdf" (every accented letter replaced, not just spaces).
+export const sanitize = (name: string): string => {
+  return transliterate(name).replace(/[^a-zA-Z0-9._-]/g, "_");
+};

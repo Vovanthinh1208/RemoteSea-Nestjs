@@ -12,7 +12,9 @@ import {
 export class ApplicationsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findTalentIdByUserId(userId: string): Promise<Pick<TalentProfile, "id"> | null> {
+  findTalentIdByUserId(
+    userId: string,
+  ): Promise<Pick<TalentProfile, "id"> | null> {
     return this.prisma.talentProfile.findUnique({
       where: { userId },
       select: { id: true },
@@ -20,7 +22,7 @@ export class ApplicationsRepository {
   }
 
   findTalentWithUserName(
-    userId: string
+    userId: string,
   ): Promise<(TalentProfile & { user: { name: string | null } }) | null> {
     return this.prisma.talentProfile.findUnique({
       where: { userId },
@@ -36,14 +38,17 @@ export class ApplicationsRepository {
     }) as Promise<ApplicationWithJob[]>;
   }
 
-  findByJobAndTalent(jobId: string, talentId: string): Promise<Application | null> {
+  findByJobAndTalent(
+    jobId: string,
+    talentId: string,
+  ): Promise<Application | null> {
     return this.prisma.application.findUnique({
       where: { jobId_talentId: { jobId, talentId } },
     });
   }
 
   async createAndIncrementApplyCount(
-    input: CreateApplicationInput
+    input: CreateApplicationInput,
   ): Promise<{ application: Application; job: JobWithEmployerEmail }> {
     const [application, job] = await this.prisma.$transaction([
       this.prisma.application.create({

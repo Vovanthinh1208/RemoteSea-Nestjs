@@ -1,5 +1,11 @@
 import { ApiBadRequestResponse, ApiNotFoundResponse } from "@nestjs/swagger";
-import { InvalidSignatureExample, JobNotFoundExample, JobNotPayableExample, MissingSignatureExample, ValidationErrorExample } from "./billing.examples";
+import {
+  InvalidSignatureExample,
+  JobNotFoundExample,
+  JobNotPayableExample,
+  MissingSignatureExample,
+  ValidationErrorExample,
+} from "./billing.examples";
 
 /** Reusable, module-specific Swagger response decorators for the Billing module. */
 
@@ -19,11 +25,13 @@ export const JobNotFoundResponse = ApiNotFoundResponse({
 });
 
 export const MissingSignatureResponse = ApiBadRequestResponse({
-  description: "`stripe-signature` header absent, or `rawBody` missing (see `rawBody: true` in main.ts)",
+  description:
+    "`stripe-signature` header absent, or `rawBody` missing (see `rawBody: true` in main.ts)",
   schema: { example: MissingSignatureExample },
 });
 
 export const InvalidSignatureResponse = ApiBadRequestResponse({
-  description: "Stripe signature verification failed (`stripe.webhooks.constructEvent` against `STRIPE_WEBHOOK_SECRET`)",
+  description:
+    "Stripe signature verification failed (`stripe.webhooks.constructEvent` against `STRIPE_WEBHOOK_SECRET`)",
   schema: { example: InvalidSignatureExample },
 });

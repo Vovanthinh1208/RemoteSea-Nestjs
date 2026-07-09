@@ -19,17 +19,23 @@ export const UnauthorizedApiResponse = ApiUnauthorizedResponse({
 });
 
 export const ForbiddenApiResponse = ApiForbiddenResponse({
-  description: "Authenticated, but the caller's role or ownership doesn't permit this action",
+  description:
+    "Authenticated, but the caller's role or ownership doesn't permit this action",
   schema: { example: { error: "Forbidden" } },
 });
 
 export const InternalServerErrorApiResponse = ApiInternalServerErrorResponse({
-  description: "Unhandled error (e.g. a database or upstream integration failure)",
+  description:
+    "Unhandled error (e.g. a database or upstream integration failure)",
   schema: { example: { error: "Internal server error" } },
 });
 
 export const rateLimitResponse = (limit: string) =>
   ApiTooManyRequestsResponse({
     description: `Rate limit exceeded (${limit})`,
-    schema: { example: { error: "Too many requests. Please slow down and try again shortly." } },
+    schema: {
+      example: {
+        error: "Too many requests. Please slow down and try again shortly.",
+      },
+    },
   });

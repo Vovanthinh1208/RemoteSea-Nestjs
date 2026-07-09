@@ -1,11 +1,35 @@
 import { applyDecorators } from "@nestjs/common";
-import { ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { InternalServerErrorApiResponse, UnauthorizedApiResponse, rateLimitResponse } from "@/core/swagger/common.responses";
-import { ApplicationResponseDto, ApplicationWithJobResponseDto, ApplyRequestDto } from "./applications.dto";
-import { ApplicationsListExample, ApplyRequestExample, ApplyResponseExample } from "./applications.examples";
-import { AlreadyAppliedResponse, TalentProfileRequiredResponse, ValidationErrorResponse } from "./applications.responses";
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from "@nestjs/swagger";
+import {
+  InternalServerErrorApiResponse,
+  UnauthorizedApiResponse,
+  rateLimitResponse,
+} from "@/core/swagger/common.responses";
+import {
+  ApplicationResponseDto,
+  ApplicationWithJobResponseDto,
+  ApplyRequestDto,
+} from "./applications.dto";
+import {
+  ApplicationsListExample,
+  ApplyRequestExample,
+  ApplyResponseExample,
+} from "./applications.examples";
+import {
+  AlreadyAppliedResponse,
+  TalentProfileRequiredResponse,
+  ValidationErrorResponse,
+} from "./applications.responses";
 
-export const ApiApplicationsTag = () => applyDecorators(ApiTags("Applications"));
+export const ApiApplicationsTag = () =>
+  applyDecorators(ApiTags("Applications"));
 
 export const ApiListApplications = () =>
   applyDecorators(
@@ -22,7 +46,7 @@ export const ApiListApplications = () =>
       schema: { example: ApplicationsListExample },
     }),
     UnauthorizedApiResponse,
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );
 
 export const ApiApply = () =>
@@ -33,12 +57,19 @@ export const ApiApply = () =>
       description:
         "Submits a job application as the current user's talent profile; increments the job's applyCount; emails the employer. Requires an existing TalentProfile.",
     }),
-    ApiBody({ type: ApplyRequestDto, examples: { default: { value: ApplyRequestExample } } }),
-    ApiCreatedResponse({ description: "Application created", type: ApplicationResponseDto, schema: { example: ApplyResponseExample } }),
+    ApiBody({
+      type: ApplyRequestDto,
+      examples: { default: { value: ApplyRequestExample } },
+    }),
+    ApiCreatedResponse({
+      description: "Application created",
+      type: ApplicationResponseDto,
+      schema: { example: ApplyResponseExample },
+    }),
     ValidationErrorResponse,
     UnauthorizedApiResponse,
     TalentProfileRequiredResponse,
     AlreadyAppliedResponse,
     rateLimitResponse("10 req/60s per user"),
-    InternalServerErrorApiResponse
+    InternalServerErrorApiResponse,
   );
