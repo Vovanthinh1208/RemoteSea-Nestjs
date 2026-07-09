@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { AlertsRepository } from "./alerts.repository";
 import type { CreateAlertDto } from "./dto/create-alert.dto";
 import type { UpdateAlertDto } from "./dto/update-alert.dto";
-import { FREQUENCY_GAP_MS } from "./constants";
+import { FREQUENCY_GAP_MS, SEND_CONCURRENCY } from "./constants";
 import type { CronDispatchResult } from "./interfaces";
 import { NotFoundApiException } from "@/common/exceptions/api.exception";
 import { EmailService } from "@/common/services/email.service";
@@ -50,52 +50,64 @@ export class AlertsService {
 
     let sent = 0;
 
+    // Processed in bounded-size chunks (not all at once) so a large batch doesn't
+    // fire hundreds of simultaneous outbound email requests in one burst.
+    for (let i = 0; i < alerts.length; i += SEND_CONCURRENCY) {
+      const chunk = alerts.slice(i, i + SEND_CONCURRENCY);
+      const results = await Promise.all(chunk.map((alert) => this.dispatchOne(alert, now)));
+      sent += results.filter(Boolean).length;
+    }
+
+    return { processed: alerts.length, sent };
+  }
+
+  private async dispatchOne(
+    alert: Awaited<ReturnType<AlertsRepository["findActiveAlerts"]>>[number],
+    now: number
+  ): Promise<boolean> {
+    const gap = FREQUENCY_GAP_MS[alert.frequency];
+    if (alert.lastSentAt && now - alert.lastSentAt.getTime() < gap) return false;
+
+    const since = alert.lastSentAt ?? new Date(now - gap || now - FREQUENCY_GAP_MS.DAILY);
+
+    const where: Prisma.JobWhereInput = {
+      status: "ACTIVE",
+      publishedAt: { gt: since, lte: new Date() },
+      ...(alert.jobType && { jobType: alert.jobType }),
+      ...(alert.level && { level: alert.level }),
+      ...(alert.country && { country: alert.country }),
+      ...(alert.salaryMin && { salaryMin: { gte: alert.salaryMin } }),
+      ...(alert.keywords && {
+        OR: [
+          { title: { contains: alert.keywords, mode: "insensitive" } },
+          { description: { contains: alert.keywords, mode: "insensitive" } },
+        ],
+      }),
+      ...(alert.categories.length && {
+        categories: { some: { categoryId: { in: alert.categories.map((c) => c.categoryId) } } },
+      }),
+    };
+
+    const jobs = await this.alertsRepository.findMatchingJobs(where);
+    if (jobs.length === 0) return false;
+
     // Each alert is claimed (lastSentAt conditionally updated) before its email is
     // sent, not after — this closes the race where two overlapping cron runs both
     // read the same stale lastSentAt and double-send. A crash/failure after the
     // claim just means that alert waits for the next window instead of retrying,
     // which is the safer failure mode for a non-critical notification email.
-    for (const alert of alerts) {
-      const gap = FREQUENCY_GAP_MS[alert.frequency];
-      if (alert.lastSentAt && now - alert.lastSentAt.getTime() < gap) continue;
+    const claimed = await this.alertsRepository.claimForSend(alert.id, alert.lastSentAt);
+    if (!claimed) return false;
 
-      const since = alert.lastSentAt ?? new Date(now - gap || now - FREQUENCY_GAP_MS.DAILY);
-
-      const where: Prisma.JobWhereInput = {
-        status: "ACTIVE",
-        publishedAt: { gt: since, lte: new Date() },
-        ...(alert.jobType && { jobType: alert.jobType }),
-        ...(alert.level && { level: alert.level }),
-        ...(alert.country && { country: alert.country }),
-        ...(alert.salaryMin && { salaryMin: { gte: alert.salaryMin } }),
-        ...(alert.keywords && {
-          OR: [
-            { title: { contains: alert.keywords, mode: "insensitive" } },
-            { description: { contains: alert.keywords, mode: "insensitive" } },
-          ],
-        }),
-        ...(alert.categories.length && {
-          categories: { some: { categoryId: { in: alert.categories.map((c) => c.categoryId) } } },
-        }),
-      };
-
-      const jobs = await this.alertsRepository.findMatchingJobs(where);
-      if (jobs.length === 0) continue;
-
-      const claimed = await this.alertsRepository.claimForSend(alert.id, alert.lastSentAt);
-      if (!claimed) continue;
-
-      try {
-        await this.emailService.sendJobAlertEmail(alert.user.email, jobs);
-        sent += 1;
-      } catch (error) {
-        this.logger.error(
-          `Failed to send alert email for alert ${alert.id}`,
-          error instanceof Error ? error.stack : error
-        );
-      }
+    try {
+      await this.emailService.sendJobAlertEmail(alert.user.email, jobs);
+      return true;
+    } catch (error) {
+      this.logger.error(
+        `Failed to send alert email for alert ${alert.id}`,
+        error instanceof Error ? error.stack : error
+      );
+      return false;
     }
-
-    return { processed: alerts.length, sent };
   }
 }

@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { JobAlert, Prisma } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 import { jobWithRelationsInclude, type JobWithRelations } from "@/common/types/job-with-relations.type";
+import { MAX_ALERTS_PER_RUN } from "./constants";
 
 const alertWithCategoriesInclude = {
   categories: { include: { category: true } },
@@ -50,9 +51,14 @@ export class AlertsRepository {
     await this.prisma.jobAlert.delete({ where: { id } });
   }
 
+  // Bounded + ordered oldest-sent-first (never-sent alerts first) so a large
+  // table doesn't turn one cron run into an unbounded pass — alerts left over
+  // get priority on the next tick instead of starving behind newer ones.
   findActiveAlerts() {
     return this.prisma.jobAlert.findMany({
       where: { isActive: true },
+      take: MAX_ALERTS_PER_RUN,
+      orderBy: { lastSentAt: { sort: "asc", nulls: "first" } },
       include: {
         categories: { select: { categoryId: true } },
         user: { select: { email: true } },

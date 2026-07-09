@@ -4,17 +4,29 @@ import { TooManyRequestsApiException } from "@/common/exceptions/api.exception";
 
 type Bucket = { count: number; resetAt: number };
 
-export type RateLimitResult = { allowed: boolean; remaining: number; retryAfter: number };
+export type RateLimitResult = {
+  allowed: boolean;
+  remaining: number;
+  retryAfter: number;
+};
 
 /**
- * In-memory fixed-window limiter. Fine for a single instance / dev; for
- * multi-instance production, back this with Redis (already in docker-compose).
+ * In-memory fixed-window limiter, scoped per process. Correct for a single
+ * instance; behind multiple replicas each holds its own counters, so the
+ * effective limit is roughly (configured limit × instance count) instead of
+ * the configured value. There is no Redis (or other shared store) in this
+ * repo yet — before running more than one instance, back this with one.
  */
 @Injectable()
 export class RateLimitService {
   private readonly store = new Map<string, Bucket>();
 
-  check(key: string, limit: number, windowMs: number, now: number = Date.now()): RateLimitResult {
+  check(
+    key: string,
+    limit: number,
+    windowMs: number,
+    now: number = Date.now(),
+  ): RateLimitResult {
     const bucket = this.store.get(key);
 
     if (!bucket || bucket.resetAt <= now) {
@@ -28,7 +40,11 @@ export class RateLimitService {
     }
 
     if (bucket.count >= limit) {
-      return { allowed: false, remaining: 0, retryAfter: Math.ceil((bucket.resetAt - now) / 1000) };
+      return {
+        allowed: false,
+        remaining: 0,
+        retryAfter: Math.ceil((bucket.resetAt - now) / 1000),
+      };
     }
 
     bucket.count += 1;
@@ -51,6 +67,4 @@ export class RateLimitService {
  * (as this function previously did) let any client spoof its rate-limit key
  * by sending an arbitrary X-Forwarded-For value, bypassing the limiter entirely.
  */
-export function clientIp(request: Request): string {
-  return request.ip ?? "unknown";
-}
+export const clientIp = (request: Request): string => request.ip ?? "unknown";
