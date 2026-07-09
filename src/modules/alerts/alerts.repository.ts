@@ -69,7 +69,14 @@ export class AlertsRepository {
     }) as Promise<JobWithRelations[]>;
   }
 
-  async markManySent(ids: string[]): Promise<void> {
-    await this.prisma.jobAlert.updateMany({ where: { id: { in: ids } }, data: { lastSentAt: new Date() } });
+  // Atomically claims an alert for sending: the update only applies if
+  // lastSentAt still matches what the caller read, so two concurrent cron
+  // runs (e.g. an overlapping retry) can't both send for the same alert.
+  async claimForSend(id: string, expectedLastSentAt: Date | null): Promise<boolean> {
+    const { count } = await this.prisma.jobAlert.updateMany({
+      where: { id, lastSentAt: expectedLastSentAt },
+      data: { lastSentAt: new Date() },
+    });
+    return count === 1;
   }
 }

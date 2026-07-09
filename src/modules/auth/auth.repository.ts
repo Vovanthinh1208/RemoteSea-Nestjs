@@ -72,21 +72,23 @@ export class AuthRepository {
     });
     if (existingAccount) return existingAccount.user;
 
-    const user = await this.prisma.user.upsert({
-      where: { email: params.email },
-      create: { email: params.email, name: params.name, image: params.image },
-      update: {},
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.upsert({
+        where: { email: params.email },
+        create: { email: params.email, name: params.name, image: params.image },
+        update: {},
+      });
 
-    await this.prisma.account.create({
-      data: {
-        userId: user.id,
-        type: "oauth",
-        provider: params.provider,
-        providerAccountId: params.providerAccountId,
-      },
-    });
+      await tx.account.create({
+        data: {
+          userId: user.id,
+          type: "oauth",
+          provider: params.provider,
+          providerAccountId: params.providerAccountId,
+        },
+      });
 
-    return user;
+      return user;
+    });
   }
 }

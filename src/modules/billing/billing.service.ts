@@ -67,7 +67,9 @@ export class BillingService {
       const jobId = checkoutSession.metadata?.jobId;
       if (jobId) {
         const job = await this.billingRepository.markJobPaidAndSubmitted(jobId);
-        await this.emailService.sendJobSubmittedEmail(job.employer.user.email, job.title);
+        if (job) {
+          await this.emailService.sendJobSubmittedEmail(job.employer.user.email, job.title);
+        }
       }
     }
 

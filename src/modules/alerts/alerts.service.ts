@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import { AlertsRepository } from "./alerts.repository";
 import type { CreateAlertDto } from "./dto/create-alert.dto";
@@ -10,6 +10,8 @@ import { EmailService } from "@/common/services/email.service";
 
 @Injectable()
 export class AlertsService {
+  private readonly logger = new Logger(AlertsService.name);
+
   constructor(
     private readonly alertsRepository: AlertsRepository,
     private readonly emailService: EmailService
@@ -48,10 +50,11 @@ export class AlertsService {
 
     let sent = 0;
 
-    // lastSentAt is persisted immediately after each successful send (not batched
-    // at the end of the loop) so a crash partway through a run can't leave an
-    // alert's email sent but its lastSentAt stale — which would re-match the same
-    // jobs and duplicate-send on the next cron tick.
+    // Each alert is claimed (lastSentAt conditionally updated) before its email is
+    // sent, not after — this closes the race where two overlapping cron runs both
+    // read the same stale lastSentAt and double-send. A crash/failure after the
+    // claim just means that alert waits for the next window instead of retrying,
+    // which is the safer failure mode for a non-critical notification email.
     for (const alert of alerts) {
       const gap = FREQUENCY_GAP_MS[alert.frequency];
       if (alert.lastSentAt && now - alert.lastSentAt.getTime() < gap) continue;
@@ -79,9 +82,18 @@ export class AlertsService {
       const jobs = await this.alertsRepository.findMatchingJobs(where);
       if (jobs.length === 0) continue;
 
-      await this.emailService.sendJobAlertEmail(alert.user.email, jobs);
-      await this.alertsRepository.markManySent([alert.id]);
-      sent += 1;
+      const claimed = await this.alertsRepository.claimForSend(alert.id, alert.lastSentAt);
+      if (!claimed) continue;
+
+      try {
+        await this.emailService.sendJobAlertEmail(alert.user.email, jobs);
+        sent += 1;
+      } catch (error) {
+        this.logger.error(
+          `Failed to send alert email for alert ${alert.id}`,
+          error instanceof Error ? error.stack : error
+        );
+      }
     }
 
     return { processed: alerts.length, sent };

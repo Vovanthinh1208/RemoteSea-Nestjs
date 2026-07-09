@@ -8,6 +8,7 @@ import type { EnvConfig } from "@/core/config/env.validation";
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { rawBody: true });
+  app.enableShutdownHooks();
 
   const config = app.get(ConfigService<EnvConfig, true>);
 

@@ -13,6 +13,8 @@ import type { JobWithRelations } from "@/common/types/job-with-relations.type";
  * instead of the original branded templates. Port src/emails/*.tsx into this
  * service (or a shared package) to restore pixel-identical emails.
  */
+const SEND_TIMEOUT_MS = 10_000;
+
 @Injectable()
 export class EmailService {
   private readonly resend: Resend;
@@ -33,7 +35,14 @@ export class EmailService {
 
   private async send(to: string, subject: string, html: string): Promise<void> {
     if (!this.enabled) return;
-    await this.resend.emails.send({ from: this.from, to, subject, html });
+    // The Resend SDK has no built-in request timeout, so a slow/hung upstream
+    // call would otherwise block the caller (e.g. the alerts cron loop) indefinitely.
+    await Promise.race([
+      this.resend.emails.send({ from: this.from, to, subject, html }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Email send timed out")), SEND_TIMEOUT_MS)
+      ),
+    ]);
   }
 
   async sendWelcomeEmail(to: string, name: string): Promise<void> {
