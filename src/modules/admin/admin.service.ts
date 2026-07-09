@@ -6,7 +6,7 @@ import type { ListJobsDto } from "./dto/list-jobs.dto";
 import type { ReviewJobDto } from "./dto/review-job.dto";
 import type { RevenuePlanMix, RevenueSummary } from "./interfaces";
 import { buildRecentMonthKeys, monthKeyOf } from "./revenue.util";
-import { NotFoundApiException } from "@/common/exceptions/api.exception";
+import { BadRequestApiException, NotFoundApiException } from "@/common/exceptions/api.exception";
 import { PLAN_LABELS, PLAN_PRICES } from "@/common/constants/plan.constants";
 import { PLAN_TYPE_VALUES } from "@/common/constants/enum-values.constants";
 import { EmailService } from "@/common/services/email.service";
@@ -67,6 +67,9 @@ export class AdminService {
     const job = await this.adminRepository.findJobWithEmployerEmail(id);
     if (!job) {
       throw new NotFoundApiException("Job not found");
+    }
+    if (job.status !== "PENDING_REVIEW") {
+      throw new BadRequestApiException(`Job is ${job.status}, not pending review`);
     }
 
     const { action, note } = dto;
