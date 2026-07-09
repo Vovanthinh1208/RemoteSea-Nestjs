@@ -34,6 +34,7 @@ import {
   UpdateEmployerProfileRequestExample,
 } from "./employer.examples";
 import {
+  ApplicationConflictResponse,
   ApplicationNotFoundResponse,
   EmployerProfileAlreadyExistsResponse,
   EmployerProfileNotFoundResponse,
@@ -188,5 +189,6 @@ export const ApiUpdateApplication = () =>
     UnauthorizedApiResponse,
     NotOwningEmployerResponse,
     ApplicationNotFoundResponse,
+    ApplicationConflictResponse,
     InternalServerErrorApiResponse
   );

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import type { Job } from "@prisma/client";
 import { JobsRepository } from "./jobs.repository";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
@@ -16,6 +16,8 @@ import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.i
 
 @Injectable()
 export class JobsService {
+  private readonly logger = new Logger(JobsService.name);
+
   constructor(private readonly jobsRepository: JobsRepository) {}
 
   async list(query: ListJobsDto) {
@@ -39,7 +41,12 @@ export class JobsService {
       throw new NotFoundApiException("Job not found");
     }
 
-    void this.jobsRepository.incrementViewCount(job.id).catch(() => undefined);
+    void this.jobsRepository.incrementViewCount(job.id).catch((error: unknown) => {
+      this.logger.warn(
+        `Failed to increment view count for job ${job.id}`,
+        error instanceof Error ? error.stack : error
+      );
+    });
 
     return job;
   }

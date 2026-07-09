@@ -33,6 +33,12 @@ export const ApplicationNotFoundResponse = ApiNotFoundResponse({
   schema: { example: { error: "Application not found" } },
 });
 
+export const ApplicationConflictResponse = ApiConflictResponse({
+  description:
+    "The application's status changed between read and write (e.g. a concurrent update) — retry with fresh data",
+  schema: { example: { error: "Application was updated concurrently — please refresh and try again" } },
+});
+
 export const NotOwningEmployerResponse = ApiForbiddenResponse({
   description: "Authenticated, but the caller does not own the job/application (ownership is checked in the service, not via @Roles())",
   schema: { example: { error: "Forbidden" } },
