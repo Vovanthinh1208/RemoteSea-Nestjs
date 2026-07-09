@@ -1,5 +1,11 @@
 export const S3_CLIENT = "S3_CLIENT";
 
+// Each presigned URL is a real, usable upload grant against paid S3 storage/egress —
+// unlike other rate-limited endpoints (apply, checkout), presign had no throttle at all.
+export const RATE_LIMITS = {
+  PRESIGN: { limit: 20, windowMs: 60_000 },
+} as const;
+
 export const CONTENT_TYPES = {
   avatar: ["image/jpeg", "image/png", "image/webp"],
   logo: ["image/jpeg", "image/png", "image/webp"],
