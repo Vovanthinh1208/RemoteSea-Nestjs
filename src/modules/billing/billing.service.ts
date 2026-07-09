@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Stripe from "stripe";
 import { BillingRepository } from "./billing.repository";
@@ -12,6 +12,8 @@ import type { EnvConfig } from "@/core/config/env.validation";
 
 @Injectable()
 export class BillingService {
+  private readonly logger = new Logger(BillingService.name);
+
   constructor(
     @Inject(STRIPE_CLIENT) private readonly stripe: Stripe,
     private readonly billingRepository: BillingRepository,
@@ -68,7 +70,18 @@ export class BillingService {
       if (jobId) {
         const job = await this.billingRepository.markJobPaidAndSubmitted(jobId);
         if (job) {
-          await this.emailService.sendJobSubmittedEmail(job.employer.user.email, job.title);
+          // Payment is already recorded above — an email failure here must return
+          // 200 to Stripe, not trigger a webhook retry: markJobPaidAndSubmitted is
+          // idempotent on planPaid, so a retry would just no-op and the email would
+          // never go out at all.
+          try {
+            await this.emailService.sendJobSubmittedEmail(job.employer.user.email, job.title);
+          } catch (error) {
+            this.logger.error(
+              `Failed to send job-submitted email for job ${jobId}`,
+              error instanceof Error ? error.stack : error
+            );
+          }
         }
       }
     }

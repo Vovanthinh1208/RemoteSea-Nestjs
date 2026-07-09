@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import type { Application } from "@prisma/client";
 import { ForbiddenApiException, ConflictApiException } from "@/common/exceptions/api.exception";
 import { EmailService } from "@/common/services/email.service";
@@ -8,6 +8,8 @@ import type { ApplicationWithJob } from "./interfaces";
 
 @Injectable()
 export class ApplicationsService {
+  private readonly logger = new Logger(ApplicationsService.name);
+
   constructor(
     private readonly applicationsRepository: ApplicationsRepository,
     private readonly emailService: EmailService
@@ -37,11 +39,21 @@ export class ApplicationsService {
       resumeUrl: dto.resumeUrl,
     });
 
-    await this.emailService.sendApplicationReceivedEmail(
-      job.employer.user.email,
-      job.title,
-      talent.user.name ?? "A candidate"
-    );
+    // The application is already committed above — a notification-email failure
+    // must not turn a successful apply into a 500 (a retry would then wrongly
+    // hit "Already applied").
+    try {
+      await this.emailService.sendApplicationReceivedEmail(
+        job.employer.user.email,
+        job.title,
+        talent.user.name ?? "A candidate"
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to send application-received email for application ${application.id}`,
+        error instanceof Error ? error.stack : error
+      );
+    }
 
     return application;
   }

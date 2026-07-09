@@ -29,24 +29,31 @@ export class TalentRepository {
     return this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
   }
 
-  upsertProfile(userId: string, slug: string, data: ProfileScalarData) {
-    return this.prisma.talentProfile.upsert({
-      where: { userId },
-      create: { userId, slug, ...data },
-      update: data,
-    });
-  }
+  // Upsert + skill replacement run in one transaction — previously two separate
+  // round-trips, so a failure between them could leave the profile updated but
+  // its skills stale (deleted-and-not-recreated, or simply never replaced).
+  upsertProfileWithSkills(
+    userId: string,
+    slug: string,
+    data: ProfileScalarData,
+    skills: { skillId: string; yearsExp?: number }[] | undefined
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const profile = await tx.talentProfile.upsert({
+        where: { userId },
+        create: { userId, slug, ...data },
+        update: data,
+      });
 
-  async replaceSkills(
-    talentId: string,
-    skills: { skillId: string; yearsExp?: number }[]
-  ): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.talentSkill.deleteMany({ where: { talentId } }),
-      this.prisma.talentSkill.createMany({
-        data: skills.map((s) => ({ talentId, skillId: s.skillId, yearsExp: s.yearsExp })),
-      }),
-    ]);
+      if (skills) {
+        await tx.talentSkill.deleteMany({ where: { talentId: profile.id } });
+        await tx.talentSkill.createMany({
+          data: skills.map((s) => ({ talentId: profile.id, skillId: s.skillId, yearsExp: s.yearsExp })),
+        });
+      }
+
+      return profile;
+    });
   }
 
   findByIdWithSkills(id: string): Promise<TalentProfileWithSkills | null> {

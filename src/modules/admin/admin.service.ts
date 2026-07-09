@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { AdminRepository } from "./admin.repository";
 import type { ListEmployersDto } from "./dto/list-employers.dto";
 import type { UpdateEmployerDto } from "./dto/update-employer.dto";
@@ -17,6 +17,8 @@ const RECENT_TRANSACTIONS_LIMIT = 10;
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private readonly adminRepository: AdminRepository,
     private readonly emailService: EmailService
@@ -75,14 +77,31 @@ export class AdminService {
     const { action, note } = dto;
     const employerEmail = job.employer.user.email;
 
+    // The status change is already committed by the time we email below — a
+    // notification failure must not surface as a failed review, since a retry
+    // would then hit the PENDING_REVIEW guard above with no way to redo it.
     if (action === "approve") {
       const updated = await this.adminRepository.approveJob(id);
-      await this.emailService.sendJobLiveEmail(employerEmail, job.title, job.slug);
+      try {
+        await this.emailService.sendJobLiveEmail(employerEmail, job.title, job.slug);
+      } catch (error) {
+        this.logger.error(
+          `Failed to send job-live email for job ${id}`,
+          error instanceof Error ? error.stack : error
+        );
+      }
       return updated;
     }
 
     const updated = await this.adminRepository.rejectJob(id, note ?? null);
-    await this.emailService.sendJobRejectedEmail(employerEmail, job.title, note ?? "");
+    try {
+      await this.emailService.sendJobRejectedEmail(employerEmail, job.title, note ?? "");
+    } catch (error) {
+      this.logger.error(
+        `Failed to send job-rejected email for job ${id}`,
+        error instanceof Error ? error.stack : error
+      );
+    }
     return updated;
   }
 

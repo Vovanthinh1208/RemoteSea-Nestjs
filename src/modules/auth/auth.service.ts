@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
@@ -19,6 +19,8 @@ import type { AuthenticatedUser, JwtPayload } from "@/common/interfaces/authenti
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly jwtService: JwtService,
@@ -40,7 +42,17 @@ export class AuthService {
       talentSlug: dto.role === "TALENT" ? uniqueSlug(dto.name) : undefined,
     });
 
-    await this.emailService.sendWelcomeEmail(user.email, user.name ?? "there");
+    // The account is already created above — a welcome-email failure must not
+    // turn a successful signup into a 500 (a retry would then wrongly hit
+    // "Email already registered").
+    try {
+      await this.emailService.sendWelcomeEmail(user.email, user.name ?? "there");
+    } catch (error) {
+      this.logger.error(
+        `Failed to send welcome email for user ${user.id}`,
+        error instanceof Error ? error.stack : error
+      );
+    }
 
     return user;
   }
@@ -77,7 +89,11 @@ export class AuthService {
       token,
       new Date(Date.now() + RESET_TOKEN_TTL_MS)
     );
-    await this.emailService.sendPasswordResetEmail(email, token);
+    try {
+      await this.emailService.sendPasswordResetEmail(email, token);
+    } catch (error) {
+      this.logger.error(`Failed to send password-reset email`, error instanceof Error ? error.stack : error);
+    }
   }
 
   async resetPassword(token: string, password: string): Promise<void> {

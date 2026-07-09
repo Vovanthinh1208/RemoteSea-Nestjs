@@ -28,11 +28,7 @@ export class TalentService {
     assertFound(user, "User not found");
     const slug = uniqueSlug(user.name ?? "talent");
 
-    const profile = await this.talentRepository.upsertProfile(userId, slug, profileData);
-
-    if (skills) {
-      await this.talentRepository.replaceSkills(profile.id, skills);
-    }
+    const profile = await this.talentRepository.upsertProfileWithSkills(userId, slug, profileData, skills);
 
     const updated = await this.talentRepository.findByIdWithSkills(profile.id);
     assertFound(updated, "Profile not found");
