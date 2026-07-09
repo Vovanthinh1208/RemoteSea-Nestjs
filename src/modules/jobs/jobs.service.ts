@@ -75,15 +75,25 @@ export class JobsService {
     const isAdmin = user.role === "ADMIN";
     const isOwner = job.employer.userId === user.id;
 
-    if (!isAdmin) {
-      if (!isOwner) {
-        throw new ForbiddenApiException();
-      }
-      if (job.status !== "DRAFT" && job.status !== "REJECTED") {
-        throw new ForbiddenApiException("Only draft or rejected jobs can be edited");
-      }
+    if (isAdmin) {
+      return this.jobsRepository.update(id, dto);
     }
 
-    return this.jobsRepository.update(id, dto);
+    if (!isOwner) {
+      throw new ForbiddenApiException();
+    }
+    if (job.status !== "DRAFT" && job.status !== "REJECTED") {
+      throw new ForbiddenApiException("Only draft or rejected jobs can be edited");
+    }
+
+    // Re-checks the DRAFT/REJECTED condition atomically at write time: the read
+    // above can go stale if an admin concurrently approves/rejects the job
+    // between this owner's read and write, which would otherwise let an edit
+    // land on a job that's no longer editable with no error at all.
+    const updated = await this.jobsRepository.updateIfEditable(id, dto);
+    if (!updated) {
+      throw new ForbiddenApiException("Only draft or rejected jobs can be edited");
+    }
+    return updated;
   }
 }

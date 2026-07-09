@@ -79,4 +79,16 @@ export class JobsRepository {
   update(id: string, data: Prisma.JobUpdateInput): Promise<Job> {
     return this.prisma.job.update({ where: { id }, data });
   }
+
+  // Only writes if the job is still DRAFT/REJECTED, so an owner's edit can't
+  // silently land on a job an admin concurrently approved/rejected in between.
+  async updateIfEditable(id: string, data: Prisma.JobUpdateInput): Promise<Job | null> {
+    const { count } = await this.prisma.job.updateMany({
+      where: { id, status: { in: ["DRAFT", "REJECTED"] } },
+      data,
+    });
+    if (count === 0) return null;
+
+    return this.prisma.job.findUnique({ where: { id } });
+  }
 }
