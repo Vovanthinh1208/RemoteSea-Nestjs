@@ -41,12 +41,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         // two concurrent "apply to job" requests) — without this, a unique-constraint
         // hit surfaces as a raw 500 instead of a normal 409.
         case "P2002":
-          response
-            .status(409)
-            .json({
-              error: "Conflict — this record already exists",
-              code: "CONFLICT",
-            });
+          response.status(409).json({
+            error: "Conflict — this record already exists",
+            code: "CONFLICT",
+          });
           return;
         // findUniqueOrThrow/findFirstOrThrow/deleteOrThrow-style calls throw this on
         // no match — treat it the same as an application-level not-found.
@@ -55,22 +53,18 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           return;
         // Foreign key violation — the request references a record that doesn't exist.
         case "P2003":
-          response
-            .status(400)
-            .json({
-              error: "Invalid reference — related record does not exist",
-              code: "INVALID_REFERENCE",
-            });
+          response.status(400).json({
+            error: "Invalid reference — related record does not exist",
+            code: "INVALID_REFERENCE",
+          });
           return;
         // Would violate a required relation (e.g. deleting a record another required
         // relation still points to).
         case "P2014":
-          response
-            .status(409)
-            .json({
-              error: "Conflict — operation violates a required relation",
-              code: "CONFLICT",
-            });
+          response.status(409).json({
+            error: "Conflict — operation violates a required relation",
+            code: "CONFLICT",
+          });
           return;
       }
     }
