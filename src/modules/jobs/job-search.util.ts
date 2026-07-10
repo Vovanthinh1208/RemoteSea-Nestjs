@@ -135,7 +135,7 @@ export const facetSelect = {
   categories: { select: { category: { select: { name: true } } } },
 } satisfies Prisma.JobSelect;
 
-function matchesTz(row: FacetRow, key: string): boolean {
+const matchesTz = (row: FacetRow, key: string): boolean => {
   if (key === "sea") {
     return (
       (row.country !== null && SEA_COUNTRIES.includes(row.country)) ||
@@ -143,12 +143,15 @@ function matchesTz(row: FacetRow, key: string): boolean {
       (row.timezone?.includes("+8") ?? false)
     );
   }
-  if (key === "async")
-    return row.timezone?.toLowerCase().includes("async") ?? false;
-  return row.country === TZ_COUNTRY[key];
-}
 
-export function computeFacets(rows: FacetRow[]): Facets {
+  if (key === "async") {
+    return row.timezone?.toLowerCase().includes("async") ?? false;
+  }
+
+  return row.country === TZ_COUNTRY[key];
+};
+
+export const computeFacets = (rows: FacetRow[]): Facets => {
   const facets: Facets = {
     jobType: {},
     timezone: {},
@@ -162,15 +165,18 @@ export function computeFacets(rows: FacetRow[]): Facets {
       enums.includes(r.jobType),
     ).length;
   }
+
   for (const label of FILTER_OPTIONS.seniority) {
     const levels = SENIORITY_TO_LEVELS[label] ?? [];
     facets.seniority[label] = rows.filter((r) =>
       levels.includes(r.level),
     ).length;
   }
+
   for (const key of FILTER_OPTIONS.timezone) {
     facets.timezone[key] = rows.filter((r) => matchesTz(r, key)).length;
   }
+
   for (const name of FILTER_OPTIONS.category) {
     facets.category[name] = rows.filter((r) =>
       r.categories.some((c) => c.category.name === name),
@@ -178,4 +184,4 @@ export function computeFacets(rows: FacetRow[]): Facets {
   }
 
   return facets;
-}
+};
