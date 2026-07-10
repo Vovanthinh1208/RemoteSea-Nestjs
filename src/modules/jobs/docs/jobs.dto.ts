@@ -220,21 +220,25 @@ export class JobDetailEmployerDto extends JobListEmployerDto {
   hqCountry?: string | null;
 }
 
+export class JobListItemEmployerDto {
+  @ApiProperty({ example: "RemoteSEA Ltd" })
+  companyName!: string;
+
+  @ApiProperty({ example: false })
+  isVerified!: boolean;
+}
+
+// Deliberately narrower than JobDetailResponseDto: only the fields the jobs-board
+// card view actually renders (title, employer name/verified badge, salary,
+// location/timezone tags, featured/VN-hire badges). No description/requirements/
+// benefits/skills/currency/status/planType/counts — those cost real bytes on a
+// paginated list and were previously sent for every card unused.
 export class JobListItemDto {
   @ApiProperty({ example: "cljob1a2b3c4d5e6f7g8h9i0" })
   id!: string;
 
   @ApiProperty({ example: "Senior Backend Engineer" })
   title!: string;
-
-  @ApiProperty({ example: "senior-backend-engineer-a1b2c3" })
-  slug!: string;
-
-  @ApiProperty({
-    example:
-      "We are looking for a senior backend engineer to join our remote team...",
-  })
-  description!: string;
 
   @ApiProperty({ enum: JOB_TYPE_VALUES, example: "FULL_TIME" })
   jobType!: (typeof JOB_TYPE_VALUES)[number];
@@ -248,9 +252,6 @@ export class JobListItemDto {
   @ApiPropertyOptional({ example: 90000, nullable: true })
   salaryMax?: number | null;
 
-  @ApiProperty({ example: "USD" })
-  currency!: string;
-
   @ApiProperty({ example: true })
   isRemote!: boolean;
 
@@ -260,26 +261,11 @@ export class JobListItemDto {
   @ApiPropertyOptional({ example: "Vietnam", nullable: true })
   country?: string | null;
 
-  @ApiProperty({ enum: JOB_STATUS_VALUES, example: "ACTIVE" })
-  status!: (typeof JOB_STATUS_VALUES)[number];
-
-  @ApiProperty({ enum: PLAN_TYPE_VALUES, example: "STANDARD" })
-  planType!: (typeof PLAN_TYPE_VALUES)[number];
-
-  @ApiProperty({
-    type: [String],
-    example: ["Health insurance", "Remote stipend"],
-  })
-  benefits!: string[];
-
   @ApiProperty({ example: false })
   isFeatured!: boolean;
 
-  @ApiProperty({ example: 342 })
-  viewCount!: number;
-
-  @ApiProperty({ example: 12 })
-  applyCount!: number;
+  @ApiProperty({ example: 3 })
+  vnHireCount!: number;
 
   @ApiPropertyOptional({ example: "2026-05-01T08:00:00.000Z", nullable: true })
   publishedAt?: string | null;
@@ -287,14 +273,11 @@ export class JobListItemDto {
   @ApiProperty({ example: "2026-04-20T08:00:00.000Z" })
   createdAt!: string;
 
-  @ApiProperty({ type: JobListEmployerDto })
-  employer!: JobListEmployerDto;
+  @ApiProperty({ type: JobListItemEmployerDto })
+  employer!: JobListItemEmployerDto;
 
   @ApiProperty({ type: [JobCategoryLinkDto] })
   categories!: JobCategoryLinkDto[];
-
-  @ApiProperty({ type: [JobSkillLinkDto] })
-  skills!: JobSkillLinkDto[];
 }
 
 export class PaginationDto {
@@ -419,9 +402,6 @@ export class JobDetailResponseDto {
     example: ["Health insurance", "Remote stipend"],
   })
   benefits!: string[];
-
-  @ApiPropertyOptional({ nullable: true })
-  reviewNote?: string | null;
 
   @ApiProperty({ example: false })
   isFeatured!: boolean;

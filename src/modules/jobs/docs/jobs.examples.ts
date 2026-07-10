@@ -3,29 +3,20 @@
 const jobListItemExample = {
   id: "cljob1a2b3c4d5e6f7g8h9i0",
   title: "Senior Backend Engineer",
-  slug: "senior-backend-engineer-a1b2c3",
-  description:
-    "We are looking for a senior backend engineer to join our remote team...",
   jobType: "FULL_TIME",
   level: "SENIOR",
   salaryMin: 60000,
   salaryMax: 90000,
-  currency: "USD",
   isRemote: true,
   timezone: "UTC+7",
   country: "Vietnam",
-  status: "ACTIVE",
-  planType: "STANDARD",
-  benefits: ["Health insurance", "Remote stipend"],
   isFeatured: false,
-  viewCount: 342,
-  applyCount: 12,
+  vnHireCount: 3,
   publishedAt: "2026-05-01T08:00:00.000Z",
   createdAt: "2026-04-20T08:00:00.000Z",
   employer: {
     companyName: "RemoteSEA Ltd",
-    logoUrl: null,
-    slug: "remotesea-ltd",
+    isVerified: false,
   },
   categories: [
     {
@@ -35,16 +26,6 @@ const jobListItemExample = {
         slug: "engineering",
         icon: "code",
       },
-    },
-  ],
-  skills: [
-    {
-      skill: {
-        id: "clskl1a2b3c4d5e6f7g8h9i0",
-        name: "TypeScript",
-        slug: "typescript",
-      },
-      isRequired: true,
     },
   ],
 };
@@ -90,12 +71,31 @@ export const CreateJobResponseExample = {
 };
 
 export const JobDetailResponseExample = {
-  ...jobListItemExample,
+  id: "cljob1a2b3c4d5e6f7g8h9i0",
+  title: "Senior Backend Engineer",
+  slug: "senior-backend-engineer-a1b2c3",
+  description:
+    "We are looking for a senior backend engineer to join our remote team...",
   requirements: "5+ years with Node.js, PostgreSQL, and distributed systems.",
   responsibilities: null,
+  jobType: "FULL_TIME",
+  level: "SENIOR",
+  salaryMin: 60000,
+  salaryMax: 90000,
+  currency: "USD",
+  isRemote: true,
+  timezone: "UTC+7",
+  country: "Vietnam",
   applicationUrl: null,
-  reviewNote: null,
+  status: "ACTIVE",
+  planType: "STANDARD",
+  benefits: ["Health insurance", "Remote stipend"],
+  isFeatured: false,
+  viewCount: 342,
+  applyCount: 12,
+  publishedAt: "2026-05-01T08:00:00.000Z",
   expiresAt: null,
+  createdAt: "2026-04-20T08:00:00.000Z",
   updatedAt: "2026-06-01T10:00:00.000Z",
   employer: {
     companyName: "RemoteSEA Ltd",
@@ -106,6 +106,26 @@ export const JobDetailResponseExample = {
     description: "We build tools for remote teams across Southeast Asia.",
     hqCountry: "Singapore",
   },
+  categories: [
+    {
+      category: {
+        id: "clcat1a2b3c4d5e6f7g8h9i0",
+        name: "Engineering",
+        slug: "engineering",
+        icon: "code",
+      },
+    },
+  ],
+  skills: [
+    {
+      skill: {
+        id: "clskl1a2b3c4d5e6f7g8h9i0",
+        name: "TypeScript",
+        slug: "typescript",
+      },
+      isRequired: true,
+    },
+  ],
 };
 
 export const UpdateJobRequestExample = {

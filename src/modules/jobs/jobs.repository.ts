@@ -6,21 +6,9 @@ import {
   facetSelect,
   type FacetRow,
 } from "./job-search.util";
-import { jobWithRelationsInclude } from "@/common/types/job-with-relations.type";
+import { omitInternalJobFields } from "@/common/types/job-with-relations.type";
 
-// stripeSessionId (a payment identifier) and reviewNote (the admin's internal
-// rejection note) are never meant to reach a client response. Prisma's `omit`
-// option isn't usable here (this client's generated types reject it), so strip
-// them manually instead.
 export type PublicJob = Omit<Job, "stripeSessionId" | "reviewNote">;
-
-function toPublicJob({
-  stripeSessionId: _stripeSessionId,
-  reviewNote: _reviewNote,
-  ...publicJob
-}: Job): PublicJob {
-  return publicJob;
-}
 
 const jobDetailInclude = {
   employer: {
@@ -38,6 +26,40 @@ const jobDetailInclude = {
   skills: { include: { skill: true } },
 } satisfies Prisma.JobInclude;
 
+// Only the fields actually read by frontend consumers of this endpoint (JobCard,
+// plus RecommendedJobs' skill-based "why recommended" line) — the list previously
+// reused the full jobWithRelationsInclude (every Job scalar, including
+// description/requirements/benefits/stripeSessionId/reviewNote) for every card
+// on every page of results.
+const jobListItemSelect = {
+  id: true,
+  title: true,
+  jobType: true,
+  level: true,
+  salaryMin: true,
+  salaryMax: true,
+  isRemote: true,
+  timezone: true,
+  country: true,
+  isFeatured: true,
+  vnHireCount: true,
+  publishedAt: true,
+  createdAt: true,
+  employer: { select: { companyName: true, isVerified: true } },
+  categories: {
+    select: {
+      category: { select: { id: true, name: true, slug: true, icon: true } },
+    },
+  },
+  skills: {
+    select: { skill: { select: { id: true, name: true, slug: true } } },
+  },
+} satisfies Prisma.JobSelect;
+
+export type JobListItem = Prisma.JobGetPayload<{
+  select: typeof jobListItemSelect;
+}>;
+
 @Injectable()
 export class JobsRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -50,13 +72,13 @@ export class JobsRepository {
       { isFeatured: "desc" },
       { publishedAt: "desc" },
     ],
-  ) {
+  ): Promise<JobListItem[]> {
     return this.prisma.job.findMany({
       where,
       skip,
       take,
       orderBy,
-      include: jobWithRelationsInclude,
+      select: jobListItemSelect,
     });
   }
 
@@ -71,11 +93,12 @@ export class JobsRepository {
     });
   }
 
-  findActiveById(id: string) {
-    return this.prisma.job.findFirst({
+  async findActiveById(id: string) {
+    const job = await this.prisma.job.findFirst({
       where: { id, status: "ACTIVE" },
       include: jobDetailInclude,
     });
+    return job && omitInternalJobFields(job);
   }
 
   findById(id: string) {
@@ -108,7 +131,7 @@ export class JobsRepository {
 
   async update(id: string, data: Prisma.JobUpdateInput): Promise<PublicJob> {
     const job = await this.prisma.job.update({ where: { id }, data });
-    return toPublicJob(job);
+    return omitInternalJobFields(job);
   }
 
   // Only writes if the job is still DRAFT/REJECTED, so an owner's edit can't
@@ -124,6 +147,6 @@ export class JobsRepository {
     if (count === 0) return null;
 
     const job = await this.prisma.job.findUnique({ where: { id } });
-    return job && toPublicJob(job);
+    return job && omitInternalJobFields(job);
   }
 }

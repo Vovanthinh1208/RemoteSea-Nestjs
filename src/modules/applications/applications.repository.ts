@@ -2,7 +2,11 @@ import { Injectable } from "@nestjs/common";
 import type { Application, TalentProfile } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 import type { ApplicationWithJob, CreateApplicationInput } from "./interfaces";
-import { jobWithRelationsInclude } from "@/common/types/job-with-relations.type";
+import {
+  jobWithRelationsInclude,
+  omitInternalJobFields,
+  type JobWithRelations,
+} from "@/common/types/job-with-relations.type";
 import {
   jobWithEmployerEmailInclude,
   type JobWithEmployerEmail,
@@ -30,12 +34,14 @@ export class ApplicationsRepository {
     });
   }
 
-  findByTalentId(talentId: string): Promise<ApplicationWithJob[]> {
-    return this.prisma.application.findMany({
+  async findByTalentId(talentId: string): Promise<ApplicationWithJob[]> {
+    const rows = (await this.prisma.application.findMany({
       where: { talentId },
       orderBy: { appliedAt: "desc" },
       include: { job: { include: jobWithRelationsInclude } },
-    }) as Promise<ApplicationWithJob[]>;
+    })) as (Application & { job: JobWithRelations })[];
+
+    return rows.map((row) => ({ ...row, job: omitInternalJobFields(row.job) }));
   }
 
   findByJobAndTalent(
