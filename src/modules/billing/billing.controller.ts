@@ -7,9 +7,14 @@ import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
+import { CurrentResource } from "@/common/authorization/current-resource.decorator";
 import { RateLimitService } from "@/common/services/rate-limit.service";
 import { BadRequestApiException } from "@/common/exceptions/api.exception";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+import {
+  JobPayerOwnershipGuard,
+  type JobPayer,
+} from "./guards/job-payer-ownership.guard";
 import { ApiBillingTag, ApiCheckout, ApiWebhook } from "./docs/billing.swagger";
 
 @ApiBillingTag()
@@ -22,17 +27,18 @@ export class BillingController {
 
   @ApiCheckout()
   @Post("checkout")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, JobPayerOwnershipGuard)
   async checkout(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new ZodValidationPipe(checkoutSchema)) body: CheckoutDto,
+    @CurrentResource() job: JobPayer,
+    @Body(new ZodValidationPipe(checkoutSchema)) _body: CheckoutDto,
   ) {
     this.rateLimitService.enforce(
       `checkout:${user.id}`,
       RATE_LIMITS.CHECKOUT.limit,
       RATE_LIMITS.CHECKOUT.windowMs,
     );
-    return this.billingService.createCheckoutSession(user.id, body);
+    return this.billingService.createCheckoutSession(job, user.id);
   }
 
   @ApiWebhook()

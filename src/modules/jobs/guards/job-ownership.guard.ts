@@ -1,0 +1,28 @@
+import { Injectable } from "@nestjs/common";
+import type { UserRole } from "@prisma/client";
+import { OwnershipGuardBase } from "@/common/authorization/ownership.guard";
+import { JobsRepository } from "../jobs.repository";
+
+export type JobWithOwner = NonNullable<
+  Awaited<ReturnType<JobsRepository["findById"]>>
+>;
+
+@Injectable()
+export class JobOwnershipGuard extends OwnershipGuardBase<JobWithOwner> {
+  // Admins can edit any job regardless of ownership — JobsService.update still
+  // checks user.role itself afterward, since admins also bypass the
+  // DRAFT/REJECTED-only editing rule, not just this ownership check.
+  protected readonly bypassRoles: UserRole[] = ["ADMIN"];
+
+  constructor(private readonly jobsRepository: JobsRepository) {
+    super();
+  }
+
+  protected loadResource(id: string): Promise<JobWithOwner | null> {
+    return this.jobsRepository.findById(id);
+  }
+
+  protected getOwnerUserId(job: JobWithOwner): string {
+    return job.employer.userId;
+  }
+}

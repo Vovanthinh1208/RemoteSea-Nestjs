@@ -4,14 +4,20 @@ import type { ListEmployersDto } from "./dto/list-employers.dto";
 import type { UpdateEmployerDto } from "./dto/update-employer.dto";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
 import type { ReviewJobDto } from "./dto/review-job.dto";
-import type { RevenuePlanMix, RevenueSummary } from "./interfaces";
-import { buildRecentMonthKeys, monthKeyOf } from "./revenue.util";
+import type { RevenueSummary } from "./interfaces";
+import {
+  buildMonthlyRevenueBuckets,
+  buildRecentMonthKeys,
+  buildRevenuePlanMix,
+  buildRevenueTransactions,
+  computeRevenueTotals,
+  monthKeyOf,
+} from "./revenue.util";
 import {
   BadRequestApiException,
   NotFoundApiException,
 } from "@/common/exceptions/api.exception";
-import { PLAN_LABELS, PLAN_PRICES } from "@/common/constants/plan.constants";
-import { PLAN_TYPE_VALUES } from "@/common/constants/enum-values.constants";
+import { PLAN_PRICES } from "@/common/constants/plan.constants";
 import { EmailService } from "@/common/services/email.service";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 
@@ -150,60 +156,19 @@ export class AdminService {
       this.adminRepository.findRecentPaidJobs(RECENT_TRANSACTIONS_LIMIT),
     ]);
 
-    const months = monthKeys.map(({ key, label }) => ({
-      key,
-      label,
-      standard: 0,
-      featured: 0,
-      handsOn: 0,
-    }));
-    const monthIndexByKey = new Map(
-      months.map((month, index) => [month.key, index]),
+    const months = buildMonthlyRevenueBuckets(recentPaidJobs, monthKeys);
+    const mix = buildRevenuePlanMix(planCounts);
+    const transactions = buildRevenueTransactions(transactionJobs);
+
+    const currentMonthIndex = months.findIndex(
+      (month) => month.key === monthKeyOf(now),
+    );
+    const totals = computeRevenueTotals(
+      mix,
+      months,
+      currentMonthIndex === -1 ? months.length - 1 : currentMonthIndex,
     );
 
-    for (const job of recentPaidJobs) {
-      const amount = PLAN_PRICES[job.planType];
-      const paidOn = job.paidAt ?? job.createdAt;
-
-      const monthIndex = monthIndexByKey.get(monthKeyOf(paidOn));
-      if (monthIndex === undefined) continue;
-
-      const bucket = months[monthIndex];
-      if (job.planType === "STANDARD") bucket.standard += amount;
-      else if (job.planType === "FEATURED") bucket.featured += amount;
-      else bucket.handsOn += amount;
-    }
-
-    const countByPlan = new Map(
-      planCounts.map(({ planType, count }) => [planType, count]),
-    );
-    const mix: RevenuePlanMix[] = PLAN_TYPE_VALUES.map((planType) => {
-      const count = countByPlan.get(planType) ?? 0;
-      return {
-        planType,
-        label: PLAN_LABELS[planType],
-        price: PLAN_PRICES[planType],
-        count,
-        amount: count * PLAN_PRICES[planType],
-      };
-    });
-
-    const transactions = transactionJobs.map((job) => ({
-      jobId: job.id,
-      jobTitle: job.title,
-      companyName: job.employer.companyName,
-      planType: job.planType,
-      amount: PLAN_PRICES[job.planType],
-      paidAt: (job.paidAt ?? job.createdAt).toISOString(),
-    }));
-
-    const allTime = mix.reduce((sum, m) => sum + m.amount, 0);
-    const currentMonthIndex =
-      monthIndexByKey.get(monthKeyOf(now)) ?? months.length - 1;
-    const currentMonth = months[currentMonthIndex];
-    const thisMonth =
-      currentMonth.standard + currentMonth.featured + currentMonth.handsOn;
-
-    return { months, mix, transactions, totals: { allTime, thisMonth } };
+    return { months, mix, transactions, totals };
   }
 }

@@ -150,7 +150,7 @@ export class EmployerRepository {
   findJobWithEmployerOwner(id: string) {
     return this.prisma.job.findUnique({
       where: { id },
-      select: { employer: { select: { userId: true } } },
+      select: { id: true, employer: { select: { userId: true } } },
     });
   }
 
@@ -196,6 +196,7 @@ export class EmployerRepository {
     return this.prisma.application.findUnique({
       where: { id },
       select: {
+        id: true,
         status: true,
         job: { select: { employer: { select: { userId: true } } } },
       },

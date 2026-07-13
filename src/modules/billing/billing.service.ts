@@ -3,15 +3,12 @@ import { ConfigService } from "@nestjs/config";
 import Stripe from "stripe";
 import { BillingRepository } from "./billing.repository";
 import { STRIPE_CLIENT } from "./constants";
-import type { CheckoutDto } from "./dto/checkout.dto";
 import type { CheckoutSessionResult } from "./interfaces";
-import {
-  BadRequestApiException,
-  NotFoundApiException,
-} from "@/common/exceptions/api.exception";
+import { BadRequestApiException } from "@/common/exceptions/api.exception";
 import { EmailService } from "@/common/services/email.service";
 import { PLAN_LABELS, PLAN_PRICES } from "@/common/constants/plan.constants";
 import type { EnvConfig } from "@/core/config/env.validation";
+import type { JobPayer } from "./guards/job-payer-ownership.guard";
 
 @Injectable()
 export class BillingService {
@@ -25,13 +22,10 @@ export class BillingService {
   ) {}
 
   async createCheckoutSession(
+    job: JobPayer,
     userId: string,
-    dto: CheckoutDto,
   ): Promise<CheckoutSessionResult> {
-    const job = await this.billingRepository.findJobWithEmployer(dto.jobId);
-    if (!job || job.employer.userId !== userId) {
-      throw new NotFoundApiException("Job not found");
-    }
+    // Ownership is already enforced by JobPayerOwnershipGuard before this runs.
     if (job.status !== "DRAFT" || job.planPaid) {
       throw new BadRequestApiException("Job is not payable");
     }

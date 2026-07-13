@@ -23,6 +23,8 @@ import {
   ConflictApiException,
   ForbiddenApiException,
 } from "@/common/exceptions/api.exception";
+import type { ApplicationWithJobOwner } from "./guards/application-ownership.guard";
+import { computeAvgTimeToHireInDays } from "./employer.util";
 
 @Injectable()
 export class EmployerService {
@@ -143,35 +145,18 @@ export class EmployerService {
       this.employerRepository.getEmployerJobStats(employer.id),
     ]);
 
-    const avgTimeToHireInDays = offered.length
-      ? offered.reduce(
-          (sum, a) =>
-            sum + (a.updatedAt.getTime() - a.appliedAt.getTime()) / 86_400_000,
-          0,
-        ) / offered.length
-      : 0;
-
     return {
       jobs,
       stats: {
         totalApps,
         shortlisted,
-        avgTimeToHireInDays: Math.round(avgTimeToHireInDays * 10) / 10,
+        avgTimeToHireInDays: computeAvgTimeToHireInDays(offered),
       },
     };
   }
 
-  async listJobApplications(
-    userId: string,
-    jobId: string,
-    dto: ListJobApplicationsDto,
-  ) {
-    const job = await this.employerRepository.findJobWithEmployerOwner(jobId);
-    assertFound(job, "Job not found");
-    if (job.employer.userId !== userId) {
-      throw new ForbiddenApiException();
-    }
-
+  async listJobApplications(jobId: string, dto: ListJobApplicationsDto) {
+    // Ownership is already enforced by EmployerJobOwnershipGuard before this runs.
     const { status, page, limit } = dto;
     const skip = paginationSkip(page, limit);
     const { applications, total } =
@@ -189,17 +174,10 @@ export class EmployerService {
   }
 
   async updateApplication(
-    userId: string,
-    applicationId: string,
+    application: ApplicationWithJobOwner,
     dto: UpdateApplicationDto,
   ) {
-    const application =
-      await this.employerRepository.findApplicationWithJobOwner(applicationId);
-    assertFound(application, "Application not found");
-    if (application.job.employer.userId !== userId) {
-      throw new ForbiddenApiException();
-    }
-
+    // Ownership is already enforced by ApplicationOwnershipGuard before this runs.
     const { status, notes } = dto;
     if (
       status !== application.status &&
@@ -211,7 +189,7 @@ export class EmployerService {
     }
 
     const updated = await this.employerRepository.updateApplication(
-      applicationId,
+      application.id,
       application.status,
       status,
       notes,

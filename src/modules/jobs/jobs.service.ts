@@ -16,6 +16,7 @@ import {
   NotFoundApiException,
 } from "@/common/exceptions/api.exception";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+import type { JobWithOwner } from "./guards/job-ownership.guard";
 
 @Injectable()
 export class JobsService {
@@ -88,25 +89,18 @@ export class JobsService {
   }
 
   async update(
-    id: string,
+    job: JobWithOwner,
     user: AuthenticatedUser,
     dto: UpdateJobDto,
   ): Promise<PublicJob> {
-    const job = await this.jobsRepository.findById(id);
-    if (!job) {
-      throw new NotFoundApiException("Job not found");
-    }
-
+    // Ownership (or ADMIN membership) is already enforced by JobOwnershipGuard
+    // before this method runs — `job` here is the same row the guard fetched.
     const isAdmin = user.role === "ADMIN";
-    const isOwner = job.employer.userId === user.id;
 
     if (isAdmin) {
-      return this.jobsRepository.update(id, dto);
+      return this.jobsRepository.update(job.id, dto);
     }
 
-    if (!isOwner) {
-      throw new ForbiddenApiException();
-    }
     if (job.status !== "DRAFT" && job.status !== "REJECTED") {
       throw new ForbiddenApiException(
         "Only draft or rejected jobs can be edited",
@@ -132,7 +126,7 @@ export class JobsService {
     // above can go stale if an admin concurrently approves/rejects the job
     // between this owner's read and write, which would otherwise let an edit
     // land on a job that's no longer editable with no error at all.
-    const updated = await this.jobsRepository.updateIfEditable(id, dto);
+    const updated = await this.jobsRepository.updateIfEditable(job.id, dto);
     if (!updated) {
       throw new ForbiddenApiException(
         "Only draft or rejected jobs can be edited",

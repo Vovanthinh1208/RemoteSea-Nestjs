@@ -17,7 +17,12 @@ import { updateJobSchema, type UpdateJobDto } from "./dto/update-job.dto";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
+import { CurrentResource } from "@/common/authorization/current-resource.decorator";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+import {
+  JobOwnershipGuard,
+  type JobWithOwner,
+} from "./guards/job-ownership.guard";
 import {
   ApiCreateJob,
   ApiGetJobById,
@@ -56,12 +61,12 @@ export class JobsController {
 
   @ApiUpdateJob()
   @Patch(":id")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, JobOwnershipGuard)
   update(
-    @Param("id") id: string,
+    @CurrentResource() job: JobWithOwner,
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(updateJobSchema)) body: UpdateJobDto,
   ) {
-    return this.jobsService.update(id, user, body);
+    return this.jobsService.update(job, user, body);
   }
 }

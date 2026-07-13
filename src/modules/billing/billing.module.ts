@@ -4,6 +4,7 @@ import Stripe from "stripe";
 import { BillingController } from "./billing.controller";
 import { BillingService } from "./billing.service";
 import { BillingRepository } from "./billing.repository";
+import { JobPayerOwnershipGuard } from "./guards/job-payer-ownership.guard";
 import { STRIPE_CLIENT } from "./constants";
 import type { EnvConfig } from "@/core/config/env.validation";
 
@@ -12,6 +13,7 @@ import type { EnvConfig } from "@/core/config/env.validation";
   providers: [
     BillingService,
     BillingRepository,
+    JobPayerOwnershipGuard,
     {
       provide: STRIPE_CLIENT,
       useFactory: (config: ConfigService<EnvConfig, true>) =>

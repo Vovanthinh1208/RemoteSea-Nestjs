@@ -4,7 +4,6 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  Param,
   Patch,
   Post,
   Query,
@@ -36,7 +35,16 @@ import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
 import { Roles } from "@/core/decorators/roles.decorator";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
+import { CurrentResource } from "@/common/authorization/current-resource.decorator";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+import {
+  EmployerJobOwnershipGuard,
+  type JobOwnerOnly,
+} from "./guards/employer-job-ownership.guard";
+import {
+  ApplicationOwnershipGuard,
+  type ApplicationWithJobOwner,
+} from "./guards/application-ownership.guard";
 import {
   ApiCreateEmployerProfile,
   ApiEmployerTag,
@@ -96,24 +104,24 @@ export class EmployerController {
   @ApiListJobApplications()
   @Get("jobs/:id/applications")
   @Roles("EMPLOYER")
+  @UseGuards(EmployerJobOwnershipGuard)
   async listJobApplications(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param("id") id: string,
+    @CurrentResource() job: JobOwnerOnly,
     @Query(new ZodValidationPipe(listJobApplicationsSchema))
     query: ListJobApplicationsDto,
   ) {
-    return this.employerService.listJobApplications(user.id, id, query);
+    return this.employerService.listJobApplications(job.id, query);
   }
 
   @ApiUpdateApplication()
   @Patch("applications/:id")
   @Roles("EMPLOYER")
+  @UseGuards(ApplicationOwnershipGuard)
   async updateApplication(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param("id") id: string,
+    @CurrentResource() application: ApplicationWithJobOwner,
     @Body(new ZodValidationPipe(updateApplicationSchema))
     body: UpdateApplicationDto,
   ) {
-    return this.employerService.updateApplication(user.id, id, body);
+    return this.employerService.updateApplication(application, body);
   }
 }
