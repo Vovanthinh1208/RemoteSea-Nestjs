@@ -8,10 +8,16 @@ import {
 } from "@/common/exceptions/api.exception";
 import { EmailService } from "@/common/services/email.service";
 import { isOwnedUploadUrl } from "@/modules/uploads/upload-url.util";
+import { buildPagination, paginationSkip } from "@/common/utils/paginate";
+import type { Pagination } from "@/common/interfaces/pagination.interface";
 import type { EnvConfig } from "@/core/config/env.validation";
 import { ApplicationsRepository } from "./applications.repository";
 import type { ApplyDto } from "./dto/apply.dto";
 import type { ApplicationWithJob } from "./interfaces";
+import {
+  buildApplicationStatusCounts,
+  type ApplicationStatusCounts,
+} from "./applications.util";
 
 @Injectable()
 export class ApplicationsService {
@@ -23,11 +29,33 @@ export class ApplicationsService {
     private readonly config: ConfigService<EnvConfig, true>,
   ) {}
 
-  async findAllForUser(userId: string): Promise<ApplicationWithJob[]> {
+  async findAllForUser(
+    userId: string,
+    page: number,
+    limit: number,
+  ): Promise<{ applications: ApplicationWithJob[]; pagination: Pagination }> {
     const talent =
       await this.applicationsRepository.findTalentIdByUserId(userId);
-    if (!talent) return [];
-    return this.applicationsRepository.findByTalentId(talent.id);
+    if (!talent) {
+      return { applications: [], pagination: buildPagination(page, limit, 0) };
+    }
+
+    const skip = paginationSkip(page, limit);
+    const [applications, total] =
+      await this.applicationsRepository.findByTalentId(talent.id, skip, limit);
+    return { applications, pagination: buildPagination(page, limit, total) };
+  }
+
+  /** DB-side status breakdown for TalentDashboard's stat tiles — see applications.util.ts. */
+  async getStatusCounts(userId: string): Promise<ApplicationStatusCounts> {
+    const talent =
+      await this.applicationsRepository.findTalentIdByUserId(userId);
+    if (!talent) return buildApplicationStatusCounts([]);
+
+    const rows = await this.applicationsRepository.getStatusCountsByTalentId(
+      talent.id,
+    );
+    return buildApplicationStatusCounts(rows);
   }
 
   async apply(userId: string, dto: ApplyDto): Promise<Application> {

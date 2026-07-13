@@ -1,5 +1,8 @@
 import { JobsService } from "./jobs.service";
-import { ForbiddenApiException, BadRequestApiException } from "@/common/exceptions/api.exception";
+import {
+  ForbiddenApiException,
+  BadRequestApiException,
+} from "@/common/exceptions/api.exception";
 import type { JobsRepository } from "./jobs.repository";
 import type { JobWithOwner } from "./guards/job-ownership.guard";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
@@ -35,7 +38,7 @@ const makeService = (repoOverrides: Partial<JobsRepository> = {}) => {
     updateIfEditable: jest.fn(),
     ...repoOverrides,
   } as unknown as JobsRepository;
-  return { service: new JobsService(repo), repo };
+  return { service: new JobsService(repo, {} as never), repo };
 };
 
 describe("JobsService.update", () => {

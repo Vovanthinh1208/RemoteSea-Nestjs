@@ -5,10 +5,15 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { ApplicationsService } from "./applications.service";
 import { applySchema, type ApplyDto } from "./dto/apply.dto";
+import {
+  listApplicationsSchema,
+  type ListApplicationsDto,
+} from "./dto/list-applications.dto";
 import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
@@ -32,8 +37,23 @@ export class ApplicationsController {
 
   @ApiListApplications()
   @Get()
-  findAll(@CurrentUser() user: AuthenticatedUser) {
-    return this.applicationsService.findAllForUser(user.id);
+  findAll(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query(new ZodValidationPipe(listApplicationsSchema))
+    query: ListApplicationsDto,
+  ) {
+    return this.applicationsService.findAllForUser(
+      user.id,
+      query.page,
+      query.limit,
+    );
+  }
+
+  // Static path segment — doesn't collide with any :id-style route (there is none
+  // in this controller). DB-side aggregate for TalentDashboard's stat tiles.
+  @Get("stats")
+  getStats(@CurrentUser() user: AuthenticatedUser) {
+    return this.applicationsService.getStatusCounts(user.id);
   }
 
   @ApiApply()

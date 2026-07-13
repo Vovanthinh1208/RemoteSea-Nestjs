@@ -101,10 +101,18 @@ export class JobsRepository {
     return job && omitInternalJobFields(job);
   }
 
+  // Backs JobOwnershipGuard + JobsService.update — narrow select, not the full Job
+  // row: those are the only fields that method reads.
   findById(id: string) {
     return this.prisma.job.findUnique({
       where: { id },
-      include: { employer: { select: { userId: true } } },
+      select: {
+        id: true,
+        status: true,
+        salaryMin: true,
+        salaryMax: true,
+        employer: { select: { userId: true } },
+      },
     });
   }
 

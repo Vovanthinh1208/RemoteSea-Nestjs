@@ -6,12 +6,15 @@ import {
   HttpStatus,
   Param,
   Put,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { SavedService } from "./saved.service";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
+import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+import { listSavedSchema, type ListSavedDto } from "./dto/list-saved.dto";
 import {
   ApiListSaved,
   ApiSavedTag,
@@ -27,8 +30,20 @@ export class SavedController {
 
   @ApiListSaved()
   @Get()
-  findAll(@CurrentUser() user: AuthenticatedUser) {
-    return this.savedService.findAllForUser(user.id);
+  findAll(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query(new ZodValidationPipe(listSavedSchema)) query: ListSavedDto,
+  ) {
+    return this.savedService.findAllForUser(user.id, query.page, query.limit);
+  }
+
+  // No pagination — this is an intentionally-complete membership set for
+  // client-side "is this job saved?" checks (e.g. the JobCard heart icon),
+  // not a display list. Static path segment, doesn't collide with :jobId below.
+  @Get("ids")
+  async listIds(@CurrentUser() user: AuthenticatedUser) {
+    const jobIds = await this.savedService.findJobIdsForUser(user.id);
+    return { jobIds };
   }
 
   @ApiSaveJob()

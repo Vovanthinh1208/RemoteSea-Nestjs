@@ -19,7 +19,9 @@ describe("ApplicationOwnershipGuard", () => {
   };
 
   it("loads via findApplicationWithJobOwner and compares job.employer.userId", async () => {
-    const findApplicationWithJobOwner = jest.fn().mockResolvedValue(application);
+    const findApplicationWithJobOwner = jest
+      .fn()
+      .mockResolvedValue(application);
     const guard = new ApplicationOwnershipGuard({
       findApplicationWithJobOwner,
     } as unknown as EmployerRepository);
@@ -30,7 +32,9 @@ describe("ApplicationOwnershipGuard", () => {
   });
 
   it("forbids a non-owner", async () => {
-    const findApplicationWithJobOwner = jest.fn().mockResolvedValue(application);
+    const findApplicationWithJobOwner = jest
+      .fn()
+      .mockResolvedValue(application);
     const guard = new ApplicationOwnershipGuard({
       findApplicationWithJobOwner,
     } as unknown as EmployerRepository);

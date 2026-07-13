@@ -16,7 +16,9 @@ describe("JobOwnershipGuard", () => {
 
   it("loads the job via jobsRepository.findById and compares employer.userId", async () => {
     const findById = jest.fn().mockResolvedValue(job);
-    const guard = new JobOwnershipGuard({ findById } as unknown as JobsRepository);
+    const guard = new JobOwnershipGuard({
+      findById,
+    } as unknown as JobsRepository);
 
     const context = makeContext({ id: "owner-1", role: "EMPLOYER" });
     await expect(guard.canActivate(context)).resolves.toBe(true);
@@ -25,7 +27,9 @@ describe("JobOwnershipGuard", () => {
 
   it("allows ADMIN even when not the owner", async () => {
     const findById = jest.fn().mockResolvedValue(job);
-    const guard = new JobOwnershipGuard({ findById } as unknown as JobsRepository);
+    const guard = new JobOwnershipGuard({
+      findById,
+    } as unknown as JobsRepository);
 
     const context = makeContext({ id: "someone-else", role: "ADMIN" });
     await expect(guard.canActivate(context)).resolves.toBe(true);
@@ -33,7 +37,9 @@ describe("JobOwnershipGuard", () => {
 
   it("forbids a non-owner, non-admin user", async () => {
     const findById = jest.fn().mockResolvedValue(job);
-    const guard = new JobOwnershipGuard({ findById } as unknown as JobsRepository);
+    const guard = new JobOwnershipGuard({
+      findById,
+    } as unknown as JobsRepository);
 
     const context = makeContext({ id: "someone-else", role: "EMPLOYER" });
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(

@@ -20,9 +20,12 @@ describe("JobPayerOwnershipGuard", () => {
       findJobWithEmployer,
     } as unknown as BillingRepository);
 
-    const context = makeContext({ id: "owner-1", role: "EMPLOYER" }, {
-      jobId: "job-1",
-    });
+    const context = makeContext(
+      { id: "owner-1", role: "EMPLOYER" },
+      {
+        jobId: "job-1",
+      },
+    );
     await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(findJobWithEmployer).toHaveBeenCalledWith("job-1");
   });
@@ -33,9 +36,12 @@ describe("JobPayerOwnershipGuard", () => {
       findJobWithEmployer,
     } as unknown as BillingRepository);
 
-    const context = makeContext({ id: "someone-else", role: "EMPLOYER" }, {
-      jobId: "job-1",
-    });
+    const context = makeContext(
+      { id: "someone-else", role: "EMPLOYER" },
+      {
+        jobId: "job-1",
+      },
+    );
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
       NotFoundApiException,
     );

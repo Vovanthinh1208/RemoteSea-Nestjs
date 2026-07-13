@@ -17,12 +17,11 @@ const application = {
 } as unknown as ApplicationWithJobOwner;
 
 const makeService = (repoOverrides: Partial<EmployerRepository> = {}) => {
-  const repo = { updateApplication: jest.fn(), ...repoOverrides } as unknown as EmployerRepository;
-  const service = new EmployerService(
-    repo,
-    {} as never,
-    {} as never,
-  );
+  const repo = {
+    updateApplication: jest.fn(),
+    ...repoOverrides,
+  } as unknown as EmployerRepository;
+  const service = new EmployerService(repo, {} as never, {} as never);
   return { service, repo };
 };
 

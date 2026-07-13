@@ -9,7 +9,9 @@ describe("BillingService.createCheckoutSession", () => {
   const makeService = (stripeCreate: jest.Mock) => {
     const stripe = { checkout: { sessions: { create: stripeCreate } } };
     const billingRepository = { setStripeSessionId: jest.fn() };
-    const config = { get: jest.fn().mockReturnValue("https://app.example.com") };
+    const config = {
+      get: jest.fn().mockReturnValue("https://app.example.com"),
+    };
     return new BillingService(
       stripe as never,
       billingRepository as never,
@@ -22,24 +24,27 @@ describe("BillingService.createCheckoutSession", () => {
     const service = makeService(jest.fn());
     const job = { status: "ACTIVE", planPaid: false } as JobPayer;
 
-    await expect(service.createCheckoutSession(job, "owner-1")).rejects.toBeInstanceOf(
-      BadRequestApiException,
-    );
+    await expect(
+      service.createCheckoutSession(job, "owner-1"),
+    ).rejects.toBeInstanceOf(BadRequestApiException);
   });
 
   it("rejects a job that's already paid", async () => {
     const service = makeService(jest.fn());
     const job = { status: "DRAFT", planPaid: true } as JobPayer;
 
-    await expect(service.createCheckoutSession(job, "owner-1")).rejects.toBeInstanceOf(
-      BadRequestApiException,
-    );
+    await expect(
+      service.createCheckoutSession(job, "owner-1"),
+    ).rejects.toBeInstanceOf(BadRequestApiException);
   });
 
   it("creates a checkout session for a payable job", async () => {
     const stripeCreate = jest
       .fn()
-      .mockResolvedValue({ id: "cs_1", url: "https://checkout.stripe.com/cs_1" });
+      .mockResolvedValue({
+        id: "cs_1",
+        url: "https://checkout.stripe.com/cs_1",
+      });
     const service = makeService(stripeCreate);
     const job = {
       id: "job-1",

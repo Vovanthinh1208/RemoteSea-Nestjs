@@ -59,7 +59,9 @@ export const buildMonthlyRevenueBuckets = (
     featured: 0,
     handsOn: 0,
   }));
-  const monthIndexByKey = new Map(months.map((month, index) => [month.key, index]));
+  const monthIndexByKey = new Map(
+    months.map((month, index) => [month.key, index]),
+  );
 
   for (const job of paidJobs) {
     const amount = PLAN_PRICES[job.planType];
@@ -81,7 +83,9 @@ export const buildMonthlyRevenueBuckets = (
 export const buildRevenuePlanMix = (
   planCounts: Array<{ planType: PlanType; count: number }>,
 ): RevenuePlanMix[] => {
-  const countByPlan = new Map(planCounts.map(({ planType, count }) => [planType, count]));
+  const countByPlan = new Map(
+    planCounts.map(({ planType, count }) => [planType, count]),
+  );
   return PLAN_TYPE_VALUES.map((planType) => {
     const count = countByPlan.get(planType) ?? 0;
     return {
@@ -113,6 +117,7 @@ export const computeRevenueTotals = (
 ): { allTime: number; thisMonth: number } => {
   const allTime = mix.reduce((sum, m) => sum + m.amount, 0);
   const currentMonth = months[currentMonthIndex];
-  const thisMonth = currentMonth.standard + currentMonth.featured + currentMonth.handsOn;
+  const thisMonth =
+    currentMonth.standard + currentMonth.featured + currentMonth.handsOn;
   return { allTime, thisMonth };
 };

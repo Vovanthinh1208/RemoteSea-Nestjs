@@ -1,5 +1,9 @@
 import { Injectable } from "@nestjs/common";
-import type { Application, TalentProfile } from "@prisma/client";
+import type {
+  Application,
+  ApplicationStatus,
+  TalentProfile,
+} from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 import type { ApplicationWithJob, CreateApplicationInput } from "./interfaces";
 import {
@@ -34,14 +38,39 @@ export class ApplicationsRepository {
     });
   }
 
-  async findByTalentId(talentId: string): Promise<ApplicationWithJob[]> {
-    const rows = (await this.prisma.application.findMany({
-      where: { talentId },
-      orderBy: { appliedAt: "desc" },
-      include: { job: { include: jobWithRelationsInclude } },
-    })) as (Application & { job: JobWithRelations })[];
+  async findByTalentId(
+    talentId: string,
+    skip: number,
+    take: number,
+  ): Promise<[ApplicationWithJob[], number]> {
+    const [rows, total] = await Promise.all([
+      this.prisma.application.findMany({
+        where: { talentId },
+        orderBy: { appliedAt: "desc" },
+        skip,
+        take,
+        include: { job: { include: jobWithRelationsInclude } },
+      }) as Promise<(Application & { job: JobWithRelations })[]>,
+      this.prisma.application.count({ where: { talentId } }),
+    ]);
 
-    return rows.map((row) => ({ ...row, job: omitInternalJobFields(row.job) }));
+    const applications = rows.map((row) => ({
+      ...row,
+      job: omitInternalJobFields(row.job),
+    }));
+    return [applications, total];
+  }
+
+  /** DB-side status breakdown for dashboard stats — avoids shipping every row to the
+   * client just to count them (see TalentDashboard's application-status tiles). */
+  getStatusCountsByTalentId(
+    talentId: string,
+  ): Promise<Array<{ status: ApplicationStatus; count: number }>> {
+    return this.prisma.application
+      .groupBy({ by: ["status"], where: { talentId }, _count: true })
+      .then((rows) =>
+        rows.map((row) => ({ status: row.status, count: row._count })),
+      );
   }
 
   findByJobAndTalent(

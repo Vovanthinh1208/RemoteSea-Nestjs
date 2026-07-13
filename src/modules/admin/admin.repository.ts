@@ -1,7 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { EmployerProfile, Job, JobStatus, PlanType } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
-import { jobWithEmployerEmailInclude } from "@/common/types/job-with-employer-email.type";
 
 type EmployerListItem = EmployerProfile & {
   user: { email: string };
@@ -9,7 +8,14 @@ type EmployerListItem = EmployerProfile & {
   jobs: { planType: PlanType }[];
 };
 
-type JobListItem = Omit<Job, "stripeSessionId" | "reviewNote"> & {
+type JobListItem = Omit<
+  Job,
+  | "stripeSessionId"
+  | "reviewNote"
+  | "responsibilities"
+  | "applicationUrl"
+  | "paidAt"
+> & {
   employer: { companyName: string; isVerified: boolean; slug: string };
   categories: { category: unknown }[];
 };
@@ -73,6 +79,11 @@ export class AdminRepository {
     ]);
   }
 
+  // Explicit select matching remotesea-web's AdminJob type field-for-field (verified
+  // against actual usage in src/features/admin/**) — was a root-level `include`,
+  // which pulls every Job scalar (description/requirements/benefits text+array
+  // columns included) on every page of up to 50 rows, then stripped 2 fields in JS
+  // after the fact. stripeSessionId/reviewNote stay excluded, same as before.
   async findJobs(
     where: { status: JobStatus },
     skip: number,
@@ -84,7 +95,33 @@ export class AdminRepository {
         skip,
         take,
         orderBy: { createdAt: "asc" },
-        include: {
+        select: {
+          id: true,
+          employerId: true,
+          title: true,
+          slug: true,
+          description: true,
+          requirements: true,
+          jobType: true,
+          level: true,
+          salaryMin: true,
+          salaryMax: true,
+          currency: true,
+          isRemote: true,
+          timezone: true,
+          country: true,
+          status: true,
+          planType: true,
+          planPaid: true,
+          benefits: true,
+          vnHireCount: true,
+          isFeatured: true,
+          viewCount: true,
+          applyCount: true,
+          publishedAt: true,
+          expiresAt: true,
+          createdAt: true,
+          updatedAt: true,
           employer: {
             select: { companyName: true, isVerified: true, slug: true },
           },
@@ -94,21 +131,22 @@ export class AdminRepository {
       this.prisma.job.count({ where }),
     ]);
 
-    // stripeSessionId/reviewNote are internal — strip before this reaches a response.
-    const publicJobs = jobs.map(
-      ({
-        stripeSessionId: _stripeSessionId,
-        reviewNote: _reviewNote,
-        ...rest
-      }) => rest,
-    );
-    return [publicJobs, total];
+    return [jobs, total];
   }
 
+  // Backs AdminService.reviewJob only — narrow select (that method's own needs),
+  // not the shared jobWithEmployerEmailInclude, which pulls the full Job row and
+  // is also reused by billing/applications for their own, different purposes.
   findJobWithEmployerEmail(id: string) {
     return this.prisma.job.findUnique({
       where: { id },
-      include: jobWithEmployerEmailInclude,
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        status: true,
+        employer: { select: { user: { select: { email: true } } } },
+      },
     });
   }
 

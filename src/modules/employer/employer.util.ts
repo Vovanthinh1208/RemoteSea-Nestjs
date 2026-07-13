@@ -9,7 +9,8 @@ export const computeAvgTimeToHireInDays = (
   if (offered.length === 0) return 0;
 
   const totalDays = offered.reduce(
-    (sum, a) => sum + (a.updatedAt.getTime() - a.appliedAt.getTime()) / MS_PER_DAY,
+    (sum, a) =>
+      sum + (a.updatedAt.getTime() - a.appliedAt.getTime()) / MS_PER_DAY,
     0,
   );
   return Math.round((totalDays / offered.length) * 10) / 10;

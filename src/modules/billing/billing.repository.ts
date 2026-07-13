@@ -6,16 +6,23 @@ import {
   type JobWithEmployerEmail,
 } from "@/common/types/job-with-employer-email.type";
 
-type JobWithEmployerUserId = Job & { employer: { userId: string } };
-
 @Injectable()
 export class BillingRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findJobWithEmployer(jobId: string): Promise<JobWithEmployerUserId | null> {
+  // Backs JobPayerOwnershipGuard + BillingService.createCheckoutSession — narrow
+  // select, not the full Job row: those are the only fields that method reads.
+  findJobWithEmployer(jobId: string) {
     return this.prisma.job.findUnique({
       where: { id: jobId },
-      include: { employer: { select: { userId: true } } },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        planPaid: true,
+        planType: true,
+        employer: { select: { userId: true } },
+      },
     });
   }
 

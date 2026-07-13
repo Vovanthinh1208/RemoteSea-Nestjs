@@ -12,14 +12,36 @@ import {
 export class SavedRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAllForUser(userId: string): Promise<SavedJobWithJob[]> {
-    const rows = (await this.prisma.savedJob.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      include: { job: { include: jobWithRelationsInclude } },
-    })) as (SavedJob & { job: JobWithRelations })[];
+  async findAllForUser(
+    userId: string,
+    skip: number,
+    take: number,
+  ): Promise<[SavedJobWithJob[], number]> {
+    const [rows, total] = await Promise.all([
+      this.prisma.savedJob.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take,
+        include: { job: { include: jobWithRelationsInclude } },
+      }) as Promise<(SavedJob & { job: JobWithRelations })[]>,
+      this.prisma.savedJob.count({ where: { userId } }),
+    ]);
 
-    return rows.map((row) => ({ ...row, job: omitInternalJobFields(row.job) }));
+    const savedJobs = rows.map((row) => ({
+      ...row,
+      job: omitInternalJobFields(row.job),
+    }));
+    return [savedJobs, total];
+  }
+
+  /** Membership set for client-side "is this job saved?" checks — no job join, just ids. */
+  async findJobIdsForUser(userId: string): Promise<string[]> {
+    const rows = await this.prisma.savedJob.findMany({
+      where: { userId },
+      select: { jobId: true },
+    });
+    return rows.map((row) => row.jobId);
   }
 
   /** Idempotent: succeeds whether or not the row existed. */

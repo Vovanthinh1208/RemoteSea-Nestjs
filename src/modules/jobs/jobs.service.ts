@@ -1,4 +1,5 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
+import { CACHE_MANAGER, type Cache } from "@nestjs/cache-manager";
 import { JobsRepository, type PublicJob } from "./jobs.repository";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
 import type { CreateJobDto } from "./dto/create-job.dto";
@@ -7,9 +8,11 @@ import {
   buildJobOrderBy,
   buildJobWhere,
   computeFacets,
+  type Facets,
 } from "./job-search.util";
 import { uniqueSlug } from "@/common/utils/slugify";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
+import { getOrSetCache } from "@/common/caching/cache.util";
 import {
   BadRequestApiException,
   ForbiddenApiException,
@@ -18,11 +21,20 @@ import {
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import type { JobWithOwner } from "./guards/job-ownership.guard";
 
+// Facets are a single global aggregate (findFacetRows() ignores the caller's search
+// filters entirely — see job-search.util.ts), so a flat cache key is correct: every
+// GET /jobs request, regardless of query params, shares the same cached facets.
+const FACETS_CACHE_KEY = "jobs:facets";
+const FACETS_CACHE_TTL_MS = 60_000;
+
 @Injectable()
 export class JobsService {
   private readonly logger = new Logger(JobsService.name);
 
-  constructor(private readonly jobsRepository: JobsRepository) {}
+  constructor(
+    private readonly jobsRepository: JobsRepository,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+  ) {}
 
   async list(query: ListJobsDto) {
     const { page, limit } = query;
@@ -30,16 +42,21 @@ export class JobsService {
     const where = buildJobWhere(query);
     const orderBy = buildJobOrderBy(query.sort);
 
-    const [jobs, total, facetRows] = await Promise.all([
+    const [jobs, total, facets] = await Promise.all([
       this.jobsRepository.findMany(where, skip, limit, orderBy),
       this.jobsRepository.count(where),
-      this.jobsRepository.findFacetRows(),
+      getOrSetCache<Facets>(
+        this.cache,
+        FACETS_CACHE_KEY,
+        FACETS_CACHE_TTL_MS,
+        async () => computeFacets(await this.jobsRepository.findFacetRows()),
+      ),
     ]);
 
     return {
       jobs,
       pagination: buildPagination(page, limit, total),
-      facets: computeFacets(facetRows),
+      facets,
     };
   }
 

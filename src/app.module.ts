@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { CacheModule } from "@nestjs/cache-manager";
 import { ConfigModule } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
 import { validateEnv } from "@/core/config/env.validation";
@@ -26,6 +27,9 @@ import { HealthModule } from "@/modules/health/health.module";
       validate: validateEnv,
     }),
     ScheduleModule.forRoot(),
+    // In-memory TTL cache, no external store — each cache.set() call sets its
+    // own TTL (see cache.util.ts), so no default here.
+    CacheModule.register({ isGlobal: true }),
     PrismaModule,
     SharedServicesModule,
     AuthModule,
