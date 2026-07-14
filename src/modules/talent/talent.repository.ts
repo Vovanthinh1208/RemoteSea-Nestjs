@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { User } from "@prisma/client";
+import type { TalentProfile, User } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 import type { TalentProfileDto } from "./dto/update-talent-profile.dto";
 import {
@@ -35,6 +35,22 @@ export class TalentRepository {
     return this.prisma.user.findUnique({
       where: { id: userId },
       select: { name: true },
+    });
+  }
+
+  // upsertProfile only needs these 3 scalars (to validate the *effective*
+  // post-patch salary range and resume-URL ownership) — not the full
+  // skills+skill+user join ownProfileArgs pulls in for the "get my profile"
+  // read endpoint.
+  findSalaryAndResumeByUserId(
+    userId: string,
+  ): Promise<Pick<
+    TalentProfile,
+    "desiredSalaryMin" | "desiredSalaryMax" | "resumeUrl"
+  > | null> {
+    return this.prisma.talentProfile.findUnique({
+      where: { userId },
+      select: { desiredSalaryMin: true, desiredSalaryMax: true, resumeUrl: true },
     });
   }
 

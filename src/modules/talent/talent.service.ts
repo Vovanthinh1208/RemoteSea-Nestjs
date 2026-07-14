@@ -52,8 +52,10 @@ export class TalentService {
     // upsertProfileWithSkills only touches fields present in this request (Prisma
     // `update: data`), so a caller that sends just one of the two salary fields
     // must be checked against the *effective* post-update pair, not just this
-    // request's fields in isolation.
-    const existing = await this.talentRepository.findByUserId(userId);
+    // request's fields in isolation. Only the 3 scalars below are read from
+    // `existing` — narrow query, not the full skills+user join findByUserId does
+    // for the "get my profile" read endpoint.
+    const existing = await this.talentRepository.findSalaryAndResumeByUserId(userId);
     const effectiveMin =
       dto.desiredSalaryMin ?? existing?.desiredSalaryMin ?? undefined;
     const effectiveMax =
