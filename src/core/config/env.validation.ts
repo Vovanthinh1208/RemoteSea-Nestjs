@@ -11,6 +11,14 @@ const envSchema = z.object({
   AUTH_SECRET: z.string().min(32, "AUTH_SECRET must be at least 32 characters"),
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
   JWT_EXPIRES_IN: z.string().default("30d"),
+  // Number of reverse-proxy hops in front of this app (load balancer, CDN, etc.) —
+  // passed to Express's `trust proxy` setting so req.ip resolves to the real client
+  // IP instead of the last proxy's, which the per-IP rate limiter depends on. Trusting
+  // more hops than actually exist lets a client spoof X-Forwarded-For and bypass
+  // rate limiting entirely, so this must match the real deployment topology, not be
+  // set generously "to be safe." Defaults to 1 (a single load balancer/reverse proxy),
+  // the common case for this kind of deployment (Railway/Render/Fly.io/a single nginx).
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(1),
 
   // Optional integrations — features degrade gracefully when unset.
   AUTH_GOOGLE_ID: z.string().optional(),

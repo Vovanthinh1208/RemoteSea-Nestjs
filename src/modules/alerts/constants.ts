@@ -1,5 +1,11 @@
 import type { AlertFrequency } from "@prisma/client";
 
+export const RATE_LIMITS = {
+  CREATE: { limit: 10, windowMs: 60_000 },
+  UPDATE: { limit: 20, windowMs: 60_000 },
+  DELETE: { limit: 20, windowMs: 60_000 },
+} as const;
+
 export const FREQUENCY_GAP_MS: Record<AlertFrequency, number> = {
   IMMEDIATE: 0,
   DAILY: 24 * 60 * 60 * 1000,

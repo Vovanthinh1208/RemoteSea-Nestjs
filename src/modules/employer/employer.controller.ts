@@ -30,12 +30,14 @@ import {
   updateApplicationSchema,
   type UpdateApplicationDto,
 } from "./dto/update-application.dto";
+import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
 import { Roles } from "@/core/decorators/roles.decorator";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import { CurrentResource } from "@/common/authorization/current-resource.decorator";
+import { RateLimitService } from "@/common/services/rate-limit.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import {
   EmployerJobOwnershipGuard,
@@ -59,7 +61,10 @@ import {
 @Controller("employer")
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class EmployerController {
-  constructor(private readonly employerService: EmployerService) {}
+  constructor(
+    private readonly employerService: EmployerService,
+    private readonly rateLimitService: RateLimitService,
+  ) {}
 
   @ApiCreateEmployerProfile()
   @Post("profile")
@@ -69,6 +74,11 @@ export class EmployerController {
     @Body(new ZodValidationPipe(createEmployerProfileSchema))
     body: CreateEmployerProfileDto,
   ) {
+    this.rateLimitService.enforce(
+      `employer-create-profile:${user.id}`,
+      RATE_LIMITS.CREATE_PROFILE.limit,
+      RATE_LIMITS.CREATE_PROFILE.windowMs,
+    );
     return this.employerService.createProfile(user.id, body);
   }
 
@@ -87,6 +97,11 @@ export class EmployerController {
     @Body(new ZodValidationPipe(updateEmployerProfileSchema))
     body: UpdateEmployerProfileDto,
   ) {
+    this.rateLimitService.enforce(
+      `employer-update-profile:${user.id}`,
+      RATE_LIMITS.UPDATE_PROFILE.limit,
+      RATE_LIMITS.UPDATE_PROFILE.windowMs,
+    );
     return this.employerService.updateProfile(user.id, body);
   }
 
@@ -118,10 +133,16 @@ export class EmployerController {
   @Roles("EMPLOYER")
   @UseGuards(ApplicationOwnershipGuard)
   async updateApplication(
+    @CurrentUser() user: AuthenticatedUser,
     @CurrentResource() application: ApplicationWithJobOwner,
     @Body(new ZodValidationPipe(updateApplicationSchema))
     body: UpdateApplicationDto,
   ) {
+    this.rateLimitService.enforce(
+      `employer-update-application:${user.id}`,
+      RATE_LIMITS.UPDATE_APPLICATION.limit,
+      RATE_LIMITS.UPDATE_APPLICATION.windowMs,
+    );
     return this.employerService.updateApplication(application, body);
   }
 }

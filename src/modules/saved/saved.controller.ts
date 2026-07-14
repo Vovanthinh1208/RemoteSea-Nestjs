@@ -13,8 +13,10 @@ import { SavedService } from "./saved.service";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
+import { RateLimitService } from "@/common/services/rate-limit.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import { listSavedSchema, type ListSavedDto } from "./dto/list-saved.dto";
+import { RATE_LIMITS } from "./constants";
 import {
   ApiListSaved,
   ApiSavedTag,
@@ -26,7 +28,10 @@ import {
 @Controller("saved")
 @UseGuards(JwtAuthGuard)
 export class SavedController {
-  constructor(private readonly savedService: SavedService) {}
+  constructor(
+    private readonly savedService: SavedService,
+    private readonly rateLimitService: RateLimitService,
+  ) {}
 
   @ApiListSaved()
   @Get()
@@ -50,6 +55,11 @@ export class SavedController {
   @Put(":jobId")
   @HttpCode(HttpStatus.OK)
   save(@CurrentUser() user: AuthenticatedUser, @Param("jobId") jobId: string) {
+    this.rateLimitService.enforce(
+      `saved-toggle:${user.id}`,
+      RATE_LIMITS.TOGGLE.limit,
+      RATE_LIMITS.TOGGLE.windowMs,
+    );
     return this.savedService.save(user.id, jobId);
   }
 
@@ -60,6 +70,11 @@ export class SavedController {
     @CurrentUser() user: AuthenticatedUser,
     @Param("jobId") jobId: string,
   ) {
+    this.rateLimitService.enforce(
+      `saved-toggle:${user.id}`,
+      RATE_LIMITS.TOGGLE.limit,
+      RATE_LIMITS.TOGGLE.windowMs,
+    );
     return this.savedService.unsave(user.id, jobId);
   }
 }

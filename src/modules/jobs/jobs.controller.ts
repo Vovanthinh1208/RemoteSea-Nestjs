@@ -14,10 +14,12 @@ import { JobsService } from "./jobs.service";
 import { listJobsSchema, type ListJobsDto } from "./dto/list-jobs.dto";
 import { createJobSchema, type CreateJobDto } from "./dto/create-job.dto";
 import { updateJobSchema, type UpdateJobDto } from "./dto/update-job.dto";
+import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import { CurrentResource } from "@/common/authorization/current-resource.decorator";
+import { RateLimitService } from "@/common/services/rate-limit.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import {
   JobOwnershipGuard,
@@ -34,7 +36,10 @@ import {
 @ApiJobsTag()
 @Controller("jobs")
 export class JobsController {
-  constructor(private readonly jobsService: JobsService) {}
+  constructor(
+    private readonly jobsService: JobsService,
+    private readonly rateLimitService: RateLimitService,
+  ) {}
 
   @ApiListJobs()
   @Get()
@@ -50,6 +55,11 @@ export class JobsController {
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(createJobSchema)) body: CreateJobDto,
   ) {
+    this.rateLimitService.enforce(
+      `job-create:${user.id}`,
+      RATE_LIMITS.CREATE.limit,
+      RATE_LIMITS.CREATE.windowMs,
+    );
     return this.jobsService.create(user.id, body);
   }
 
@@ -67,6 +77,11 @@ export class JobsController {
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(updateJobSchema)) body: UpdateJobDto,
   ) {
+    this.rateLimitService.enforce(
+      `job-update:${user.id}`,
+      RATE_LIMITS.UPDATE.limit,
+      RATE_LIMITS.UPDATE.windowMs,
+    );
     return this.jobsService.update(job, user, body);
   }
 }

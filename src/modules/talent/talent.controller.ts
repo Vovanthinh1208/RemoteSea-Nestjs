@@ -4,9 +4,11 @@ import {
   talentProfileSchema,
   type TalentProfileDto,
 } from "./dto/update-talent-profile.dto";
+import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
+import { RateLimitService } from "@/common/services/rate-limit.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import {
   ApiGetOwnProfile,
@@ -18,7 +20,10 @@ import {
 @ApiTalentTag()
 @Controller("talent")
 export class TalentController {
-  constructor(private readonly talentService: TalentService) {}
+  constructor(
+    private readonly talentService: TalentService,
+    private readonly rateLimitService: RateLimitService,
+  ) {}
 
   @ApiGetOwnProfile()
   @Get("me")
@@ -34,6 +39,11 @@ export class TalentController {
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(talentProfileSchema)) body: TalentProfileDto,
   ) {
+    this.rateLimitService.enforce(
+      `talent-upsert-profile:${user.id}`,
+      RATE_LIMITS.UPSERT_PROFILE.limit,
+      RATE_LIMITS.UPSERT_PROFILE.windowMs,
+    );
     return this.talentService.upsertProfile(user.id, body);
   }
 

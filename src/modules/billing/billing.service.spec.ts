@@ -39,12 +39,10 @@ describe("BillingService.createCheckoutSession", () => {
   });
 
   it("creates a checkout session for a payable job", async () => {
-    const stripeCreate = jest
-      .fn()
-      .mockResolvedValue({
-        id: "cs_1",
-        url: "https://checkout.stripe.com/cs_1",
-      });
+    const stripeCreate = jest.fn().mockResolvedValue({
+      id: "cs_1",
+      url: "https://checkout.stripe.com/cs_1",
+    });
     const service = makeService(stripeCreate);
     const job = {
       id: "job-1",
