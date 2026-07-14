@@ -14,12 +14,12 @@ import { uniqueSlug } from "@/common/utils/slugify";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 import { getOrSetCache } from "@/common/caching/cache.util";
 import {
-  BadRequestApiException,
   ForbiddenApiException,
   NotFoundApiException,
 } from "@/common/exceptions/api.exception";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import type { JobWithOwner } from "./guards/job-ownership.guard";
+import { SalaryRange } from "./salary-range";
 
 // Facets are a single global aggregate (findFacetRows() ignores the caller's search
 // filters entirely — see job-search.util.ts), so a flat cache key is correct: every
@@ -79,11 +79,7 @@ export class JobsService {
   }
 
   async create(userId: string, dto: CreateJobDto) {
-    if (dto.salaryMax < dto.salaryMin) {
-      throw new BadRequestApiException(
-        "salaryMax must be greater than or equal to salaryMin",
-      );
-    }
+    SalaryRange.create(dto.salaryMin, dto.salaryMax);
 
     const employer =
       await this.jobsRepository.findEmployerProfileByUserId(userId);
@@ -124,20 +120,10 @@ export class JobsService {
       );
     }
 
-    // create() rejects salaryMax < salaryMin, but a PATCH can change just one of
-    // the two — re-check against the *effective* post-update values, not just
-    // whichever field happens to be present in this request.
-    const effectiveMin = dto.salaryMin ?? job.salaryMin;
-    const effectiveMax = dto.salaryMax ?? job.salaryMax;
-    if (
-      effectiveMin != null &&
-      effectiveMax != null &&
-      effectiveMax < effectiveMin
-    ) {
-      throw new BadRequestApiException(
-        "salaryMax must be greater than or equal to salaryMin",
-      );
-    }
+    // create() validates the raw DTO (both fields always present); a PATCH can
+    // change just one of the two, so this validates the *effective* post-update
+    // range instead of whichever field happens to be present in this request.
+    SalaryRange.merge(job, dto);
 
     // Re-checks the DRAFT/REJECTED condition atomically at write time: the read
     // above can go stale if an admin concurrently approves/rejects the job
