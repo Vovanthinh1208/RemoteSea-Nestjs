@@ -28,6 +28,14 @@ module.exports = {
           '[.]d[.]ts$', // TypeScript declaration files
           '(^|/)tsconfig[.]json$', // TypeScript config
           '(^|/)(?:babel|webpack)[.]config[.](?:js|cjs|mjs|ts|cts|mts|json)$', // other configs
+          // modules/*/interfaces.ts and common/interfaces/*.interface.ts export only
+          // types, imported everywhere via `import type {...}`. Those relationships
+          // are real but invisible to dependency-cruiser without `tsPreCompilationDeps:
+          // true`, which errors out in this project (see the option above) — these are
+          // TypeScript's equivalent of the .d.ts exception two lines up, not actually
+          // unused.
+          '(^|/)interfaces[.]ts$',
+          '(^|/)[a-z-]+[.]interface[.]ts$',
         ],
       },
       to: {},
@@ -244,6 +252,13 @@ module.exports = {
     /* false (the default): ignore dependencies that only exist before typescript-to-javascript compilation
        true: also detect dependencies that only exist before typescript-to-javascript compilation
        "specify": for each dependency identify whether it only exists before compilation or also after
+
+       Tried `true` here to make dependency-cruiser see the (real, intentional)
+       `import type` relationships into each module's interfaces.ts — it needs the
+       TypeScript compiler for that and errors out ("Unexpected token '.'") on every
+       file in this project, decorators or something else it doesn't like. Left at
+       the default; the no-orphans exception below covers the actual false positives
+       this would have fixed.
      */
     // tsPreCompilationDeps: false,
 

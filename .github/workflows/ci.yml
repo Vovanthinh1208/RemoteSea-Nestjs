@@ -17,6 +17,7 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npm run lint
+      - run: npx depcruise --config .dependency-cruiser.js src
       - run: npx tsc --noEmit
       - run: npm test -- --passWithNoTests
       - run: npm run build
