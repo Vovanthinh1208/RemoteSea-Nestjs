@@ -4,6 +4,7 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import { ConfigService } from "@nestjs/config";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import helmet from "helmet";
+import compression from "compression";
 import { AppModule } from "./app.module";
 import { GlobalExceptionFilter } from "@/core/filters/global-exception.filter";
 import type { EnvConfig } from "@/core/config/env.validation";
@@ -43,6 +44,13 @@ async function bootstrap(): Promise<void> {
       },
     }),
   );
+  // gzips response bodies over ~1KB (compression's default threshold) — the admin
+  // job list and job-detail responses carry full description/requirements text on
+  // every row and were previously going out uncompressed. Applied before the
+  // Swagger setup below is fine — it only affects response bodies, not the raw
+  // request body the Stripe webhook route needs (that's { rawBody: true } above,
+  // a request-parsing concern, unrelated to response compression).
+  app.use(compression());
   app.useGlobalFilters(new GlobalExceptionFilter());
 
   const swaggerConfig = new DocumentBuilder()
