@@ -6,6 +6,7 @@ import {
   ConflictApiException,
   BadRequestApiException,
 } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import { EmailService } from "@/common/services/email.service";
 import { isOwnedUploadUrl } from "@/modules/uploads/upload-url.util";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
@@ -62,7 +63,10 @@ export class ApplicationsService {
     const talent =
       await this.applicationsRepository.findTalentWithUserName(userId);
     if (!talent) {
-      throw new ForbiddenApiException("Talent profile required");
+      throw new ForbiddenApiException(
+        "Talent profile required",
+        ErrorCode.TALENT_PROFILE_REQUIRED,
+      );
     }
 
     const existing = await this.applicationsRepository.findByJobAndTalent(
@@ -70,7 +74,10 @@ export class ApplicationsService {
       talent.id,
     );
     if (existing) {
-      throw new ConflictApiException("Already applied");
+      throw new ConflictApiException(
+        "Already applied",
+        ErrorCode.ALREADY_APPLIED,
+      );
     }
 
     // resumeUrl was only checked with z.string().url() — any URL passed the DTO,
@@ -88,6 +95,7 @@ export class ApplicationsService {
     ) {
       throw new BadRequestApiException(
         "resumeUrl must be an uploaded file from this account",
+        ErrorCode.UPLOAD_URL_NOT_OWNED,
       );
     }
 

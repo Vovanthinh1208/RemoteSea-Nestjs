@@ -5,6 +5,7 @@ import {
   ForbiddenApiException,
   NotFoundApiException,
 } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 
 export const OWNED_RESOURCE_REQUEST_KEY = "ownedResource";
@@ -35,6 +36,8 @@ export abstract class OwnershipGuardBase<T> implements CanActivate {
   protected readonly notFoundOnMismatch: boolean = false;
   protected readonly notFoundMessage: string = "Not found";
   protected readonly forbiddenMessage: string = "Forbidden";
+  protected readonly notFoundCode: ErrorCode = ErrorCode.NOT_FOUND;
+  protected readonly forbiddenCode: ErrorCode = ErrorCode.FORBIDDEN;
 
   protected abstract loadResource(
     resourceId: string,
@@ -57,16 +60,19 @@ export abstract class OwnershipGuardBase<T> implements CanActivate {
     const resourceId = this.extractResourceId(request);
     const resource = await this.loadResource(resourceId, request);
     if (!resource) {
-      throw new NotFoundApiException(this.notFoundMessage);
+      throw new NotFoundApiException(this.notFoundMessage, this.notFoundCode);
     }
 
     const isOwner = this.getOwnerUserId(resource) === request.user.id;
     const isBypassed = this.bypassRoles.includes(request.user.role);
     if (!isOwner && !isBypassed) {
       if (this.notFoundOnMismatch) {
-        throw new NotFoundApiException(this.notFoundMessage);
+        throw new NotFoundApiException(this.notFoundMessage, this.notFoundCode);
       }
-      throw new ForbiddenApiException(this.forbiddenMessage);
+      throw new ForbiddenApiException(
+        this.forbiddenMessage,
+        this.forbiddenCode,
+      );
     }
 
     request[OWNED_RESOURCE_REQUEST_KEY] = resource;

@@ -23,6 +23,7 @@ import {
   ConflictApiException,
   ForbiddenApiException,
 } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { ApplicationWithJobOwner } from "./guards/application-ownership.guard";
 import { computeAvgTimeToHireInDays } from "./employer.util";
 
@@ -40,7 +41,10 @@ export class EmployerService {
   ): Promise<{ id: string; slug: string; companyName: string }> {
     const existing = await this.employerRepository.findProfileByUserId(userId);
     if (existing) {
-      throw new ConflictApiException("Employer profile already exists");
+      throw new ConflictApiException(
+        "Employer profile already exists",
+        ErrorCode.EMPLOYER_PROFILE_ALREADY_EXISTS,
+      );
     }
 
     // A company name made entirely of characters slugify can't transliterate
@@ -84,7 +88,11 @@ export class EmployerService {
   > {
     const profile =
       await this.employerRepository.findProfileWithApplicationCounts(userId);
-    assertFound(profile, "Profile not found");
+    assertFound(
+      profile,
+      "Profile not found",
+      ErrorCode.EMPLOYER_PROFILE_NOT_FOUND,
+    );
 
     const { jobs, ...rest } = profile;
     const totalApplications = jobs.reduce(
@@ -100,7 +108,11 @@ export class EmployerService {
     dto: UpdateEmployerProfileDto,
   ): Promise<PublicEmployerProfile> {
     const profile = await this.employerRepository.findProfileByUserId(userId);
-    assertFound(profile, "Profile not found");
+    assertFound(
+      profile,
+      "Profile not found",
+      ErrorCode.EMPLOYER_PROFILE_NOT_FOUND,
+    );
 
     // logoUrl was only checked with z.string().url() — any URL passed the DTO,
     // completely bypassing the presign flow's content-type allowlist, size cap,
@@ -117,6 +129,7 @@ export class EmployerService {
     ) {
       throw new BadRequestApiException(
         "logoUrl must be an uploaded file from this account",
+        ErrorCode.UPLOAD_URL_NOT_OWNED,
       );
     }
 
@@ -137,7 +150,10 @@ export class EmployerService {
   async listJobs(userId: string, dto: ListEmployerJobsDto) {
     const employer = await this.employerRepository.findProfileByUserId(userId);
     if (!employer) {
-      throw new ForbiddenApiException("Employer profile required");
+      throw new ForbiddenApiException(
+        "Employer profile required",
+        ErrorCode.EMPLOYER_PROFILE_REQUIRED,
+      );
     }
 
     const [jobs, { totalApps, shortlisted, offered }] = await Promise.all([
@@ -185,6 +201,7 @@ export class EmployerService {
     ) {
       throw new BadRequestApiException(
         `Cannot transition from ${application.status} to ${status}`,
+        ErrorCode.INVALID_STATUS_TRANSITION,
       );
     }
 
@@ -197,6 +214,7 @@ export class EmployerService {
     if (!updated) {
       throw new ConflictApiException(
         "Application was updated concurrently — please refresh and try again",
+        ErrorCode.APPLICATION_UPDATE_CONFLICT,
       );
     }
     return updated;

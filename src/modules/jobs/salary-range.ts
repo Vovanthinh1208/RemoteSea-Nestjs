@@ -1,4 +1,5 @@
 import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 
 type NullableSalaryFields = {
   salaryMin: number | null;
@@ -24,6 +25,7 @@ export class SalaryRange {
     if (max < min) {
       throw new BadRequestApiException(
         "salaryMax must be greater than or equal to salaryMin",
+        ErrorCode.SALARY_RANGE_INVALID,
       );
     }
     return new SalaryRange(min, max);

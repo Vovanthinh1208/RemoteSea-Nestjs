@@ -8,20 +8,30 @@ import {
   ForbiddenApiException,
   NotFoundApiException,
 } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 
 type Resource = { id: string; ownerId: string };
 
 class TestGuard extends OwnershipGuardBase<Resource> {
   protected readonly bypassRoles: UserRole[];
   protected readonly notFoundOnMismatch: boolean;
+  protected readonly notFoundCode: ErrorCode;
+  protected readonly forbiddenCode: ErrorCode;
 
   constructor(
     private readonly resource: Resource | null,
-    options: { bypassRoles?: UserRole[]; notFoundOnMismatch?: boolean } = {},
+    options: {
+      bypassRoles?: UserRole[];
+      notFoundOnMismatch?: boolean;
+      notFoundCode?: ErrorCode;
+      forbiddenCode?: ErrorCode;
+    } = {},
   ) {
     super();
     this.bypassRoles = options.bypassRoles ?? [];
     this.notFoundOnMismatch = options.notFoundOnMismatch ?? false;
+    this.notFoundCode = options.notFoundCode ?? ErrorCode.NOT_FOUND;
+    this.forbiddenCode = options.forbiddenCode ?? ErrorCode.FORBIDDEN;
   }
 
   protected loadResource(): Promise<Resource | null> {
@@ -94,5 +104,40 @@ describe("OwnershipGuardBase", () => {
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
       NotFoundApiException,
     );
+  });
+
+  it("uses the subclass's configured notFoundCode/forbiddenCode instead of the generic defaults", async () => {
+    const notFoundGuard = new TestGuard(null, {
+      notFoundCode: ErrorCode.JOB_NOT_FOUND,
+    });
+    const { context: notFoundContext } = makeContext({
+      id: "user-1",
+      role: "TALENT",
+    });
+    try {
+      await notFoundGuard.canActivate(notFoundContext);
+      throw new Error("expected canActivate to throw");
+    } catch (err) {
+      expect((err as NotFoundApiException).getResponse()).toMatchObject({
+        code: ErrorCode.JOB_NOT_FOUND,
+      });
+    }
+
+    const forbiddenGuard = new TestGuard(
+      { id: "resource-1", ownerId: "user-1" },
+      { forbiddenCode: ErrorCode.JOB_ACCESS_DENIED },
+    );
+    const { context: forbiddenContext } = makeContext({
+      id: "user-2",
+      role: "TALENT",
+    });
+    try {
+      await forbiddenGuard.canActivate(forbiddenContext);
+      throw new Error("expected canActivate to throw");
+    } catch (err) {
+      expect((err as ForbiddenApiException).getResponse()).toMatchObject({
+        code: ErrorCode.JOB_ACCESS_DENIED,
+      });
+    }
   });
 });

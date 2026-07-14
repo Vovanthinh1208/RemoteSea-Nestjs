@@ -17,6 +17,7 @@ import {
   BadRequestApiException,
   NotFoundApiException,
 } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import { PLAN_PRICES } from "@/common/constants/plan.constants";
 import { EmailService } from "@/common/services/email.service";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
@@ -63,7 +64,10 @@ export class AdminService {
   ): Promise<{ success: true }> {
     const employer = await this.adminRepository.findEmployerById(id);
     if (!employer) {
-      throw new NotFoundApiException("Employer not found");
+      throw new NotFoundApiException(
+        "Employer not found",
+        ErrorCode.EMPLOYER_PROFILE_NOT_FOUND,
+      );
     }
 
     if (dto.action === "verify") {
@@ -92,11 +96,12 @@ export class AdminService {
   async reviewJob(id: string, dto: ReviewJobDto) {
     const job = await this.adminRepository.findJobWithEmployerEmail(id);
     if (!job) {
-      throw new NotFoundApiException("Job not found");
+      throw new NotFoundApiException("Job not found", ErrorCode.JOB_NOT_FOUND);
     }
     if (job.status !== "PENDING_REVIEW") {
       throw new BadRequestApiException(
         `Job is ${job.status}, not pending review`,
+        ErrorCode.JOB_NOT_PENDING_REVIEW,
       );
     }
 

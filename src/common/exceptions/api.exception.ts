@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus } from "@nestjs/common";
+import { ErrorCode } from "./error-codes";
 
 /**
  * Base for every exception thrown by application code. Response body is
@@ -15,45 +16,51 @@ export class ApiException extends HttpException {
   constructor(
     status: HttpStatus,
     error: string | Record<string, unknown>,
-    code: string,
+    code: ErrorCode,
   ) {
     super({ error, code }, status);
   }
 }
 
 export class UnauthorizedApiException extends ApiException {
-  constructor(message = "Unauthorized") {
-    super(HttpStatus.UNAUTHORIZED, message, "UNAUTHORIZED");
+  constructor(
+    message = "Unauthorized",
+    code: ErrorCode = ErrorCode.UNAUTHORIZED,
+  ) {
+    super(HttpStatus.UNAUTHORIZED, message, code);
   }
 }
 
 export class ForbiddenApiException extends ApiException {
-  constructor(message = "Forbidden") {
-    super(HttpStatus.FORBIDDEN, message, "FORBIDDEN");
+  constructor(message = "Forbidden", code: ErrorCode = ErrorCode.FORBIDDEN) {
+    super(HttpStatus.FORBIDDEN, message, code);
   }
 }
 
 export class NotFoundApiException extends ApiException {
-  constructor(message = "Not found") {
-    super(HttpStatus.NOT_FOUND, message, "NOT_FOUND");
+  constructor(message = "Not found", code: ErrorCode = ErrorCode.NOT_FOUND) {
+    super(HttpStatus.NOT_FOUND, message, code);
   }
 }
 
 export class ConflictApiException extends ApiException {
-  constructor(message: string) {
-    super(HttpStatus.CONFLICT, message, "CONFLICT");
+  constructor(message: string, code: ErrorCode = ErrorCode.CONFLICT) {
+    super(HttpStatus.CONFLICT, message, code);
   }
 }
 
 export class BadRequestApiException extends ApiException {
-  constructor(message: string | Record<string, unknown>, code = "BAD_REQUEST") {
+  constructor(
+    message: string | Record<string, unknown>,
+    code: ErrorCode = ErrorCode.BAD_REQUEST,
+  ) {
     super(HttpStatus.BAD_REQUEST, message, code);
   }
 }
 
 export class ValidationApiException extends ApiException {
   constructor(flattened: Record<string, unknown>) {
-    super(HttpStatus.BAD_REQUEST, flattened, "VALIDATION_ERROR");
+    super(HttpStatus.BAD_REQUEST, flattened, ErrorCode.VALIDATION_ERROR);
   }
 }
 
@@ -62,7 +69,7 @@ export class TooManyRequestsApiException extends ApiException {
     super(
       HttpStatus.TOO_MANY_REQUESTS,
       "Too many requests. Please slow down and try again shortly.",
-      "RATE_LIMITED",
+      ErrorCode.RATE_LIMITED,
     );
   }
 }

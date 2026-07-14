@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { OwnershipGuardBase } from "@/common/authorization/ownership.guard";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import { EmployerRepository } from "../employer.repository";
 
 export type JobOwnerOnly = NonNullable<
@@ -9,6 +10,9 @@ export type JobOwnerOnly = NonNullable<
 /** Guards GET /employer/jobs/:id/applications — no admin bypass (unlike jobs.update). */
 @Injectable()
 export class EmployerJobOwnershipGuard extends OwnershipGuardBase<JobOwnerOnly> {
+  protected readonly notFoundCode = ErrorCode.JOB_NOT_FOUND;
+  protected readonly forbiddenCode = ErrorCode.JOB_ACCESS_DENIED;
+
   constructor(private readonly employerRepository: EmployerRepository) {
     super();
   }

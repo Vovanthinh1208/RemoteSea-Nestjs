@@ -17,6 +17,7 @@ import {
   ForbiddenApiException,
   NotFoundApiException,
 } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import type { JobWithOwner } from "./guards/job-ownership.guard";
 import { SalaryRange } from "./salary-range";
@@ -63,7 +64,7 @@ export class JobsService {
   async getActiveById(id: string) {
     const job = await this.jobsRepository.findActiveById(id);
     if (!job) {
-      throw new NotFoundApiException("Job not found");
+      throw new NotFoundApiException("Job not found", ErrorCode.JOB_NOT_FOUND);
     }
 
     void this.jobsRepository
@@ -84,7 +85,10 @@ export class JobsService {
     const employer =
       await this.jobsRepository.findEmployerProfileByUserId(userId);
     if (!employer) {
-      throw new ForbiddenApiException("Employer profile required");
+      throw new ForbiddenApiException(
+        "Employer profile required",
+        ErrorCode.EMPLOYER_PROFILE_REQUIRED,
+      );
     }
 
     const { categoryIds, skillIds, ...jobData } = dto;
@@ -117,6 +121,7 @@ export class JobsService {
     if (job.status !== "DRAFT" && job.status !== "REJECTED") {
       throw new ForbiddenApiException(
         "Only draft or rejected jobs can be edited",
+        ErrorCode.JOB_NOT_EDITABLE,
       );
     }
 
@@ -133,6 +138,7 @@ export class JobsService {
     if (!updated) {
       throw new ForbiddenApiException(
         "Only draft or rejected jobs can be edited",
+        ErrorCode.JOB_NOT_EDITABLE,
       );
     }
     return updated;

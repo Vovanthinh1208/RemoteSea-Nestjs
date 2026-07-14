@@ -8,6 +8,7 @@ import {
 import { Prisma } from "@prisma/client";
 import type { Response } from "express";
 import { TooManyRequestsApiException } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -43,19 +44,21 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         case "P2002":
           response.status(409).json({
             error: "Conflict — this record already exists",
-            code: "CONFLICT",
+            code: ErrorCode.CONFLICT,
           });
           return;
         // findUniqueOrThrow/findFirstOrThrow/deleteOrThrow-style calls throw this on
         // no match — treat it the same as an application-level not-found.
         case "P2025":
-          response.status(404).json({ error: "Not found", code: "NOT_FOUND" });
+          response
+            .status(404)
+            .json({ error: "Not found", code: ErrorCode.NOT_FOUND });
           return;
         // Foreign key violation — the request references a record that doesn't exist.
         case "P2003":
           response.status(400).json({
             error: "Invalid reference — related record does not exist",
-            code: "INVALID_REFERENCE",
+            code: ErrorCode.INVALID_REFERENCE,
           });
           return;
         // Would violate a required relation (e.g. deleting a record another required
@@ -63,7 +66,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         case "P2014":
           response.status(409).json({
             error: "Conflict — operation violates a required relation",
-            code: "CONFLICT",
+            code: ErrorCode.CONFLICT,
           });
           return;
       }
@@ -72,6 +75,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     this.logger.error(exception instanceof Error ? exception.stack : exception);
     response
       .status(500)
-      .json({ error: "Internal server error", code: "INTERNAL_ERROR" });
+      .json({ error: "Internal server error", code: ErrorCode.INTERNAL_ERROR });
   }
 }

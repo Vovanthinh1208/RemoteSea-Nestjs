@@ -10,6 +10,7 @@ import { isOwnedUploadUrl } from "@/modules/uploads/upload-url.util";
 import { UploadsService } from "@/modules/uploads/uploads.service";
 import type { EnvConfig } from "@/core/config/env.validation";
 import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 
 @Injectable()
 export class TalentService {
@@ -21,13 +22,21 @@ export class TalentService {
 
   async getOwnProfile(userId: string): Promise<OwnTalentProfile> {
     const profile = await this.talentRepository.findByUserId(userId);
-    assertFound(profile, "Profile not found");
+    assertFound(
+      profile,
+      "Profile not found",
+      ErrorCode.TALENT_PROFILE_NOT_FOUND,
+    );
     return profile;
   }
 
   async getPublicProfile(slug: string): Promise<Record<string, unknown>> {
     const profile = await this.talentRepository.findBySlug(slug);
-    assertFound(profile, "Profile not found");
+    assertFound(
+      profile,
+      "Profile not found",
+      ErrorCode.TALENT_PROFILE_NOT_FOUND,
+    );
     return TalentMapper.toPublicProfile(profile);
   }
 
@@ -37,7 +46,7 @@ export class TalentService {
   ): Promise<TalentProfileWithSkills> {
     const { skills, ...profileData } = dto;
     const user = await this.talentRepository.findUserName(userId);
-    assertFound(user, "User not found");
+    assertFound(user, "User not found", ErrorCode.USER_NOT_FOUND);
     const slug = uniqueSlug(user.name ?? "talent");
 
     // upsertProfileWithSkills only touches fields present in this request (Prisma
@@ -56,6 +65,7 @@ export class TalentService {
     ) {
       throw new BadRequestApiException(
         "desiredSalaryMax must be greater than or equal to desiredSalaryMin",
+        ErrorCode.SALARY_RANGE_INVALID,
       );
     }
 
@@ -74,6 +84,7 @@ export class TalentService {
     ) {
       throw new BadRequestApiException(
         "resumeUrl must be an uploaded file from this account",
+        ErrorCode.UPLOAD_URL_NOT_OWNED,
       );
     }
 
@@ -96,7 +107,11 @@ export class TalentService {
     }
 
     const updated = await this.talentRepository.findByIdWithSkills(profile.id);
-    assertFound(updated, "Profile not found");
+    assertFound(
+      updated,
+      "Profile not found",
+      ErrorCode.TALENT_PROFILE_NOT_FOUND,
+    );
     return updated;
   }
 }

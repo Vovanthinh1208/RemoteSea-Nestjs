@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { Request } from "express";
 import { OwnershipGuardBase } from "@/common/authorization/ownership.guard";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import { BillingRepository } from "../billing.repository";
 
 export type JobPayer = NonNullable<
@@ -18,6 +19,7 @@ export type JobPayer = NonNullable<
 export class JobPayerOwnershipGuard extends OwnershipGuardBase<JobPayer> {
   protected readonly notFoundOnMismatch = true;
   protected readonly notFoundMessage = "Job not found";
+  protected readonly notFoundCode = ErrorCode.JOB_NOT_FOUND;
 
   constructor(private readonly billingRepository: BillingRepository) {
     super();

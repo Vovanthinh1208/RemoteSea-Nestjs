@@ -10,6 +10,7 @@ import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import { CurrentResource } from "@/common/authorization/current-resource.decorator";
 import { RateLimitService } from "@/common/services/rate-limit.service";
 import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import {
   JobPayerOwnershipGuard,
@@ -46,7 +47,10 @@ export class BillingController {
   async webhook(@Req() req: RawBodyRequest<Request>) {
     const signature = req.headers["stripe-signature"];
     if (!signature || Array.isArray(signature) || !req.rawBody) {
-      throw new BadRequestApiException("Missing signature");
+      throw new BadRequestApiException(
+        "Missing signature",
+        ErrorCode.MISSING_WEBHOOK_SIGNATURE,
+      );
     }
     return this.billingService.handleWebhookEvent(req.rawBody, signature);
   }

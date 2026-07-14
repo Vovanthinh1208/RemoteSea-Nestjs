@@ -5,6 +5,7 @@ import { UsersRepository } from "./users.repository";
 import type { UpdateUserDto } from "./dto/update-user.dto";
 import type { ChangePasswordDto } from "./dto/change-password.dto";
 import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import { BCRYPT_SALT_ROUNDS } from "@/common/constants/bcrypt.constants";
 
 @Injectable()
@@ -30,12 +31,16 @@ export class UsersService {
     if (!user?.passwordHash) {
       throw new BadRequestApiException(
         "Password change is not available for social sign-in accounts.",
+        ErrorCode.SOCIAL_ACCOUNT_NO_PASSWORD,
       );
     }
 
     const valid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
     if (!valid) {
-      throw new BadRequestApiException("Current password is incorrect");
+      throw new BadRequestApiException(
+        "Current password is incorrect",
+        ErrorCode.CURRENT_PASSWORD_INCORRECT,
+      );
     }
 
     const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_SALT_ROUNDS);

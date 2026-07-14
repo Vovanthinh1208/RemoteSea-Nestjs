@@ -16,6 +16,7 @@ import {
 import type { PresignDto } from "./dto/presign.dto";
 import type { PresignResult } from "./interfaces";
 import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { EnvConfig } from "@/core/config/env.validation";
 
 @Injectable()
@@ -34,12 +35,16 @@ export class UploadsService {
     const { type, filename, contentType, fileSize } = dto;
 
     if (!(CONTENT_TYPES[type] as readonly string[]).includes(contentType)) {
-      throw new BadRequestApiException("Unsupported content type");
+      throw new BadRequestApiException(
+        "Unsupported content type",
+        ErrorCode.UNSUPPORTED_CONTENT_TYPE,
+      );
     }
 
     if (fileSize > MAX_FILE_SIZE_BYTES[type]) {
       throw new BadRequestApiException(
         `File too large — max ${Math.floor(MAX_FILE_SIZE_BYTES[type] / (1024 * 1024))}MB for ${type}`,
+        ErrorCode.FILE_TOO_LARGE,
       );
     }
 

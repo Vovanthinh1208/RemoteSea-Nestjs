@@ -4,6 +4,7 @@ import type { Request } from "express";
 import type { UserRole } from "@prisma/client";
 import { ROLES_KEY } from "@/core/decorators/roles.decorator";
 import { ForbiddenApiException } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 
 /** Must run after JwtAuthGuard so request.user is populated. */
@@ -22,7 +23,7 @@ export class RolesGuard implements CanActivate {
       .switchToHttp()
       .getRequest<Request & { user: AuthenticatedUser }>();
     if (!requiredRoles.includes(request.user.role)) {
-      throw new ForbiddenApiException();
+      throw new ForbiddenApiException("Forbidden", ErrorCode.INSUFFICIENT_ROLE);
     }
     return true;
   }

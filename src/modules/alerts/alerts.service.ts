@@ -6,6 +6,7 @@ import type { UpdateAlertDto } from "./dto/update-alert.dto";
 import { FREQUENCY_GAP_MS, SEND_CONCURRENCY } from "./constants";
 import type { CronDispatchResult } from "./interfaces";
 import { NotFoundApiException } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import { EmailService } from "@/common/services/email.service";
 
 @Injectable()
@@ -29,7 +30,10 @@ export class AlertsService {
   private async assertOwnership(userId: string, id: string): Promise<void> {
     const alert = await this.alertsRepository.findOwnerById(id);
     if (!alert || alert.userId !== userId) {
-      throw new NotFoundApiException("Alert not found");
+      throw new NotFoundApiException(
+        "Alert not found",
+        ErrorCode.ALERT_NOT_FOUND,
+      );
     }
   }
 

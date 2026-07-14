@@ -5,6 +5,7 @@ import { BillingRepository } from "./billing.repository";
 import { STRIPE_CLIENT } from "./constants";
 import type { CheckoutSessionResult } from "./interfaces";
 import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import { EmailService } from "@/common/services/email.service";
 import { PLAN_LABELS, PLAN_PRICES } from "@/common/constants/plan.constants";
 import type { EnvConfig } from "@/core/config/env.validation";
@@ -27,7 +28,10 @@ export class BillingService {
   ): Promise<CheckoutSessionResult> {
     // Ownership is already enforced by JobPayerOwnershipGuard before this runs.
     if (job.status !== "DRAFT" || job.planPaid) {
-      throw new BadRequestApiException("Job is not payable");
+      throw new BadRequestApiException(
+        "Job is not payable",
+        ErrorCode.JOB_NOT_PAYABLE,
+      );
     }
 
     const appUrl = this.config.get("FRONTEND_URL", { infer: true });
@@ -72,7 +76,10 @@ export class BillingService {
         webhookSecret,
       );
     } catch {
-      throw new BadRequestApiException("Invalid signature");
+      throw new BadRequestApiException(
+        "Invalid signature",
+        ErrorCode.INVALID_WEBHOOK_SIGNATURE,
+      );
     }
 
     if (event.type === "checkout.session.completed") {

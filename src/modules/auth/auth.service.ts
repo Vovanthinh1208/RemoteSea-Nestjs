@@ -15,6 +15,7 @@ import {
   ConflictApiException,
   UnauthorizedApiException,
 } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import type {
   AuthenticatedUser,
   JwtPayload,
@@ -33,7 +34,10 @@ export class AuthService {
   async register(dto: RegisterDto): Promise<RegisteredUser> {
     const existing = await this.authRepository.findUserByEmail(dto.email);
     if (existing) {
-      throw new ConflictApiException("Email already registered");
+      throw new ConflictApiException(
+        "Email already registered",
+        ErrorCode.EMAIL_ALREADY_REGISTERED,
+      );
     }
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_SALT_ROUNDS);
@@ -69,11 +73,17 @@ export class AuthService {
   ): Promise<AuthenticatedUser> {
     const user = await this.authRepository.findUserByEmail(email);
     if (!user?.passwordHash) {
-      throw new UnauthorizedApiException("Invalid email or password");
+      throw new UnauthorizedApiException(
+        "Invalid email or password",
+        ErrorCode.INVALID_CREDENTIALS,
+      );
     }
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
-      throw new UnauthorizedApiException("Invalid email or password");
+      throw new UnauthorizedApiException(
+        "Invalid email or password",
+        ErrorCode.INVALID_CREDENTIALS,
+      );
     }
     return AuthMapper.toAuthenticatedUser(user);
   }
@@ -116,7 +126,10 @@ export class AuthService {
   async resetPassword(token: string, password: string): Promise<void> {
     const record = await this.authRepository.findVerificationToken(token);
     if (!record || record.expires < new Date()) {
-      throw new BadRequestApiException("Invalid or expired token");
+      throw new BadRequestApiException(
+        "Invalid or expired token",
+        ErrorCode.INVALID_OR_EXPIRED_TOKEN,
+      );
     }
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
