@@ -7,7 +7,9 @@ import type { EmailService } from "@/common/services/email.service";
 
 describe("AlertsService.update", () => {
   it("delegates to the repository with the alert id and isActive flag", async () => {
-    const updateActive = jest.fn().mockResolvedValue({ id: "alert-1", isActive: false });
+    const updateActive = jest
+      .fn()
+      .mockResolvedValue({ id: "alert-1", isActive: false });
     const service = new AlertsService(
       { updateActive } as unknown as AlertsRepository,
       {} as EmailService,

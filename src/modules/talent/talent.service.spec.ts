@@ -12,7 +12,10 @@ const makeService = (repoOverrides: Partial<TalentRepository> = {}) => {
     ...repoOverrides,
   } as unknown as TalentRepository;
   const config = { get: jest.fn().mockReturnValue("https://cdn.example.com") };
-  return { service: new TalentService(repo, config as never, {} as UploadsService), repo };
+  return {
+    service: new TalentService(repo, config as never, {} as UploadsService),
+    repo,
+  };
 };
 
 describe("TalentService.upsertProfile", () => {

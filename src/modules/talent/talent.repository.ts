@@ -50,7 +50,11 @@ export class TalentRepository {
   > | null> {
     return this.prisma.talentProfile.findUnique({
       where: { userId },
-      select: { desiredSalaryMin: true, desiredSalaryMax: true, resumeUrl: true },
+      select: {
+        desiredSalaryMin: true,
+        desiredSalaryMax: true,
+        resumeUrl: true,
+      },
     });
   }
 

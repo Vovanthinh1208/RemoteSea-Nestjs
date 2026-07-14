@@ -11,6 +11,7 @@ import { UploadsService } from "@/modules/uploads/uploads.service";
 import type { EnvConfig } from "@/core/config/env.validation";
 import { BadRequestApiException } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
+import { SalaryRange } from "@/modules/jobs/salary-range";
 
 @Injectable()
 export class TalentService {
@@ -45,31 +46,31 @@ export class TalentService {
     dto: TalentProfileDto,
   ): Promise<TalentProfileWithSkills> {
     const { skills, ...profileData } = dto;
-    const user = await this.talentRepository.findUserName(userId);
+
+    // Two independent reads (different tables, no data dependency between them —
+    // `slug` only needs `user.name`, the checks below only need `existing`), so
+    // they run concurrently instead of one after the other.
+    const [user, existing] = await Promise.all([
+      this.talentRepository.findUserName(userId),
+      // Only the 3 scalars below are read from `existing` — narrow query, not the
+      // full skills+user join findByUserId does for the "get my profile" read endpoint.
+      this.talentRepository.findSalaryAndResumeByUserId(userId),
+    ]);
     assertFound(user, "User not found", ErrorCode.USER_NOT_FOUND);
     const slug = uniqueSlug(user.name ?? "talent");
 
     // upsertProfileWithSkills only touches fields present in this request (Prisma
     // `update: data`), so a caller that sends just one of the two salary fields
     // must be checked against the *effective* post-update pair, not just this
-    // request's fields in isolation. Only the 3 scalars below are read from
-    // `existing` — narrow query, not the full skills+user join findByUserId does
-    // for the "get my profile" read endpoint.
-    const existing = await this.talentRepository.findSalaryAndResumeByUserId(userId);
-    const effectiveMin =
-      dto.desiredSalaryMin ?? existing?.desiredSalaryMin ?? undefined;
-    const effectiveMax =
-      dto.desiredSalaryMax ?? existing?.desiredSalaryMax ?? undefined;
-    if (
-      effectiveMin != null &&
-      effectiveMax != null &&
-      effectiveMax < effectiveMin
-    ) {
-      throw new BadRequestApiException(
-        "desiredSalaryMax must be greater than or equal to desiredSalaryMin",
-        ErrorCode.SALARY_RANGE_INVALID,
-      );
-    }
+    // request's fields in isolation. Same rule as JobsService.update's
+    // SalaryRange.merge(job, dto) — reuse it instead of re-deriving it here.
+    SalaryRange.merge(
+      {
+        salaryMin: existing?.desiredSalaryMin ?? null,
+        salaryMax: existing?.desiredSalaryMax ?? null,
+      },
+      { salaryMin: dto.desiredSalaryMin, salaryMax: dto.desiredSalaryMax },
+    );
 
     // resumeUrl was only checked with z.string().url() — any URL passed the DTO,
     // completely bypassing the presign flow's content-type allowlist, size cap,
