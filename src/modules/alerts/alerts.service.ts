@@ -5,8 +5,6 @@ import type { CreateAlertDto } from "./dto/create-alert.dto";
 import type { UpdateAlertDto } from "./dto/update-alert.dto";
 import { FREQUENCY_GAP_MS, SEND_CONCURRENCY } from "./constants";
 import type { CronDispatchResult } from "./interfaces";
-import { NotFoundApiException } from "@/common/exceptions/api.exception";
-import { ErrorCode } from "@/common/exceptions/error-codes";
 import { EmailService } from "@/common/services/email.service";
 
 @Injectable()
@@ -27,23 +25,12 @@ export class AlertsService {
     return this.alertsRepository.create(userId, alertData, categoryIds);
   }
 
-  private async assertOwnership(userId: string, id: string): Promise<void> {
-    const alert = await this.alertsRepository.findOwnerById(id);
-    if (!alert || alert.userId !== userId) {
-      throw new NotFoundApiException(
-        "Alert not found",
-        ErrorCode.ALERT_NOT_FOUND,
-      );
-    }
-  }
-
-  async update(userId: string, id: string, dto: UpdateAlertDto) {
-    await this.assertOwnership(userId, id);
+  // Ownership is already enforced by AlertOwnershipGuard before these run.
+  async update(id: string, dto: UpdateAlertDto) {
     return this.alertsRepository.updateActive(id, dto.isActive);
   }
 
-  async remove(userId: string, id: string): Promise<{ success: true }> {
-    await this.assertOwnership(userId, id);
+  async remove(id: string): Promise<{ success: true }> {
     await this.alertsRepository.delete(id);
     return { success: true };
   }

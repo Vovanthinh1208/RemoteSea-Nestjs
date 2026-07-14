@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  Param,
   Patch,
   Post,
   UseGuards,
@@ -12,10 +11,15 @@ import { AlertsService } from "./alerts.service";
 import { createAlertSchema, type CreateAlertDto } from "./dto/create-alert.dto";
 import { updateAlertSchema, type UpdateAlertDto } from "./dto/update-alert.dto";
 import { CronSecretGuard } from "./guards/cron-secret.guard";
+import {
+  AlertOwnershipGuard,
+  type AlertOwnerOnly,
+} from "./guards/alert-ownership.guard";
 import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
+import { CurrentResource } from "@/common/authorization/current-resource.decorator";
 import { RateLimitService } from "@/common/services/rate-limit.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import {
@@ -59,10 +63,10 @@ export class AlertsController {
 
   @ApiUpdateAlert()
   @Patch(":id")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, AlertOwnershipGuard)
   async update(
     @CurrentUser() user: AuthenticatedUser,
-    @Param("id") id: string,
+    @CurrentResource() alert: AlertOwnerOnly,
     @Body(new ZodValidationPipe(updateAlertSchema)) body: UpdateAlertDto,
   ) {
     this.rateLimitService.enforce(
@@ -70,22 +74,22 @@ export class AlertsController {
       RATE_LIMITS.UPDATE.limit,
       RATE_LIMITS.UPDATE.windowMs,
     );
-    return this.alertsService.update(user.id, id, body);
+    return this.alertsService.update(alert.id, body);
   }
 
   @ApiDeleteAlert()
   @Delete(":id")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, AlertOwnershipGuard)
   async remove(
     @CurrentUser() user: AuthenticatedUser,
-    @Param("id") id: string,
+    @CurrentResource() alert: AlertOwnerOnly,
   ) {
     this.rateLimitService.enforce(
       `alert-delete:${user.id}`,
       RATE_LIMITS.DELETE.limit,
       RATE_LIMITS.DELETE.windowMs,
     );
-    return this.alertsService.remove(user.id, id);
+    return this.alertsService.remove(alert.id);
   }
 
   @ApiDispatchCron()

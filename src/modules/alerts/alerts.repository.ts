@@ -47,10 +47,10 @@ export class AlertsRepository {
     });
   }
 
-  findOwnerById(id: string): Promise<Pick<JobAlert, "userId"> | null> {
+  findOwnerById(id: string): Promise<Pick<JobAlert, "id" | "userId"> | null> {
     return this.prisma.jobAlert.findUnique({
       where: { id },
-      select: { userId: true },
+      select: { id: true, userId: true },
     });
   }
 
