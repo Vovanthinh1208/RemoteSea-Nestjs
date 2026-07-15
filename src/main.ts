@@ -27,13 +27,21 @@ async function bootstrap(): Promise<void> {
     origin: config.get("FRONTEND_URL", { infer: true }),
     credentials: true,
   });
+  // Strict helmet defaults (CSP included) for every route. The only page that
+  // needs a looser CSP is Swagger UI, and that relaxation used to be applied
+  // globally — 'unsafe-inline' script-src on the whole API to serve one docs
+  // page. Now the strict policy is the default and /docs alone gets the
+  // overrides below (the later path-scoped helmet re-sets the headers for
+  // /docs requests, so last write wins there).
+  app.use(helmet());
   app.use(
+    "/docs",
     helmet({
-      // Swagger UI (mounted at /docs below) ships an inline bootstrap script and
-      // inline styles, and pings validator.swagger.io for its "valid spec" badge —
-      // the default CSP blocks all three. Relaxing just those directives (rather
-      // than disabling CSP outright) keeps helmet's other protections intact
-      // (frameguard, HSTS, nosniff, etc.) for the rest of this JSON API.
+      // Swagger UI ships an inline bootstrap script and inline styles, and
+      // pings validator.swagger.io for its "valid spec" badge — the default
+      // CSP blocks all three. Relaxing just these directives (rather than
+      // disabling CSP outright) keeps helmet's other protections intact
+      // (frameguard, HSTS, nosniff, etc.) even on /docs.
       contentSecurityPolicy: {
         directives: {
           ...helmet.contentSecurityPolicy.getDefaultDirectives(),
