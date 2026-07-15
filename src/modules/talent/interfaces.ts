@@ -19,14 +19,15 @@ export type OwnTalentProfile = Prisma.TalentProfileGetPayload<
   typeof ownProfileArgs
 >;
 
-// GET /talent/:slug is unauthenticated — explicit select of public-appropriate
-// fields only. Notably excluded: resumeUrl (the candidate's CV is shared with
-// employers they apply to, not with the whole internet) and userId (internal
-// id). desiredSalaryMin/Max stay here because TalentMapper.toPublicProfile
-// gates them on isOpenToWork.
+// GET /talent/:slug is unauthenticated — explicit select so every public field
+// is a decision, not an accident. PublicTalentProfilePage (remotesea-web)
+// consumes userId (its "own profile" check) and resumeUrl (the Resume/CV link
+// the owner publishes deliberately), so both stay. desiredSalaryMin/Max stay
+// because TalentMapper.toPublicProfile gates them on isOpenToWork.
 export const publicProfileArgs = {
   select: {
     id: true,
+    userId: true,
     slug: true,
     headline: true,
     bio: true,
@@ -35,6 +36,7 @@ export const publicProfileArgs = {
     timezone: true,
     yearsExperience: true,
     level: true,
+    resumeUrl: true,
     portfolioUrl: true,
     githubUrl: true,
     linkedinUrl: true,
@@ -43,6 +45,7 @@ export const publicProfileArgs = {
     desiredSalaryMax: true,
     currency: true,
     createdAt: true,
+    updatedAt: true,
     skills: { include: { skill: true } },
     user: { select: { name: true, image: true } },
   },

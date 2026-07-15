@@ -219,6 +219,9 @@ export class PublicTalentProfileResponseDto {
   @ApiProperty({ example: "clx4talent0001abcd" })
   id!: string;
 
+  @ApiProperty({ example: "cme8f1a2b0000ug0h9x1n1a2" })
+  userId!: string;
+
   @ApiProperty({ example: "jane-doe-a1b2c3" })
   slug!: string;
 
@@ -245,6 +248,12 @@ export class PublicTalentProfileResponseDto {
 
   @ApiProperty({ enum: LEVELS, example: "SENIOR" })
   level!: (typeof LEVELS)[number];
+
+  @ApiPropertyOptional({
+    example: "https://example.com/resume.pdf",
+    nullable: true,
+  })
+  resumeUrl?: string | null;
 
   @ApiPropertyOptional({ example: "https://janedoe.dev", nullable: true })
   portfolioUrl?: string | null;
@@ -283,6 +292,9 @@ export class PublicTalentProfileResponseDto {
 
   @ApiProperty({ format: "date-time", example: "2026-01-15T09:12:00.000Z" })
   createdAt!: string;
+
+  @ApiProperty({ format: "date-time", example: "2026-06-30T14:02:31.000Z" })
+  updatedAt!: string;
 
   @ApiProperty({ type: [TalentSkillDto] })
   skills!: TalentSkillDto[];
