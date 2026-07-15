@@ -8,23 +8,41 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npx prisma generate
-      - run: npm run lint
-      - run: npm run format:check
-      - run: npx depcruise --config .dependency-cruiser.js src
-      - run: npx tsc --noEmit
-      - run: npm test -- --passWithNoTests
-      - run: npm run build
-      # Informational only: every current advisory needs a major-version bump
-      # (Nest v11, etc.) to actually clear, tracked separately rather than
-      # blocking every PR on it. Re-run without --continue-on-error once
-      # those upgrades land.
-      - run: npm audit --omit=dev
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Dependency Cruiser
+        run: npm run depcruise -- --config .dependency-cruiser.js src
+
+      - name: TypeScript Type Check
+        run: npx tsc --noEmit
+
+      - name: Run Tests
+        run: npm test -- --passWithNoTests
+
+      - name: Build
+        run: npm run build
+
+      - name: Security Audit
+        run: npm audit --omit=dev
         continue-on-error: true

@@ -6,13 +6,14 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
-    "format": "prettier --write \"src/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
-    "lint": "eslint \"{src,test}/**/*.ts\" --fix",
-    "depcruise": "depcruise src",
+    "lint": "eslint \"{src,test}/**/*.ts\"",
+    "lint:fix": "eslint \"{src,test}/**/*.ts\" --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
@@ -20,7 +21,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "docker:up": "docker compose --env-file .env.docker up -d --build",
-    "docker:down": "docker compose --env-file .env.docker down"
+    "docker:down": "docker compose --env-file .env.docker down",
+    "depcruise": "depcruise src"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.712.0",
