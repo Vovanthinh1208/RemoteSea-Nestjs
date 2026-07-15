@@ -45,14 +45,24 @@ export const OwnTalentProfileExample = {
 
 export const UpsertTalentProfileExample = { ...baseTalentProfile };
 
+// The public profile excludes userId, resumeUrl, and updatedAt (see
+// publicProfileArgs) — internal id and the candidate's CV are not public.
+const publicTalentProfileBase = (() => {
+  const publicFields: Record<string, unknown> = { ...baseTalentProfile };
+  delete publicFields.userId;
+  delete publicFields.resumeUrl;
+  delete publicFields.updatedAt;
+  return publicFields;
+})();
+
 export const PublicTalentProfileOpenExample = {
-  ...baseTalentProfile,
+  ...publicTalentProfileBase,
   user: { name: "Jane Doe", image: "https://example.com/avatar.jpg" },
 };
 
 export const PublicTalentProfileClosedExample = (() => {
   const closed: Record<string, unknown> = {
-    ...baseTalentProfile,
+    ...publicTalentProfileBase,
     isOpenToWork: false,
     user: { name: "Jane Doe", image: "https://example.com/avatar.jpg" },
   };

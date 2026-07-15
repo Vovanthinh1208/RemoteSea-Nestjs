@@ -1,6 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import type { Application } from "@prisma/client";
 import {
   ForbiddenApiException,
   ConflictApiException,
@@ -14,7 +13,7 @@ import type { Pagination } from "@/common/interfaces/pagination.interface";
 import type { EnvConfig } from "@/core/config/env.validation";
 import { ApplicationsRepository } from "./applications.repository";
 import type { ApplyDto } from "./dto/apply.dto";
-import type { ApplicationWithJob } from "./interfaces";
+import type { ApplicationWithJob, OwnApplication } from "./interfaces";
 import {
   buildApplicationStatusCounts,
   type ApplicationStatusCounts,
@@ -59,7 +58,7 @@ export class ApplicationsService {
     return buildApplicationStatusCounts(rows);
   }
 
-  async apply(userId: string, dto: ApplyDto): Promise<Application> {
+  async apply(userId: string, dto: ApplyDto): Promise<OwnApplication> {
     const talent =
       await this.applicationsRepository.findTalentWithUserName(userId);
     if (!talent) {

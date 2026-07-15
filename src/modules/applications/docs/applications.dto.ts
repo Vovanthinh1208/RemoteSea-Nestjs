@@ -135,9 +135,6 @@ export class ApplicationResponseDto {
     | "REJECTED"
     | "WITHDRAWN";
 
-  @ApiPropertyOptional({ nullable: true, example: null })
-  notes!: string | null;
-
   @ApiProperty({ example: "2026-07-02T09:00:00.000Z" })
   appliedAt!: string;
 

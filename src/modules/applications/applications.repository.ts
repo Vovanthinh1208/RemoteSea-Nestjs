@@ -5,7 +5,12 @@ import type {
   TalentProfile,
 } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
-import type { ApplicationWithJob, CreateApplicationInput } from "./interfaces";
+import {
+  ownApplicationSelect,
+  type ApplicationWithJob,
+  type CreateApplicationInput,
+  type OwnApplication,
+} from "./interfaces";
 import { jobListItemSelect } from "@/common/types/job-list-item.type";
 import {
   jobWithEmployerEmailInclude,
@@ -49,7 +54,10 @@ export class ApplicationsRepository {
         orderBy: { appliedAt: "desc" },
         skip,
         take,
-        include: { job: { select: jobListItemSelect } },
+        select: {
+          ...ownApplicationSelect,
+          job: { select: jobListItemSelect },
+        },
       }),
       this.prisma.application.count({ where: { talentId } }),
     ]);
@@ -71,15 +79,16 @@ export class ApplicationsRepository {
   findByJobAndTalent(
     jobId: string,
     talentId: string,
-  ): Promise<Application | null> {
+  ): Promise<Pick<Application, "id"> | null> {
     return this.prisma.application.findUnique({
       where: { jobId_talentId: { jobId, talentId } },
+      select: { id: true },
     });
   }
 
   async createAndIncrementApplyCount(
     input: CreateApplicationInput,
-  ): Promise<{ application: Application; job: JobWithEmployerEmail }> {
+  ): Promise<{ application: OwnApplication; job: JobWithEmployerEmail }> {
     const [application, job] = await this.prisma.$transaction([
       this.prisma.application.create({
         data: {
@@ -88,6 +97,10 @@ export class ApplicationsRepository {
           coverLetter: input.coverLetter,
           resumeUrl: input.resumeUrl,
         },
+        // ownApplicationSelect: the created row goes straight back to the
+        // applicant in the POST /applications response — same talent-facing
+        // shape as GET /applications (no employer `notes`).
+        select: ownApplicationSelect,
       }),
       this.prisma.job.update({
         where: { id: input.jobId },
