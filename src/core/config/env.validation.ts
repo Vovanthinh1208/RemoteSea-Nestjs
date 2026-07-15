@@ -8,6 +8,16 @@ const envSchema = z.object({
 
   // Required — the app cannot run without these.
   DATABASE_URL: z.string().url(),
+  // Prisma sizes its connection pool from these two URL params; when unset it
+  // defaults to num_CPUs × 2 + 1 connections, which silently varies per machine
+  // and can exhaust a hosted Postgres's connection budget (e.g. Supabase's
+  // session-mode pooler holds one real DB connection per pooled client
+  // connection). These knobs make the pool explicit without editing the
+  // DATABASE_URL secret itself: when set, PrismaService appends them to the
+  // datasource URL as connection_limit / pool_timeout (seconds). Unset = the
+  // exact Prisma defaults, same behavior as before these existed.
+  DATABASE_CONNECTION_LIMIT: z.coerce.number().int().min(1).optional(),
+  DATABASE_POOL_TIMEOUT: z.coerce.number().int().min(0).optional(),
   AUTH_SECRET: z.string().min(32, "AUTH_SECRET must be at least 32 characters"),
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
   JWT_EXPIRES_IN: z.string().default("30d"),

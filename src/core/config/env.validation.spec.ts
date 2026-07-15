@@ -42,4 +42,26 @@ describe("validateEnv", () => {
       validateEnv({ AUTH_SECRET: validBaseEnv.AUTH_SECRET }),
     ).toThrow();
   });
+
+  it("leaves the pool knobs undefined when unset", () => {
+    const config = validateEnv(validBaseEnv);
+    expect(config.DATABASE_CONNECTION_LIMIT).toBeUndefined();
+    expect(config.DATABASE_POOL_TIMEOUT).toBeUndefined();
+  });
+
+  it("coerces the pool knobs from string env vars", () => {
+    const config = validateEnv({
+      ...validBaseEnv,
+      DATABASE_CONNECTION_LIMIT: "10",
+      DATABASE_POOL_TIMEOUT: "20",
+    });
+    expect(config.DATABASE_CONNECTION_LIMIT).toBe(10);
+    expect(config.DATABASE_POOL_TIMEOUT).toBe(20);
+  });
+
+  it("rejects a zero or negative DATABASE_CONNECTION_LIMIT", () => {
+    expect(() =>
+      validateEnv({ ...validBaseEnv, DATABASE_CONNECTION_LIMIT: "0" }),
+    ).toThrow();
+  });
 });

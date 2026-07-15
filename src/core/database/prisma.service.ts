@@ -4,7 +4,10 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { PrismaClient } from "@prisma/client";
+import type { EnvConfig } from "@/core/config/env.validation";
+import { withPoolParams } from "./db-url.util";
 
 @Injectable()
 export class PrismaService
@@ -13,8 +16,17 @@ export class PrismaService
 {
   private readonly logger = new Logger(PrismaService.name);
 
-  constructor() {
+  constructor(config: ConfigService<EnvConfig, true>) {
     super({
+      datasources: {
+        db: {
+          url: withPoolParams(
+            config.get("DATABASE_URL", { infer: true }),
+            config.get("DATABASE_CONNECTION_LIMIT", { infer: true }),
+            config.get("DATABASE_POOL_TIMEOUT", { infer: true }),
+          ),
+        },
+      },
       log:
         process.env.NODE_ENV === "development"
           ? ["query", "error", "warn"]
