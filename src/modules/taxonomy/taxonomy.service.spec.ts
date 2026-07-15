@@ -29,26 +29,7 @@ describe("TaxonomyService.listCategories", () => {
 });
 
 describe("TaxonomyService.listSkills", () => {
-  it("caches per distinct search query, not as one shared entry", async () => {
-    const findSkills = jest
-      .fn()
-      .mockResolvedValueOnce([{ id: "skill-a" }])
-      .mockResolvedValueOnce([{ id: "skill-b" }]);
-    const cache = makeCache();
-    const service = new TaxonomyService(
-      { findSkills } as unknown as TaxonomyRepository,
-      cache,
-    );
-
-    const a = await service.listSkills("react");
-    const b = await service.listSkills("vue");
-
-    expect(findSkills).toHaveBeenCalledTimes(2);
-    expect(a).toEqual([{ id: "skill-a" }]);
-    expect(b).toEqual([{ id: "skill-b" }]);
-  });
-
-  it("reuses the cached result for a repeated search query", async () => {
+  it("caches the unfiltered full list across calls", async () => {
     const findSkills = jest.fn().mockResolvedValue([{ id: "skill-a" }]);
     const cache = makeCache();
     const service = new TaxonomyService(
@@ -56,9 +37,29 @@ describe("TaxonomyService.listSkills", () => {
       cache,
     );
 
+    await service.listSkills();
+    await service.listSkills();
+
+    expect(findSkills).toHaveBeenCalledTimes(1);
+  });
+
+  it("never caches filtered searches — q is user input on a public endpoint", async () => {
+    const findSkills = jest
+      .fn()
+      .mockResolvedValueOnce([{ id: "skill-a" }])
+      .mockResolvedValueOnce([{ id: "skill-a" }]);
+    const cache = makeCache();
+    const service = new TaxonomyService(
+      { findSkills } as unknown as TaxonomyRepository,
+      cache,
+    );
+
     await service.listSkills("react");
     await service.listSkills("react");
 
-    expect(findSkills).toHaveBeenCalledTimes(1);
+    // Repository hit both times, and nothing was written to the cache — a
+    // flood of distinct q values must not grow the in-memory store.
+    expect(findSkills).toHaveBeenCalledTimes(2);
+    expect(cache.set).not.toHaveBeenCalled();
   });
 });

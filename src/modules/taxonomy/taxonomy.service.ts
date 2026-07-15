@@ -7,6 +7,7 @@ import { getOrSetCache } from "@/common/caching/cache.util";
 // change essentially never, so this is a purely additive win with no real staleness
 // cost. Same TTL tier as salary benchmarks (also "rarely changes" data).
 const CATEGORIES_CACHE_KEY = "taxonomy:categories";
+const SKILLS_CACHE_KEY = "taxonomy:skills";
 const TAXONOMY_CACHE_TTL_MS = 300_000;
 
 @Injectable()
@@ -26,14 +27,22 @@ export class TaxonomyService {
   }
 
   listSkills(q?: string) {
-    // Keyed per search string (capped result set, take: 100 in the repository) —
-    // unlike categories/benchmarks this isn't a single flat key, since the result
-    // genuinely varies by query.
-    const cacheKey = `taxonomy:skills:${q ?? ""}`;
-    return getOrSetCache(this.cache, cacheKey, TAXONOMY_CACHE_TTL_MS, () =>
-      this.taxonomyRepository.findSkills(
-        q ? { name: { contains: q, mode: "insensitive" } } : undefined,
-      ),
+    // Only the unfiltered full list is cached. This used to cache per search
+    // string (`taxonomy:skills:${q}`), but q is user input on a public endpoint
+    // and the default in-memory store only evicts expired entries when they're
+    // read again — so every distinct q left a permanent Map entry (unbounded
+    // growth), while the only real consumer (the post-job wizard) never sends q
+    // at all. Filtered lookups just hit the DB: small table, take: 100.
+    if (q) {
+      return this.taxonomyRepository.findSkills({
+        name: { contains: q, mode: "insensitive" },
+      });
+    }
+    return getOrSetCache(
+      this.cache,
+      SKILLS_CACHE_KEY,
+      TAXONOMY_CACHE_TTL_MS,
+      () => this.taxonomyRepository.findSkills(),
     );
   }
 }
