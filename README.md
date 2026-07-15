@@ -86,17 +86,17 @@ See `.env.example` for the full list. Required: `DATABASE_URL`, `AUTH_SECRET`. E
 
 ## Scripts
 
-| Command | Description |
-| --- | --- |
-| `npm run start:dev` | Start with hot reload |
-| `npm run build` | Compile to `dist/` |
-| `npm run start:prod` | Run the compiled build |
-| `npm run lint` | ESLint (auto-fix) |
-| `npm test` | Unit tests |
-| `npm run test:e2e` | End-to-end tests |
-| `npm run db:generate` | Regenerate the Prisma client |
-| `npm run db:migrate` | Create + apply a new migration (dev) |
-| `npm run db:deploy` | Apply existing migrations (CI/prod) |
+| Command               | Description                          |
+| --------------------- | ------------------------------------ |
+| `npm run start:dev`   | Start with hot reload                |
+| `npm run build`       | Compile to `dist/`                   |
+| `npm run start:prod`  | Run the compiled build               |
+| `npm run lint`        | ESLint (auto-fix)                    |
+| `npm test`            | Unit tests                           |
+| `npm run test:e2e`    | End-to-end tests                     |
+| `npm run db:generate` | Regenerate the Prisma client         |
+| `npm run db:migrate`  | Create + apply a new migration (dev) |
+| `npm run db:deploy`   | Apply existing migrations (CI/prod)  |
 
 ## API surface
 

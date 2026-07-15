@@ -9,13 +9,17 @@ Base URL (local): `http://localhost:4000` (configurable via `PORT` / `APP_URL`).
 **Authentication.** Protected routes require `Authorization: Bearer <jwt>`, issued by `POST /auth/login` or an OAuth callback. `JwtAuthGuard` rejects missing/invalid/expired tokens with `401 { "error": "Unauthorized" }`. Some routes additionally require a role via `RolesGuard` + `@Roles(...)`, or check ownership manually in the service layer (documented per-route below).
 
 **Error shape.** Every thrown error is rendered by the global `GlobalExceptionFilter` as:
+
 ```json
 { "error": "<string>" }
 ```
+
 or, for validation failures, `error` is a Zod `.flatten()` object:
+
 ```json
 { "error": { "formErrors": [], "fieldErrors": { "email": ["Invalid email"] } } }
 ```
+
 A few routes bypass this convention — noted explicitly where it happens (e.g. `GET /health`, raw OAuth guard failures, `RolesGuard`'s `403`).
 
 **Validation.** Request bodies/queries are validated with Zod schemas via a shared `ZodValidationPipe` (not `class-validator`), so invalid input always returns `400` with the flattened-error shape above.
@@ -23,8 +27,12 @@ A few routes bypass this convention — noted explicitly where it happens (e.g. 
 **Rate limiting.** An in-memory, single-instance, fixed-window limiter (`RateLimitService`). Exceeding a limit returns `429 { "error": "Too many requests. Please slow down and try again shortly." }` with a `Retry-After` header (seconds). Limits are keyed per-IP or per-user depending on the route (noted per-endpoint).
 
 **Pagination.** List endpoints that paginate accept `page` (default `1`) and `limit` (default `20`, max `50`, both coerced from query strings) and return:
+
 ```json
-{ "...": "...", "pagination": { "page": 1, "limit": 20, "total": 37, "pages": 2 } }
+{
+  "...": "...",
+  "pagination": { "page": 1, "limit": 20, "total": 37, "pages": 2 }
+}
 ```
 
 ## Modules
@@ -58,14 +66,16 @@ Liveness check: pings the database with `SELECT 1` and reports connectivity.
 - **Request**: no params/query/body
 
 **Success response — `200 OK`**
+
 ```json
 { "status": "ok", "timestamp": "2026-07-02T10:00:00.000Z", "db": "connected" }
 ```
 
 **Error response**
-| Status | Body | Trigger |
-|---|---|---|
-| 503 | `{ "status": "error", "db": "disconnected" }` | `SELECT 1` fails (DB unreachable) — note this is **not** the `{ error }` shape |
+
+| Status | Body                                          | Trigger                                                                        |
+| ------ | --------------------------------------------- | ------------------------------------------------------------------------------ |
+| 503    | `{ "status": "error", "db": "disconnected" }` | `SELECT 1` fails (DB unreachable) — note this is **not** the `{ error }` shape |
 
 ---
 
@@ -83,28 +93,40 @@ Creates a new user account (`TALENT` or `EMPLOYER`) with a bcrypt-hashed passwor
 - **Rate limit**: 5 req / 60s, keyed per IP — `register:<ip>`
 - **Body** (`registerSchema`):
 
-| Field | Type | Required | Constraints |
-|---|---|---|---|
-| `name` | string | yes | min 1, max 120 |
-| `email` | string | yes | valid email |
-| `password` | string | yes | min 8 |
-| `role` | enum | yes | `TALENT` \| `EMPLOYER` |
+| Field      | Type   | Required | Constraints            |
+| ---------- | ------ | -------- | ---------------------- |
+| `name`     | string | yes      | min 1, max 120         |
+| `email`    | string | yes      | valid email            |
+| `password` | string | yes      | min 8                  |
+| `role`     | enum   | yes      | `TALENT` \| `EMPLOYER` |
 
 ```json
-{ "name": "Jane Doe", "email": "jane.doe@example.com", "password": "SuperSecret123", "role": "TALENT" }
+{
+  "name": "Jane Doe",
+  "email": "jane.doe@example.com",
+  "password": "SuperSecret123",
+  "role": "TALENT"
+}
 ```
 
 **Success response — `201 Created`**
+
 ```json
-{ "id": "cme8f1a2b0000ug0h9x1n1a2", "email": "jane.doe@example.com", "name": "Jane Doe", "role": "TALENT" }
+{
+  "id": "cme8f1a2b0000ug0h9x1n1a2",
+  "email": "jane.doe@example.com",
+  "name": "Jane Doe",
+  "role": "TALENT"
+}
 ```
 
 **Errors**
-| Status | Body | Trigger |
-|---|---|---|
-| 400 | flattened Zod error | validation failure |
-| 409 | `{ "error": "Email already registered" }` | email already in use |
-| 429 | rate-limit body | too many requests from this IP |
+
+| Status | Body                                      | Trigger                        |
+| ------ | ----------------------------------------- | ------------------------------ |
+| 400    | flattened Zod error                       | validation failure             |
+| 409    | `{ "error": "Email already registered" }` | email already in use           |
+| 429    | rate-limit body                           | too many requests from this IP |
 
 ---
 
@@ -120,15 +142,17 @@ Validates email/password credentials and issues a signed JWT.
 ```
 
 **Success response — `200 OK`**
+
 ```json
 { "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
 ```
 
 **Errors**
-| Status | Body | Trigger |
-|---|---|---|
-| 400 | flattened Zod error | validation failure |
-| 401 | `{ "error": "Invalid email or password" }` | no such user, OAuth-only account (no password), or wrong password |
+
+| Status | Body                                       | Trigger                                                           |
+| ------ | ------------------------------------------ | ----------------------------------------------------------------- |
+| 400    | flattened Zod error                        | validation failure                                                |
+| 401    | `{ "error": "Invalid email or password" }` | no such user, OAuth-only account (no password), or wrong password |
 
 ---
 
@@ -139,9 +163,18 @@ Reads an optional `Authorization: Bearer <jwt>` header, verifies it, and returns
 - **Auth**: None required (manual verification, no guard) · **Rate limit**: None
 
 **Success response — `200 OK` (always)**
+
 ```json
-{ "user": { "id": "cme8f1a2b0000ug0h9x1n1a2", "email": "jane.doe@example.com", "name": "Jane Doe", "role": "TALENT" } }
+{
+  "user": {
+    "id": "cme8f1a2b0000ug0h9x1n1a2",
+    "email": "jane.doe@example.com",
+    "name": "Jane Doe",
+    "role": "TALENT"
+  }
+}
 ```
+
 or `{ "user": null }` if the header is missing/invalid/expired.
 
 ---
@@ -170,6 +203,7 @@ Issues a password-reset token (if the email exists, TTL 1h) and emails a reset l
 - **Body**: `email` (string, valid email, required)
 
 **Success response — `200 OK`**
+
 ```json
 { "message": "If that email exists, a reset link was sent." }
 ```
@@ -186,16 +220,18 @@ Consumes a reset token and sets a new password.
 - **Body** (`resetPasswordSchema`): `token` (string, min 1, required), `password` (string, min 8, required)
 
 **Success response — `200 OK`**
+
 ```json
 { "message": "Password updated" }
 ```
 
 **Errors**
-| Status | Body | Trigger |
-|---|---|---|
-| 400 | flattened Zod error | validation failure |
-| 400 | `{ "error": "Invalid or expired token" }` | token not found or expired |
-| 429 | rate-limit body | too many requests |
+
+| Status | Body                                      | Trigger                    |
+| ------ | ----------------------------------------- | -------------------------- |
+| 400    | flattened Zod error                       | validation failure         |
+| 400    | `{ "error": "Invalid or expired token" }` | token not found or expired |
+| 429    | rate-limit body                           | too many requests          |
 
 ---
 
@@ -210,8 +246,13 @@ Updates the authenticated user's display name.
 - **Body**: `name` (string, min 1, max 120, required) — `{ "name": "Jane A. Doe" }`
 
 **Success response — `200 OK`**
+
 ```json
-{ "id": "cme8f1a2b0000ug0h9x1n1a2", "name": "Jane A. Doe", "email": "jane.doe@example.com" }
+{
+  "id": "cme8f1a2b0000ug0h9x1n1a2",
+  "name": "Jane A. Doe",
+  "email": "jane.doe@example.com"
+}
 ```
 
 **Errors**: `400` validation failure.
@@ -223,6 +264,7 @@ Updates the authenticated user's display name.
 Permanently deletes the authenticated user's account (cascades to related records).
 
 **Success response — `200 OK`**
+
 ```json
 { "success": true }
 ```
@@ -239,17 +281,19 @@ Changes the authenticated user's password after verifying the current one.
 - **Body** (`changePasswordSchema`): `currentPassword` (string, min 1, required), `newPassword` (string, min 8, required)
 
 **Success response — `200 OK`**
+
 ```json
 { "message": "Password updated" }
 ```
 
 **Errors**
-| Status | Body | Trigger |
-|---|---|---|
-| 400 | flattened Zod error | validation failure |
-| 400 | `{ "error": "Password change is not available for social sign-in accounts." }` | account has no password hash (OAuth-only) |
-| 400 | `{ "error": "Current password is incorrect" }` | wrong `currentPassword` |
-| 429 | rate-limit body | too many requests |
+
+| Status | Body                                                                           | Trigger                                   |
+| ------ | ------------------------------------------------------------------------------ | ----------------------------------------- |
+| 400    | flattened Zod error                                                            | validation failure                        |
+| 400    | `{ "error": "Password change is not available for social sign-in accounts." }` | account has no password hash (OAuth-only) |
+| 400    | `{ "error": "Current password is incorrect" }`                                 | wrong `currentPassword`                   |
+| 429    | rate-limit body                                                                | too many requests                         |
 
 ---
 
@@ -264,6 +308,7 @@ Returns the authenticated user's own talent profile with skills and their name.
 - **Auth**: Bearer JWT required
 
 **Success response — `200 OK`**
+
 ```json
 {
   "id": "clx4talent0001abcd",
@@ -287,7 +332,16 @@ Returns the authenticated user's own talent profile with skills and their name.
   "createdAt": "2026-01-15T09:12:00.000Z",
   "updatedAt": "2026-06-30T14:02:31.000Z",
   "skills": [
-    { "talentId": "clx4talent0001abcd", "skillId": "clx4skill0001node", "yearsExp": 6, "skill": { "id": "clx4skill0001node", "name": "Node.js", "slug": "node-js" } }
+    {
+      "talentId": "clx4talent0001abcd",
+      "skillId": "clx4skill0001node",
+      "yearsExp": 6,
+      "skill": {
+        "id": "clx4skill0001node",
+        "name": "Node.js",
+        "slug": "node-js"
+      }
+    }
   ],
   "user": { "name": "Jane Doe" }
 }
@@ -304,17 +358,17 @@ Creates or updates the authenticated user's talent profile (upsert); if `skills`
 - **Auth**: Bearer JWT required
 - **Body** (`talentProfileSchema`, every field optional — partial upsert):
 
-| Field | Type | Constraints |
-|---|---|---|
-| `headline` | string | max 120 |
-| `bio` | string | max 2000 |
-| `location`, `country`, `timezone` | string | — |
-| `yearsExperience` | number | integer, min 0 |
-| `level` | enum | `ENTRY`\|`MID`\|`SENIOR`\|`LEAD`\|`EXECUTIVE` |
-| `resumeUrl`, `portfolioUrl`, `githubUrl`, `linkedinUrl` | string | valid URL |
-| `isOpenToWork` | boolean | — |
-| `desiredSalaryMin`, `desiredSalaryMax` | number | integer, positive |
-| `skills` | array | `{ skillId: string (CUID), yearsExp?: number (int, min 0) }[]`; provided → replaces entire skill set; omitted → untouched; `[]` → clears |
+| Field                                                   | Type    | Constraints                                                                                                                              |
+| ------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `headline`                                              | string  | max 120                                                                                                                                  |
+| `bio`                                                   | string  | max 2000                                                                                                                                 |
+| `location`, `country`, `timezone`                       | string  | —                                                                                                                                        |
+| `yearsExperience`                                       | number  | integer, min 0                                                                                                                           |
+| `level`                                                 | enum    | `ENTRY`\|`MID`\|`SENIOR`\|`LEAD`\|`EXECUTIVE`                                                                                            |
+| `resumeUrl`, `portfolioUrl`, `githubUrl`, `linkedinUrl` | string  | valid URL                                                                                                                                |
+| `isOpenToWork`                                          | boolean | —                                                                                                                                        |
+| `desiredSalaryMin`, `desiredSalaryMax`                  | number  | integer, positive                                                                                                                        |
+| `skills`                                                | array   | `{ skillId: string (CUID), yearsExp?: number (int, min 0) }[]`; provided → replaces entire skill set; omitted → untouched; `[]` → clears |
 
 ```json
 {
@@ -328,6 +382,7 @@ Creates or updates the authenticated user's talent profile (upsert); if `skills`
 **Success response — `200 OK`** — same shape as `GET /talent/me` but **without** the `user` field (the upsert re-fetch only includes `skills.skill`).
 
 **Notes**
+
 - `slug` is only set on first creation; later `PUT`s never change it.
 - `level` defaults to `MID` and `currency` always defaults to `USD` on first creation; `currency` cannot be set via this endpoint.
 
@@ -360,12 +415,22 @@ Creates an employer profile for the authenticated user and promotes their `User.
 - **Body** (`createEmployerProfileSchema`): `companyName` (string, min 2, max 100, required); optional `websiteUrl` (URL), `description`, `industry`, `size`, `hqCountry`, `hqCity`
 
 ```json
-{ "companyName": "RemoteSEA Ltd", "websiteUrl": "https://remotesea.io", "industry": "Technology", "hqCountry": "Vietnam" }
+{
+  "companyName": "RemoteSEA Ltd",
+  "websiteUrl": "https://remotesea.io",
+  "industry": "Technology",
+  "hqCountry": "Vietnam"
+}
 ```
 
 **Success response — `201 Created`**
+
 ```json
-{ "id": "clx1a2b3c4d5e6f7g8h9i0j1", "slug": "remotesea-ltd", "companyName": "RemoteSEA Ltd" }
+{
+  "id": "clx1a2b3c4d5e6f7g8h9i0j1",
+  "slug": "remotesea-ltd",
+  "companyName": "RemoteSEA Ltd"
+}
 ```
 
 **Errors**: `400` validation failure; `401`; `409 { "error": "Employer profile already exists" }`.
@@ -379,6 +444,7 @@ Returns the authenticated employer's profile plus `_count.jobs` and computed `to
 - **Auth**: Bearer JWT + `EMPLOYER` role (`RolesGuard`)
 
 **Success response — `200 OK`**
+
 ```json
 {
   "id": "clx1a2b3c4d5e6f7g8h9i0j1",
@@ -414,12 +480,23 @@ Lists jobs owned by the authenticated employer, optionally filtered by status, p
 - **Query**: `status` (enum, optional) — `DRAFT`\|`PENDING_REVIEW`\|`ACTIVE`\|`CLOSED`\|`REJECTED`
 
 **Success response — `200 OK`**
+
 ```json
 {
-  "jobs": [{ "id": "cljob1a2b3c4d5e6f7g8h9i0", "title": "Senior Backend Engineer", "status": "ACTIVE", "viewCount": 342, "applyCount": 12, "_count": { "applications": 12 } }],
+  "jobs": [
+    {
+      "id": "cljob1a2b3c4d5e6f7g8h9i0",
+      "title": "Senior Backend Engineer",
+      "status": "ACTIVE",
+      "viewCount": 342,
+      "applyCount": 12,
+      "_count": { "applications": 12 }
+    }
+  ],
   "stats": { "totalApps": 27, "shortlisted": 5, "avgTimeToHireInDays": 6.4 }
 }
 ```
+
 `avgTimeToHireInDays` is computed only over `OFFERED` applications; `0` if none.
 
 **Errors**: `400`; `401`; `403 { "error": "Forbidden" }` (wrong role); `403 { "error": "Employer profile required" }` (`EMPLOYER` role but no profile row).
@@ -435,6 +512,7 @@ Lists paginated applications for a job owned by the caller.
 - **Query**: `status` (enum, optional, one of the 7 `ApplicationStatus` values), `page`, `limit` (pagination defaults)
 
 **Success response — `200 OK`**
+
 ```json
 {
   "applications": [
@@ -443,7 +521,14 @@ Lists paginated applications for a job owned by the caller.
       "status": "REVIEWING",
       "appliedAt": "2026-06-10T12:00:00.000Z",
       "coverLetter": "I would love to join your team...",
-      "talent": { "id": "cltal1...", "slug": "jane-doe", "headline": "Full-stack Developer", "level": "SENIOR", "user": { "name": "Jane Doe" }, "skills": [] }
+      "talent": {
+        "id": "cltal1...",
+        "slug": "jane-doe",
+        "headline": "Full-stack Developer",
+        "level": "SENIOR",
+        "user": { "name": "Jane Doe" },
+        "skills": []
+      }
     }
   ],
   "pagination": { "page": 1, "limit": 20, "total": 12, "pages": 1 }
@@ -493,23 +578,28 @@ Creates a new job in `DRAFT` status for the authenticated employer.
 - **Auth**: Bearer JWT required only — no `@Roles()`; service requires an existing `EmployerProfile`
 - **Body** (`createJobSchema`):
 
-| Field | Type | Required | Constraints |
-|---|---|---|---|
-| `title` | string | yes | min 5, max 120 |
-| `description` | string | yes | min 100 |
-| `requirements` | string | no | — |
-| `jobType` | enum | yes | `FULL_TIME`\|`PART_TIME`\|`CONTRACT`\|`FREELANCE` |
-| `level` | enum | yes | `ENTRY`\|`MID`\|`SENIOR`\|`LEAD`\|`EXECUTIVE` |
-| `salaryMin`, `salaryMax` | number | yes | positive int; `salaryMax >= salaryMin` (service-checked) |
-| `timezone`, `country` | string | no | — |
-| `benefits` | string[] | no | max 10, default `[]` |
-| `planType` | enum | yes | `STANDARD`\|`FEATURED`\|`HANDS_ON` |
-| `categoryIds` | string[] | yes | CUIDs, 1–3 items |
-| `skillIds` | string[] | no | CUIDs, max 15, default `[]` |
+| Field                    | Type     | Required | Constraints                                              |
+| ------------------------ | -------- | -------- | -------------------------------------------------------- |
+| `title`                  | string   | yes      | min 5, max 120                                           |
+| `description`            | string   | yes      | min 100                                                  |
+| `requirements`           | string   | no       | —                                                        |
+| `jobType`                | enum     | yes      | `FULL_TIME`\|`PART_TIME`\|`CONTRACT`\|`FREELANCE`        |
+| `level`                  | enum     | yes      | `ENTRY`\|`MID`\|`SENIOR`\|`LEAD`\|`EXECUTIVE`            |
+| `salaryMin`, `salaryMax` | number   | yes      | positive int; `salaryMax >= salaryMin` (service-checked) |
+| `timezone`, `country`    | string   | no       | —                                                        |
+| `benefits`               | string[] | no       | max 10, default `[]`                                     |
+| `planType`               | enum     | yes      | `STANDARD`\|`FEATURED`\|`HANDS_ON`                       |
+| `categoryIds`            | string[] | yes      | CUIDs, 1–3 items                                         |
+| `skillIds`               | string[] | no       | CUIDs, max 15, default `[]`                              |
 
 **Success response — `201 Created`**
+
 ```json
-{ "id": "cljob1a2b3c4d5e6f7g8h9i0", "slug": "senior-backend-engineer-a1b2c3", "status": "DRAFT" }
+{
+  "id": "cljob1a2b3c4d5e6f7g8h9i0",
+  "slug": "senior-backend-engineer-a1b2c3",
+  "status": "DRAFT"
+}
 ```
 
 **Errors**: `400` validation or `{ "error": "salaryMax must be greater than or equal to salaryMin" }`; `401`; `403 { "error": "Employer profile required" }`.
@@ -553,8 +643,16 @@ Lists all job categories, alphabetically, no pagination.
 - **Auth**: None
 
 **Success response — `200 OK`**
+
 ```json
-[{ "id": "clcat1...", "name": "Engineering", "slug": "engineering", "icon": "code" }]
+[
+  {
+    "id": "clcat1...",
+    "name": "Engineering",
+    "slug": "engineering",
+    "icon": "code"
+  }
+]
 ```
 
 ---
@@ -567,6 +665,7 @@ Lists skills, optionally filtered by a case-insensitive substring match on `name
 - **Query**: `q` (string, optional, trimmed — empty/omitted returns all up to 100)
 
 **Success response — `200 OK`**
+
 ```json
 [{ "id": "clskl1...", "name": "TypeScript", "slug": "typescript" }]
 ```
@@ -602,14 +701,15 @@ Submits a job application as the current user's talent profile; increments the j
 **Success response — `201 Created`** — the created `Application` row.
 
 **Errors**
-| Status | Body | Trigger |
-|---|---|---|
-| 400 | flattened Zod error | validation failure |
-| 401 | `{ "error": "Unauthorized" }` | no/invalid token |
-| 403 | `{ "error": "Talent profile required" }` | user has no `TalentProfile` |
-| 409 | `{ "error": "Already applied" }` | duplicate `(jobId, talentId)` |
-| 429 | rate-limit body | too many applications |
-| 500 | `{ "error": "Internal server error" }` | `jobId` references a non-existent job (unhandled FK violation) |
+
+| Status | Body                                     | Trigger                                                        |
+| ------ | ---------------------------------------- | -------------------------------------------------------------- |
+| 400    | flattened Zod error                      | validation failure                                             |
+| 401    | `{ "error": "Unauthorized" }`            | no/invalid token                                               |
+| 403    | `{ "error": "Talent profile required" }` | user has no `TalentProfile`                                    |
+| 409    | `{ "error": "Already applied" }`         | duplicate `(jobId, talentId)`                                  |
+| 429    | rate-limit body                          | too many applications                                          |
+| 500    | `{ "error": "Internal server error" }`   | `jobId` references a non-existent job (unhandled FK violation) |
 
 ---
 
@@ -657,18 +757,20 @@ Creates a Stripe Checkout session for a `DRAFT`, unpaid job owned by the current
 Line item price from `PLAN_PRICES[job.planType]` (cents): `STANDARD=15000`, `FEATURED=35000`, `HANDS_ON=120000`. `success_url` → `{FRONTEND_URL}/post-job/success?session_id={CHECKOUT_SESSION_ID}`; `cancel_url` → `{FRONTEND_URL}/post-job?job={job.id}`.
 
 **Success response — `201 Created`**
+
 ```json
 { "url": "https://checkout.stripe.com/c/pay/cs_test_a1b2c3..." }
 ```
 
 **Errors**
-| Status | Body | Trigger |
-|---|---|---|
-| 400 | flattened Zod error | validation failure |
-| 400 | `{ "error": "Job is not payable" }` | job not `DRAFT` or already `planPaid` |
-| 401 | `{ "error": "Unauthorized" }` | no/invalid token |
-| 404 | `{ "error": "Job not found" }` | job doesn't exist / not owned by caller |
-| 429 | rate-limit body | too many checkout attempts |
+
+| Status | Body                                | Trigger                                 |
+| ------ | ----------------------------------- | --------------------------------------- |
+| 400    | flattened Zod error                 | validation failure                      |
+| 400    | `{ "error": "Job is not payable" }` | job not `DRAFT` or already `planPaid`   |
+| 401    | `{ "error": "Unauthorized" }`       | no/invalid token                        |
+| 404    | `{ "error": "Job not found" }`      | job doesn't exist / not owned by caller |
+| 429    | rate-limit body                     | too many checkout attempts              |
 
 ---
 
@@ -683,16 +785,18 @@ Stripe webhook receiver. On `checkout.session.completed`, marks the job paid + m
 Non-`checkout.session.completed` events, or events missing `metadata.jobId`, are accepted (`200`) but are no-ops.
 
 **Success response — `201 Created`**
+
 ```json
 { "received": true }
 ```
 
 **Errors**
-| Status | Body | Trigger |
-|---|---|---|
-| 400 | `{ "error": "Missing signature" }` | `stripe-signature` header absent or `rawBody` missing |
-| 400 | `{ "error": "Invalid signature" }` | signature verification fails |
-| 500 | `{ "error": "Internal server error" }` | e.g. job id from a valid event doesn't exist in DB (unhandled) |
+
+| Status | Body                                   | Trigger                                                        |
+| ------ | -------------------------------------- | -------------------------------------------------------------- |
+| 400    | `{ "error": "Missing signature" }`     | `stripe-signature` header absent or `rawBody` missing          |
+| 400    | `{ "error": "Invalid signature" }`     | signature verification fails                                   |
+| 500    | `{ "error": "Internal server error" }` | e.g. job id from a valid event doesn't exist in DB (unhandled) |
 
 ---
 
@@ -712,6 +816,7 @@ Allowed `contentType`: `avatar`/`logo` → `image/jpeg`, `image/png`, `image/web
 S3 key: `uploads/{type}/{userId}/{Date.now()}-{sanitizedFilename}`.
 
 **Success response — `201 Created`**
+
 ```json
 {
   "uploadUrl": "https://s3.amazonaws.com/bucket-name/uploads/resume/.../1751443200000-resume.pdf?X-Amz-Signature=...",
@@ -721,12 +826,13 @@ S3 key: `uploads/{type}/{userId}/{Date.now()}-{sanitizedFilename}`.
 ```
 
 **Errors**
-| Status | Body | Trigger |
-|---|---|---|
-| 400 | flattened Zod error | validation failure |
-| 400 | `{ "error": "Unsupported content type" }` | `contentType` not allowed for `type` |
-| 401 | `{ "error": "Unauthorized" }` | no/invalid token |
-| 500 | `{ "error": "Internal server error" }` | S3 config/credentials error |
+
+| Status | Body                                      | Trigger                              |
+| ------ | ----------------------------------------- | ------------------------------------ |
+| 400    | flattened Zod error                       | validation failure                   |
+| 400    | `{ "error": "Unsupported content type" }` | `contentType` not allowed for `type` |
+| 401    | `{ "error": "Unauthorized" }`             | no/invalid token                     |
+| 500    | `{ "error": "Internal server error" }`    | S3 config/credentials error          |
 
 ---
 
@@ -753,17 +859,17 @@ Creates a new job alert, optionally attaching category filters.
 - **Auth**: Bearer JWT required
 - **Body** (`createAlertSchema`):
 
-| Field | Type | Required | Constraints / notes |
-|---|---|---|---|
-| `name` | string | yes | min 1, max 100 |
-| `keywords` | string | no | max 200; matched against job `title`/`description` (case-insensitive contains) |
-| `jobType` | enum | no | `FULL_TIME`\|`PART_TIME`\|`CONTRACT`\|`FREELANCE` |
-| `level` | enum | no | `ENTRY`\|`MID`\|`SENIOR`\|`LEAD`\|`EXECUTIVE` |
-| `salaryMin` | number | no | positive int; matches jobs with `salaryMin >= value` |
-| `country` | string | no | exact match |
-| `timezone` | string | no | stored only, not used in matching |
-| `frequency` | enum | no (default `DAILY`) | `IMMEDIATE`\|`DAILY`\|`WEEKLY` |
-| `categoryIds` | string[] | no | CUIDs |
+| Field         | Type     | Required             | Constraints / notes                                                            |
+| ------------- | -------- | -------------------- | ------------------------------------------------------------------------------ |
+| `name`        | string   | yes                  | min 1, max 100                                                                 |
+| `keywords`    | string   | no                   | max 200; matched against job `title`/`description` (case-insensitive contains) |
+| `jobType`     | enum     | no                   | `FULL_TIME`\|`PART_TIME`\|`CONTRACT`\|`FREELANCE`                              |
+| `level`       | enum     | no                   | `ENTRY`\|`MID`\|`SENIOR`\|`LEAD`\|`EXECUTIVE`                                  |
+| `salaryMin`   | number   | no                   | positive int; matches jobs with `salaryMin >= value`                           |
+| `country`     | string   | no                   | exact match                                                                    |
+| `timezone`    | string   | no                   | stored only, not used in matching                                              |
+| `frequency`   | enum     | no (default `DAILY`) | `IMMEDIATE`\|`DAILY`\|`WEEKLY`                                                 |
+| `categoryIds` | string[] | no                   | CUIDs                                                                          |
 
 **Success response — `201 Created`** — created alert, same shape as `GET /alerts` items.
 
@@ -790,6 +896,7 @@ Toggles an alert's active state — only `isActive` is mutable here.
 Deletes an alert owned by the current user.
 
 **Success response — `200 OK`**
+
 ```json
 { "success": true }
 ```
@@ -808,6 +915,7 @@ Cron-triggered fan-out: scans active alerts, finds newly-published matching jobs
 Frequency gaps: `IMMEDIATE`=0, `DAILY`=24h, `WEEKLY`=7d. Matching window is `(lastSentAt, now]` (or `now - gap` on first run); optional filters (`jobType`, `level`, `country`, `salaryMin` as `gte`, `keywords`, `categories`) applied if set on the alert. Up to 10 jobs per alert; zero matches → alert skipped (no email, `lastSentAt` untouched).
 
 **Success response — `200 OK`**
+
 ```json
 { "processed": 42, "sent": 7 }
 ```
@@ -827,9 +935,20 @@ Lists employer profiles for moderation with computed job count and total ad spen
 - **Query** (`listEmployersSchema`): `verified` (`"true"`\|`"false"`, optional filter on `isVerified`), `page`, `limit` (pagination defaults)
 
 **Success response — `200 OK`** — each item includes both raw `_count.jobs` and a duplicated `jobCount`, plus `totalSpend` (sum of `PLAN_PRICES[planType]` over `planPaid: true` jobs).
+
 ```json
 {
-  "employers": [{ "id": "clx1emp...", "companyName": "Acme Corp", "isVerified": false, "user": { "email": "hiring@acme.com" }, "_count": { "jobs": 4 }, "jobCount": 4, "totalSpend": 50000 }],
+  "employers": [
+    {
+      "id": "clx1emp...",
+      "companyName": "Acme Corp",
+      "isVerified": false,
+      "user": { "email": "hiring@acme.com" },
+      "_count": { "jobs": 4 },
+      "jobCount": 4,
+      "totalSpend": 50000
+    }
+  ],
   "pagination": { "page": 1, "limit": 20, "total": 37, "pages": 2 }
 }
 ```
@@ -846,6 +965,7 @@ Verifies or suspends an employer. Suspending force-closes (`status: CLOSED`) all
 - **Body**: `action` (enum, required) — `"verify"`\|`"suspend"`
 
 **Success response — `200 OK`**
+
 ```json
 { "success": true }
 ```
@@ -874,6 +994,7 @@ Approves or rejects a job under review. Approve → `status: ACTIVE`, sets `publ
 - **Body** (`reviewJobSchema`): `action` (enum, required) — `"approve"`\|`"reject"`; `note` (string, max 2000, optional — rejection reason)
 
 **Success response — `200 OK`** — intentionally partial (repository only selects these two fields):
+
 ```json
 { "status": "ACTIVE", "publishedAt": "2026-07-02T10:05:00.000Z" }
 ```
