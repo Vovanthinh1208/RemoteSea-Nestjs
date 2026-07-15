@@ -5,6 +5,10 @@ RUN apk add --no-cache openssl
 
 # ─── Dependencies (with dev deps, for build) ───────────────────────────────
 FROM base AS deps
+# Toolchain for native-module compile fallback (bcrypt): on musl/alpine a
+# prebuilt binary may not be available for every arch, in which case npm ci
+# builds it from source. No-op layer cost when a prebuild is found.
+RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 RUN npm ci
@@ -21,6 +25,9 @@ RUN npm run build
 
 # ─── Production dependencies only ──────────────────────────────────────────
 FROM base AS prod-deps
+# Same native-module fallback as the deps stage (bcrypt) — the toolchain stays
+# in this stage only; the runner copies just node_modules.
+RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 

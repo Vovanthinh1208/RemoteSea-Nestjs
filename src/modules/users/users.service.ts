@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import * as bcrypt from "bcryptjs";
+// Native bcrypt (threadpool) — see auth.service.ts for the bcryptjs rationale.
+import * as bcrypt from "bcrypt";
 import type { User } from "@prisma/client";
 import { UsersRepository } from "./users.repository";
 import type { UpdateUserDto } from "./dto/update-user.dto";

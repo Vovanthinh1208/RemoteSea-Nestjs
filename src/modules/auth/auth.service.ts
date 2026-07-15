@@ -1,6 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import * as bcrypt from "bcryptjs";
+// Native bcrypt (libuv threadpool), not bcryptjs: the pure-JS implementation
+// burned main-thread CPU for the whole cost-12 hash (~hundreds of ms), stalling
+// every other in-flight request during each login/register. Hashes are
+// interchangeable between the two ($2a/$2b both verify).
+import * as bcrypt from "bcrypt";
 import * as crypto from "crypto";
 import { AuthRepository } from "./auth.repository";
 import { AuthMapper } from "./auth.mapper";
