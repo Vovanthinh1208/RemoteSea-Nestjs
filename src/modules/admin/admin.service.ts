@@ -21,6 +21,7 @@ import { ErrorCode } from "@/common/exceptions/error-codes";
 import { PLAN_PRICES } from "@/common/constants/plan.constants";
 import { EmailService } from "@/common/services/email.service";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
+import { runInBackground } from "@/common/utils/background-task.util";
 
 const REVENUE_MONTHS_WINDOW = 8;
 const RECENT_TRANSACTIONS_LIMIT = 10;
@@ -113,34 +114,24 @@ export class AdminService {
     // would then hit the PENDING_REVIEW guard above with no way to redo it.
     if (action === "approve") {
       const updated = await this.adminRepository.approveJob(id);
-      try {
-        await this.emailService.sendJobLiveEmail(
-          employerEmail,
-          job.title,
-          job.slug,
-        );
-      } catch (error) {
-        this.logger.error(
-          `Failed to send job-live email for job ${id}`,
-          error instanceof Error ? error.stack : error,
-        );
-      }
+      runInBackground(
+        this.emailService.sendJobLiveEmail(employerEmail, job.title, job.slug),
+        this.logger,
+        `Failed to send job-live email for job ${id}`,
+      );
       return updated;
     }
 
     const updated = await this.adminRepository.rejectJob(id, note ?? null);
-    try {
-      await this.emailService.sendJobRejectedEmail(
+    runInBackground(
+      this.emailService.sendJobRejectedEmail(
         employerEmail,
         job.title,
         note ?? "",
-      );
-    } catch (error) {
-      this.logger.error(
-        `Failed to send job-rejected email for job ${id}`,
-        error instanceof Error ? error.stack : error,
-      );
-    }
+      ),
+      this.logger,
+      `Failed to send job-rejected email for job ${id}`,
+    );
     return updated;
   }
 

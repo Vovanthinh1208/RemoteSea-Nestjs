@@ -8,6 +8,7 @@ import { RESET_TOKEN_TTL_MS } from "./constants";
 import type { RegisterDto } from "./dto/register.dto";
 import type { RegisteredUser, OAuthProfile } from "./interfaces";
 import { EmailService } from "@/common/services/email.service";
+import { runInBackground } from "@/common/utils/background-task.util";
 import { uniqueSlug } from "@/common/utils/slugify";
 import { BCRYPT_SALT_ROUNDS } from "@/common/constants/bcrypt.constants";
 import {
@@ -51,18 +52,13 @@ export class AuthService {
 
     // The account is already created above — a welcome-email failure must not
     // turn a successful signup into a 500 (a retry would then wrongly hit
-    // "Email already registered").
-    try {
-      await this.emailService.sendWelcomeEmail(
-        user.email,
-        user.name ?? "there",
-      );
-    } catch (error) {
-      this.logger.error(
-        `Failed to send welcome email for user ${user.id}`,
-        error instanceof Error ? error.stack : error,
-      );
-    }
+    // "Email already registered"). Background send: signup shouldn't wait out
+    // an outbound HTTP round-trip whose failure was already swallowed anyway.
+    runInBackground(
+      this.emailService.sendWelcomeEmail(user.email, user.name ?? "there"),
+      this.logger,
+      `Failed to send welcome email for user ${user.id}`,
+    );
 
     return user;
   }
@@ -113,14 +109,17 @@ export class AuthService {
       token,
       new Date(Date.now() + RESET_TOKEN_TTL_MS),
     );
-    try {
-      await this.emailService.sendPasswordResetEmail(email, token);
-    } catch (error) {
-      this.logger.error(
-        `Failed to send password-reset email`,
-        error instanceof Error ? error.stack : error,
-      );
-    }
+    // Background send: the response no longer waits out the Resend round-trip.
+    // Note this only removes the email leg of the known-vs-unknown-email timing
+    // difference — the token write above still runs only for known emails, so
+    // response timing remains an account-enumeration signal. Closing that fully
+    // would mean doing equal work on both paths; accepted for now since the
+    // register endpoint already confirms address existence outright.
+    runInBackground(
+      this.emailService.sendPasswordResetEmail(email, token),
+      this.logger,
+      "Failed to send password-reset email",
+    );
   }
 
   async resetPassword(token: string, password: string): Promise<void> {

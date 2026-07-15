@@ -8,6 +8,7 @@ import { BadRequestApiException } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { EmailService } from "@/common/services/email.service";
 import { PLAN_LABELS, PLAN_PRICES } from "@/common/constants/plan.constants";
+import { runInBackground } from "@/common/utils/background-task.util";
 import type { EnvConfig } from "@/core/config/env.validation";
 import type { JobPayer } from "./guards/job-payer-ownership.guard";
 
@@ -91,18 +92,16 @@ export class BillingService {
           // Payment is already recorded above — an email failure here must return
           // 200 to Stripe, not trigger a webhook retry: markJobPaidAndSubmitted is
           // idempotent on planPaid, so a retry would just no-op and the email would
-          // never go out at all.
-          try {
-            await this.emailService.sendJobSubmittedEmail(
+          // never go out at all. Background send also acks Stripe faster (Stripe
+          // times out slow webhook handlers and retries them).
+          runInBackground(
+            this.emailService.sendJobSubmittedEmail(
               job.employer.user.email,
               job.title,
-            );
-          } catch (error) {
-            this.logger.error(
-              `Failed to send job-submitted email for job ${jobId}`,
-              error instanceof Error ? error.stack : error,
-            );
-          }
+            ),
+            this.logger,
+            `Failed to send job-submitted email for job ${jobId}`,
+          );
         }
       }
     }

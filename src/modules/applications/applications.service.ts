@@ -9,6 +9,7 @@ import { ErrorCode } from "@/common/exceptions/error-codes";
 import { EmailService } from "@/common/services/email.service";
 import { isOwnedUploadUrl } from "@/modules/uploads/upload-url.util";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
+import { runInBackground } from "@/common/utils/background-task.util";
 import type { Pagination } from "@/common/interfaces/pagination.interface";
 import type { EnvConfig } from "@/core/config/env.validation";
 import { ApplicationsRepository } from "./applications.repository";
@@ -108,19 +109,18 @@ export class ApplicationsService {
 
     // The application is already committed above — a notification-email failure
     // must not turn a successful apply into a 500 (a retry would then wrongly
-    // hit "Already applied").
-    try {
-      await this.emailService.sendApplicationReceivedEmail(
+    // hit "Already applied"). Sent in the background: the failure was already
+    // swallowed-and-logged before, so awaiting it only made the applicant wait
+    // out a full outbound HTTP round-trip for nothing.
+    runInBackground(
+      this.emailService.sendApplicationReceivedEmail(
         job.employer.user.email,
         job.title,
         talent.user.name ?? "A candidate",
-      );
-    } catch (error) {
-      this.logger.error(
-        `Failed to send application-received email for application ${application.id}`,
-        error instanceof Error ? error.stack : error,
-      );
-    }
+      ),
+      this.logger,
+      `Failed to send application-received email for application ${application.id}`,
+    );
 
     return application;
   }
