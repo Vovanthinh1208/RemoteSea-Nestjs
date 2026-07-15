@@ -38,7 +38,11 @@ const makeService = (repoOverrides: Partial<JobsRepository> = {}) => {
     updateIfEditable: jest.fn(),
     ...repoOverrides,
   } as unknown as JobsRepository;
-  return { service: new JobsService(repo, {} as never), repo };
+  const viewCounts = { record: jest.fn() };
+  return {
+    service: new JobsService(repo, {} as never, viewCounts as never),
+    repo,
+  };
 };
 
 describe("JobsService.update", () => {

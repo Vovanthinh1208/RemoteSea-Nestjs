@@ -86,10 +86,12 @@ export class JobsRepository {
     });
   }
 
-  incrementViewCount(id: string): Promise<Job> {
-    return this.prisma.job.update({
+  // updateMany (not update) so a job deleted between the view and the buffered
+  // flush is a silent no-op instead of a thrown P2025.
+  async incrementViewCountBy(id: string, count: number): Promise<void> {
+    await this.prisma.job.updateMany({
       where: { id },
-      data: { viewCount: { increment: 1 } },
+      data: { viewCount: { increment: count } },
     });
   }
 

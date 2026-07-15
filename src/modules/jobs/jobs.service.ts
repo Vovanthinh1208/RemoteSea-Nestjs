@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { CACHE_MANAGER, type Cache } from "@nestjs/cache-manager";
 import { JobsRepository, type PublicJob } from "./jobs.repository";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
@@ -21,6 +21,7 @@ import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import type { JobWithOwner } from "./guards/job-ownership.guard";
 import { SalaryRange } from "./salary-range";
+import { ViewCountBuffer } from "./view-count.buffer";
 
 // Facets are a single global aggregate (findFacetRows() ignores the caller's search
 // filters entirely — see job-search.util.ts), so a flat cache key is correct: every
@@ -30,11 +31,10 @@ const FACETS_CACHE_TTL_MS = 60_000;
 
 @Injectable()
 export class JobsService {
-  private readonly logger = new Logger(JobsService.name);
-
   constructor(
     private readonly jobsRepository: JobsRepository,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    private readonly viewCounts: ViewCountBuffer,
   ) {}
 
   async list(query: ListJobsDto) {
@@ -67,14 +67,8 @@ export class JobsService {
       throw new NotFoundApiException("Job not found", ErrorCode.JOB_NOT_FOUND);
     }
 
-    void this.jobsRepository
-      .incrementViewCount(job.id)
-      .catch((error: unknown) => {
-        this.logger.warn(
-          `Failed to increment view count for job ${job.id}`,
-          error instanceof Error ? error.stack : error,
-        );
-      });
+    // Buffered, not a per-view UPDATE — see ViewCountBuffer for the rationale.
+    this.viewCounts.record(job.id);
 
     return job;
   }
