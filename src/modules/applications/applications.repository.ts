@@ -6,11 +6,7 @@ import type {
 } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 import type { ApplicationWithJob, CreateApplicationInput } from "./interfaces";
-import {
-  jobWithRelationsInclude,
-  omitInternalJobFields,
-  type JobWithRelations,
-} from "@/common/types/job-with-relations.type";
+import { jobListItemSelect } from "@/common/types/job-list-item.type";
 import {
   jobWithEmployerEmailInclude,
   type JobWithEmployerEmail,
@@ -43,21 +39,20 @@ export class ApplicationsRepository {
     skip: number,
     take: number,
   ): Promise<[ApplicationWithJob[], number]> {
-    const [rows, total] = await Promise.all([
+    // The embedded job only feeds the dashboard's application rows (title,
+    // country, company name) — the shared narrow job-card select, not every Job
+    // column; previously the full row (description/requirements/responsibilities
+    // included) was fetched and serialized per application.
+    const [applications, total] = await Promise.all([
       this.prisma.application.findMany({
         where: { talentId },
         orderBy: { appliedAt: "desc" },
         skip,
         take,
-        include: { job: { include: jobWithRelationsInclude } },
-      }) as Promise<(Application & { job: JobWithRelations })[]>,
+        include: { job: { select: jobListItemSelect } },
+      }),
       this.prisma.application.count({ where: { talentId } }),
     ]);
-
-    const applications = rows.map((row) => ({
-      ...row,
-      job: omitInternalJobFields(row.job),
-    }));
     return [applications, total];
   }
 

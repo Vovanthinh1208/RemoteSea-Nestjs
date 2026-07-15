@@ -2,7 +2,6 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   JOB_TYPE_VALUES,
   EXPERIENCE_LEVEL_VALUES,
-  JOB_STATUS_VALUES,
   APPLICATION_STATUS_VALUES,
 } from "@/common/constants/enum-values.constants";
 
@@ -38,14 +37,8 @@ class JobEmployerSummaryDto {
   @ApiProperty({ example: "Acme Corp" })
   companyName!: string;
 
-  @ApiPropertyOptional({
-    nullable: true,
-    example: "https://cdn.remotesea.com/logos/acme.png",
-  })
-  logoUrl!: string | null;
-
-  @ApiProperty({ example: "acme-corp" })
-  slug!: string;
+  @ApiProperty({ example: true })
+  isVerified!: boolean;
 }
 
 class JobSkillSummaryDto {
@@ -57,9 +50,6 @@ class JobSkillSummaryDto {
     },
   })
   skill!: { id: string; name: string; slug: string };
-
-  @ApiProperty({ example: true })
-  isRequired!: boolean;
 }
 
 class JobCategorySummaryDto {
@@ -73,15 +63,14 @@ class JobCategorySummaryDto {
   category!: { id: string; name: string; slug: string };
 }
 
+// The embedded job is the same narrow "job card" shape GET /jobs returns per
+// list item (see jobListItemSelect) — key fields sketched here for /docs.
 class EmbeddedJobDto {
   @ApiProperty({ example: "cjob1a2b0000ug0h9x1n1a2" })
   id!: string;
 
   @ApiProperty({ example: "Senior Backend Engineer" })
   title!: string;
-
-  @ApiProperty({ example: "senior-backend-engineer" })
-  slug!: string;
 
   @ApiProperty({ enum: JOB_TYPE_VALUES, example: "FULL_TIME" })
   jobType!: "FULL_TIME" | "PART_TIME" | "CONTRACT" | "FREELANCE";
@@ -95,17 +84,11 @@ class EmbeddedJobDto {
   @ApiPropertyOptional({ nullable: true, example: 130000 })
   salaryMax!: number | null;
 
-  @ApiProperty({ example: "USD" })
-  currency!: string;
-
   @ApiProperty({ example: true })
   isRemote!: boolean;
 
   @ApiPropertyOptional({ nullable: true, example: "Vietnam" })
   country!: string | null;
-
-  @ApiProperty({ enum: JOB_STATUS_VALUES, example: "ACTIVE" })
-  status!: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED";
 
   @ApiProperty({ type: JobEmployerSummaryDto })
   employer!: JobEmployerSummaryDto;

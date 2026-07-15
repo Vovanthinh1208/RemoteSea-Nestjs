@@ -7,6 +7,10 @@ import {
   type FacetRow,
 } from "./job-search.util";
 import { omitInternalJobFields } from "@/common/types/job-with-relations.type";
+import {
+  jobListItemSelect,
+  type JobListItem,
+} from "@/common/types/job-list-item.type";
 
 export type PublicJob = Omit<Job, "stripeSessionId" | "reviewNote">;
 
@@ -25,40 +29,6 @@ const jobDetailInclude = {
   categories: { include: { category: true } },
   skills: { include: { skill: true } },
 } satisfies Prisma.JobInclude;
-
-// Only the fields actually read by frontend consumers of this endpoint (JobCard,
-// plus RecommendedJobs' skill-based "why recommended" line) — the list previously
-// reused the full jobWithRelationsInclude (every Job scalar, including
-// description/requirements/benefits/stripeSessionId/reviewNote) for every card
-// on every page of results.
-const jobListItemSelect = {
-  id: true,
-  title: true,
-  jobType: true,
-  level: true,
-  salaryMin: true,
-  salaryMax: true,
-  isRemote: true,
-  timezone: true,
-  country: true,
-  isFeatured: true,
-  vnHireCount: true,
-  publishedAt: true,
-  createdAt: true,
-  employer: { select: { companyName: true, isVerified: true } },
-  categories: {
-    select: {
-      category: { select: { id: true, name: true, slug: true, icon: true } },
-    },
-  },
-  skills: {
-    select: { skill: { select: { id: true, name: true, slug: true } } },
-  },
-} satisfies Prisma.JobSelect;
-
-export type JobListItem = Prisma.JobGetPayload<{
-  select: typeof jobListItemSelect;
-}>;
 
 @Injectable()
 export class JobsRepository {

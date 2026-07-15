@@ -1,7 +1,7 @@
 import type { Application } from "@prisma/client";
-import type { PublicJobWithRelations } from "@/common/types/job-with-relations.type";
+import type { JobListItem } from "@/common/types/job-list-item.type";
 
-export type ApplicationWithJob = Application & { job: PublicJobWithRelations };
+export type ApplicationWithJob = Application & { job: JobListItem };
 
 export type CreateApplicationInput = {
   jobId: string;

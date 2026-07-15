@@ -2,11 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { SavedJob } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 import type { SavedJobWithJob } from "./interfaces";
-import {
-  jobWithRelationsInclude,
-  omitInternalJobFields,
-  type JobWithRelations,
-} from "@/common/types/job-with-relations.type";
+import { jobListItemSelect } from "@/common/types/job-list-item.type";
 
 @Injectable()
 export class SavedRepository {
@@ -17,21 +13,20 @@ export class SavedRepository {
     skip: number,
     take: number,
   ): Promise<[SavedJobWithJob[], number]> {
-    const [rows, total] = await Promise.all([
+    // The embedded job is only ever rendered as a card (same consumer as the
+    // /jobs list), so this selects the shared narrow job-card shape instead of
+    // every Job column — previously the full row (description/requirements/
+    // responsibilities included) was fetched and serialized per saved job.
+    const [savedJobs, total] = await Promise.all([
       this.prisma.savedJob.findMany({
         where: { userId },
         orderBy: { createdAt: "desc" },
         skip,
         take,
-        include: { job: { include: jobWithRelationsInclude } },
-      }) as Promise<(SavedJob & { job: JobWithRelations })[]>,
+        include: { job: { select: jobListItemSelect } },
+      }),
       this.prisma.savedJob.count({ where: { userId } }),
     ]);
-
-    const savedJobs = rows.map((row) => ({
-      ...row,
-      job: omitInternalJobFields(row.job),
-    }));
     return [savedJobs, total];
   }
 

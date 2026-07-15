@@ -15,22 +15,16 @@ export type JobWithRelations = Job & {
   categories: Array<{ category: Category }>;
 };
 
+// Full job row + relations — only for alert emails now (email content needs the
+// complete listing); list endpoints that embed jobs (saved, applications) use
+// the narrow jobListItemSelect in job-list-item.type.ts instead.
 export const jobWithRelationsInclude = {
-  // isVerified drives the "Verified" badge on every card that renders this
-  // include (saved jobs, applications) — previously missing here even though
-  // the /jobs list and detail selects both include it, so the badge silently
-  // never rendered for saved-job/application job cards.
   employer: {
     select: { companyName: true, logoUrl: true, slug: true, isVerified: true },
   },
   categories: { include: { category: true } },
   skills: { include: { skill: true } },
 } satisfies Prisma.JobInclude;
-
-export type PublicJobWithRelations = Omit<
-  JobWithRelations,
-  "stripeSessionId" | "reviewNote"
->;
 
 // stripeSessionId (a Stripe payment identifier) and reviewNote (the admin's
 // internal rejection note) are never meant to reach any client response — Prisma's

@@ -1,5 +1,4 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { JOB_STATUS_VALUES } from "@/common/constants/enum-values.constants";
 
 /**
  * Swagger-only request/response shapes for the Saved Jobs module.
@@ -13,10 +12,12 @@ class SavedJobEmployerSummaryDto {
   @ApiProperty({ example: "Acme Corp" })
   companyName!: string;
 
-  @ApiProperty({ example: "acme-corp" })
-  slug!: string;
+  @ApiProperty({ example: true })
+  isVerified!: boolean;
 }
 
+// The embedded job is the same narrow "job card" shape GET /jobs returns per
+// list item (see jobListItemSelect) — key fields sketched here for /docs.
 class SavedJobEmbeddedJobDto {
   @ApiProperty({ example: "cjob1a2b0000ug0h9x1n1a2" })
   id!: string;
@@ -24,11 +25,17 @@ class SavedJobEmbeddedJobDto {
   @ApiProperty({ example: "Senior Backend Engineer" })
   title!: string;
 
-  @ApiProperty({ example: "senior-backend-engineer" })
-  slug!: string;
+  @ApiProperty({ example: 2000, nullable: true })
+  salaryMin!: number | null;
 
-  @ApiProperty({ enum: JOB_STATUS_VALUES, example: "ACTIVE" })
-  status!: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED";
+  @ApiProperty({ example: 4000, nullable: true })
+  salaryMax!: number | null;
+
+  @ApiProperty({ example: true })
+  isRemote!: boolean;
+
+  @ApiProperty({ example: "VN", nullable: true })
+  country!: string | null;
 
   @ApiProperty({ type: SavedJobEmployerSummaryDto })
   employer!: SavedJobEmployerSummaryDto;
