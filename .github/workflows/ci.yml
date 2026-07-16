@@ -25,20 +25,24 @@ jobs:
       - name: Generate Prisma Client
         run: npm run db:generate
 
+      # --check, not --write: `npm run format` rewrites files in the throwaway
+      # CI workspace, so a formatting violation could never actually fail CI.
       - name: Check formatting
-        run: npm run format
+        run: npm run format:check
 
       - name: Lint
         run: npm run lint
 
       - name: Dependency Cruiser
-        run: npm run depcruise -- --config .dependency-cruiser.js src
+        run: npm run depcruise
 
       - name: TypeScript Type Check
         run: npx tsc --noEmit
 
+      # No --passWithNoTests: the suite has 100+ tests, and the flag would let
+      # a jest config regression that matches zero tests pass silently.
       - name: Run Tests
-        run: npm test -- --passWithNoTests
+        run: npm test
 
       - name: Build
         run: npm run build
