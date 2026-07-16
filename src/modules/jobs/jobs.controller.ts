@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -41,8 +42,17 @@ export class JobsController {
     private readonly rateLimitService: RateLimitService,
   ) {}
 
+  // Public, identical for every caller, no side effects — lets a CDN/proxy
+  // absorb repeats for 60s (matching the facets cache TTL) while browsers
+  // still revalidate (max-age=0; client staleness is React Query's job).
+  // The job *detail* route deliberately has no cache header: it increments
+  // viewCount per request, and a CDN hit would silently skip that.
   @ApiListJobs()
   @Get()
+  @Header(
+    "Cache-Control",
+    "public, max-age=0, s-maxage=60, stale-while-revalidate=30",
+  )
   list(@Query(new ZodValidationPipe(listJobsSchema)) query: ListJobsDto) {
     return this.jobsService.list(query);
   }
