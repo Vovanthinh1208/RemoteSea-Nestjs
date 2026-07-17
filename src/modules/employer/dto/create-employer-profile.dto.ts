@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { httpUrlSchema } from "@/common/validation/http-url.schema";
 
 export const createEmployerProfileSchema = z.object({
   companyName: z.string().min(2).max(100),
-  websiteUrl: z.string().url().optional(),
+  websiteUrl: httpUrlSchema.optional(),
   description: z.string().max(2000).optional(),
   industry: z.string().max(100).optional(),
   size: z.string().max(50).optional(),
