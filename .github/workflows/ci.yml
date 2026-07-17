@@ -5,9 +5,20 @@ on:
     branches: [main]
   pull_request:
 
+# Least privilege: CI only reads the repo.
+permissions:
+  contents: read
+
+# A newer push to the same branch/PR cancels the in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    # Guards against a hung step holding a runner for the 6-hour default.
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
