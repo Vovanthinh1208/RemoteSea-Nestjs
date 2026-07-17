@@ -56,6 +56,14 @@ export class ApplicationsController {
     return this.applicationsService.getStatusCounts(user.id);
   }
 
+  // Membership set for "already applied?" checks (ApplyButton) — the twin of
+  // GET /saved/ids. Static segment, no :id routes here to collide with.
+  @Get("ids")
+  async listIds(@CurrentUser() user: AuthenticatedUser) {
+    const jobIds = await this.applicationsService.getAppliedJobIds(user.id);
+    return { jobIds };
+  }
+
   @ApiApply()
   @Post()
   @HttpCode(HttpStatus.CREATED)

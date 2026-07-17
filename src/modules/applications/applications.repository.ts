@@ -64,6 +64,16 @@ export class ApplicationsRepository {
     return [applications, total];
   }
 
+  /** Membership set (applied job ids) for client-side "already applied?" checks —
+   * the ApplyButton twin of saved's findJobIdsForUser: no pagination, ids only. */
+  async findJobIdsByTalentId(talentId: string): Promise<string[]> {
+    const rows = await this.prisma.application.findMany({
+      where: { talentId },
+      select: { jobId: true },
+    });
+    return rows.map((row) => row.jobId);
+  }
+
   /** DB-side status breakdown for dashboard stats — avoids shipping every row to the
    * client just to count them (see TalentDashboard's application-status tiles). */
   getStatusCountsByTalentId(

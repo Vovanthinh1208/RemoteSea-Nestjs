@@ -59,6 +59,13 @@ export class ApplicationsService {
     return buildApplicationStatusCounts(rows);
   }
 
+  async getAppliedJobIds(userId: string): Promise<string[]> {
+    const talent =
+      await this.applicationsRepository.findTalentIdByUserId(userId);
+    if (!talent) return [];
+    return this.applicationsRepository.findJobIdsByTalentId(talent.id);
+  }
+
   async apply(userId: string, dto: ApplyDto): Promise<OwnApplication> {
     const talent =
       await this.applicationsRepository.findTalentWithUserName(userId);
