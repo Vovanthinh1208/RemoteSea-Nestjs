@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { Resend } from "resend";
 import type { EnvConfig } from "@/core/config/env.validation";
 import type { JobWithRelations } from "@/common/types/job-with-relations.type";
+import { escapeHtml } from "@/common/utils/escape-html";
 
 /**
  * Ported from src/lib/email.ts. The original Next.js app renders React Email
@@ -59,7 +60,7 @@ export class EmailService {
     await this.send(
       to,
       "Welcome to RemoteSEA",
-      `<p>Hi ${name},</p><p>Welcome to RemoteSEA! Start exploring remote jobs at <a href="${this.appUrl}">${this.appUrl}</a>.</p>`,
+      `<p>Hi ${escapeHtml(name)},</p><p>Welcome to RemoteSEA! Start exploring remote jobs at <a href="${this.appUrl}">${this.appUrl}</a>.</p>`,
     );
   }
 
@@ -80,7 +81,7 @@ export class EmailService {
     await this.send(
       to,
       "Your job is live",
-      `<p>Your listing "${jobTitle}" is now live: <a href="${this.appUrl}/jobs/${jobSlug}">${this.appUrl}/jobs/${jobSlug}</a></p>`,
+      `<p>Your listing "${escapeHtml(jobTitle)}" is now live: <a href="${this.appUrl}/jobs/${jobSlug}">${this.appUrl}/jobs/${jobSlug}</a></p>`,
     );
   }
 
@@ -92,7 +93,7 @@ export class EmailService {
     await this.send(
       to,
       "Changes needed for your listing",
-      `<p>Your listing "${jobTitle}" needs changes before it can go live.</p><p>${note}</p>`,
+      `<p>Your listing "${escapeHtml(jobTitle)}" needs changes before it can go live.</p><p>${escapeHtml(note)}</p>`,
     );
   }
 
@@ -100,7 +101,7 @@ export class EmailService {
     await this.send(
       to,
       "Payment received — job under review",
-      `<p>We received payment for "${jobTitle}". It's now under review and will go live once approved.</p>`,
+      `<p>We received payment for "${escapeHtml(jobTitle)}". It's now under review and will go live once approved.</p>`,
     );
   }
 
@@ -112,7 +113,7 @@ export class EmailService {
     await this.send(
       to,
       `New application: ${talentName}`,
-      `<p>${talentName} applied to "${jobTitle}". Log in to review the application.</p>`,
+      `<p>${escapeHtml(talentName)} applied to "${escapeHtml(jobTitle)}". Log in to review the application.</p>`,
     );
   }
 
@@ -120,7 +121,7 @@ export class EmailService {
     const rows = jobs
       .map(
         (job) =>
-          `<li><a href="${this.appUrl}/jobs/${job.slug}">${job.title}</a></li>`,
+          `<li><a href="${this.appUrl}/jobs/${job.slug}">${escapeHtml(job.title)}</a></li>`,
       )
       .join("");
     await this.send(
