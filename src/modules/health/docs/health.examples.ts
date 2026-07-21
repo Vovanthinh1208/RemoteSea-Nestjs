@@ -7,3 +7,5 @@ export const HealthOkExample = {
 };
 
 export const HealthErrorExample = { status: "error", db: "disconnected" };
+
+export const HealthLiveExample = { status: "ok" };

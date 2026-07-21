@@ -5,8 +5,10 @@ import {
   Get,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from "@nestjs/common";
+import type { Request } from "express";
 import { AlertsService } from "./alerts.service";
 import { createAlertSchema, type CreateAlertDto } from "./dto/create-alert.dto";
 import { updateAlertSchema, type UpdateAlertDto } from "./dto/update-alert.dto";
@@ -50,6 +52,7 @@ export class AlertsController {
   @Post()
   @UseGuards(JwtAuthGuard)
   async create(
+    @Req() req: Request,
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(createAlertSchema)) body: CreateAlertDto,
   ) {
@@ -57,6 +60,7 @@ export class AlertsController {
       `alert-create:${user.id}`,
       RATE_LIMITS.CREATE.limit,
       RATE_LIMITS.CREATE.windowMs,
+      req,
     );
     return this.alertsService.create(user.id, body);
   }
@@ -65,6 +69,7 @@ export class AlertsController {
   @Patch(":id")
   @UseGuards(JwtAuthGuard, AlertOwnershipGuard)
   async update(
+    @Req() req: Request,
     @CurrentUser() user: AuthenticatedUser,
     @CurrentResource() alert: AlertOwnerOnly,
     @Body(new ZodValidationPipe(updateAlertSchema)) body: UpdateAlertDto,
@@ -73,6 +78,7 @@ export class AlertsController {
       `alert-update:${user.id}`,
       RATE_LIMITS.UPDATE.limit,
       RATE_LIMITS.UPDATE.windowMs,
+      req,
     );
     return this.alertsService.update(alert.id, body);
   }
@@ -81,6 +87,7 @@ export class AlertsController {
   @Delete(":id")
   @UseGuards(JwtAuthGuard, AlertOwnershipGuard)
   async remove(
+    @Req() req: Request,
     @CurrentUser() user: AuthenticatedUser,
     @CurrentResource() alert: AlertOwnerOnly,
   ) {
@@ -88,6 +95,7 @@ export class AlertsController {
       `alert-delete:${user.id}`,
       RATE_LIMITS.DELETE.limit,
       RATE_LIMITS.DELETE.windowMs,
+      req,
     );
     return this.alertsService.remove(alert.id);
   }

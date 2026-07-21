@@ -32,4 +32,18 @@ describe("withPoolParams", () => {
     expect(result).toContain("connection_limit=10");
     expect(result).not.toContain("connection_limit=99");
   });
+
+  it("appends statement_timeout on its own", () => {
+    const result = withPoolParams(BASE_URL, undefined, undefined, 5);
+    expect(result).toContain("statement_timeout=5");
+    expect(result).not.toContain("connection_limit");
+    expect(result).not.toContain("pool_timeout=");
+  });
+
+  it("appends all three knobs together", () => {
+    const result = withPoolParams(BASE_URL, 5, 30, 10);
+    expect(result).toContain("connection_limit=5");
+    expect(result).toContain("pool_timeout=30");
+    expect(result).toContain("statement_timeout=10");
+  });
 });

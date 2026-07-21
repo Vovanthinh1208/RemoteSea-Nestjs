@@ -151,36 +151,60 @@ const matchesTz = (row: FacetRow, key: string): boolean => {
   return row.country === TZ_COUNTRY[key];
 };
 
+// jobType/seniority buckets are mutually exclusive (every JobType/
+// ExperienceLevel enum value maps to exactly one FILTER_OPTIONS label), so a
+// reverse lookup turns "which bucket does this row belong to" into one Map
+// read instead of testing every label against every row.
+const buildReverseLookup = <TValue extends string>(
+  labelToValues: Record<string, TValue[]>,
+): Map<TValue, string> => {
+  const lookup = new Map<TValue, string>();
+  for (const [label, values] of Object.entries(labelToValues)) {
+    for (const value of values) lookup.set(value, label);
+  }
+  return lookup;
+};
+
+const JOBTYPE_LABEL_BY_ENUM = buildReverseLookup(JOBTYPE_TO_ENUMS);
+const SENIORITY_LABEL_BY_LEVEL = buildReverseLookup(SENIORITY_TO_LEVELS);
+const TRACKED_CATEGORY_NAMES = new Set(FILTER_OPTIONS.category);
+
+const zeroCounts = (keys: readonly string[]): Record<string, number> =>
+  Object.fromEntries(keys.map((key) => [key, 0]));
+
+/**
+ * Single pass over `rows` instead of 17 separate `.filter().length` calls (4
+ * jobType + 3 seniority + 5 timezone + 5 category) — each of those walked the
+ * full active-jobs set on its own, so building the same facets object used to
+ * cost O(17 × rows.length) plus 17 throwaway intermediate arrays. Timezone and
+ * category buckets aren't mutually exclusive (a row can match more than one
+ * timezone key, or belong to more than one tracked category), so those still
+ * check each row individually — just within this one pass, not their own.
+ */
 export const computeFacets = (rows: FacetRow[]): Facets => {
   const facets: Facets = {
-    jobType: {},
-    timezone: {},
-    seniority: {},
-    category: {},
+    jobType: zeroCounts(FILTER_OPTIONS.jobType),
+    timezone: zeroCounts(FILTER_OPTIONS.timezone),
+    seniority: zeroCounts(FILTER_OPTIONS.seniority),
+    category: zeroCounts(FILTER_OPTIONS.category),
   };
 
-  for (const label of FILTER_OPTIONS.jobType) {
-    const enums = JOBTYPE_TO_ENUMS[label] ?? [];
-    facets.jobType[label] = rows.filter((r) =>
-      enums.includes(r.jobType),
-    ).length;
-  }
+  for (const row of rows) {
+    const jobTypeLabel = JOBTYPE_LABEL_BY_ENUM.get(row.jobType);
+    if (jobTypeLabel !== undefined) facets.jobType[jobTypeLabel] += 1;
 
-  for (const label of FILTER_OPTIONS.seniority) {
-    const levels = SENIORITY_TO_LEVELS[label] ?? [];
-    facets.seniority[label] = rows.filter((r) =>
-      levels.includes(r.level),
-    ).length;
-  }
+    const seniorityLabel = SENIORITY_LABEL_BY_LEVEL.get(row.level);
+    if (seniorityLabel !== undefined) facets.seniority[seniorityLabel] += 1;
 
-  for (const key of FILTER_OPTIONS.timezone) {
-    facets.timezone[key] = rows.filter((r) => matchesTz(r, key)).length;
-  }
+    for (const key of FILTER_OPTIONS.timezone) {
+      if (matchesTz(row, key)) facets.timezone[key] += 1;
+    }
 
-  for (const name of FILTER_OPTIONS.category) {
-    facets.category[name] = rows.filter((r) =>
-      r.categories.some((c) => c.category.name === name),
-    ).length;
+    for (const { category } of row.categories) {
+      if (TRACKED_CATEGORY_NAMES.has(category.name)) {
+        facets.category[category.name] += 1;
+      }
+    }
   }
 
   return facets;

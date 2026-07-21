@@ -37,24 +37,34 @@ export class BillingService {
 
     const appUrl = this.config.get("FRONTEND_URL", { infer: true });
 
-    const checkout = await this.stripe.checkout.sessions.create({
-      mode: "payment",
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: "usd",
-            unit_amount: PLAN_PRICES[job.planType],
-            product_data: {
-              name: `${PLAN_LABELS[job.planType]} — ${job.title}`,
+    const checkout = await this.stripe.checkout.sessions.create(
+      {
+        mode: "payment",
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: "usd",
+              unit_amount: PLAN_PRICES[job.planType],
+              product_data: {
+                name: `${PLAN_LABELS[job.planType]} — ${job.title}`,
+              },
             },
           },
-        },
-      ],
-      success_url: `${appUrl}/post-job/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/post-job?job=${job.id}`,
-      metadata: { jobId: job.id, userId },
-    });
+        ],
+        success_url: `${appUrl}/post-job/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${appUrl}/post-job?job=${job.id}`,
+        metadata: { jobId: job.id, userId },
+      },
+      // The client's own maxNetworkRetries only dedupes this SDK call's own
+      // internal retries — it does nothing for a genuine double-submit
+      // (double-click, a client-side retry after a perceived timeout). Since
+      // checkout-session creation never flips job.status off DRAFT, two
+      // concurrent requests both pass the guard above and would otherwise
+      // create two separate Stripe sessions for the same job. Keying on
+      // job.id makes a duplicate request return the original session instead.
+      { idempotencyKey: `checkout:${job.id}` },
+    );
 
     await this.billingRepository.setStripeSessionId(job.id, checkout.id);
 

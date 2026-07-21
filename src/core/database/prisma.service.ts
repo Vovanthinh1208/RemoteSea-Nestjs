@@ -32,6 +32,7 @@ export class PrismaService
             config.get("DATABASE_URL", { infer: true }),
             config.get("DATABASE_CONNECTION_LIMIT", { infer: true }),
             config.get("DATABASE_POOL_TIMEOUT", { infer: true }),
+            config.get("DATABASE_STATEMENT_TIMEOUT", { infer: true }),
           ),
         },
       },

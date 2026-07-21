@@ -18,6 +18,11 @@ const envSchema = z.object({
   // exact Prisma defaults, same behavior as before these existed.
   DATABASE_CONNECTION_LIMIT: z.coerce.number().int().min(1).optional(),
   DATABASE_POOL_TIMEOUT: z.coerce.number().int().min(0).optional(),
+  // Seconds before Postgres cancels a running statement. Unset = no timeout
+  // (Prisma/Postgres default), same as today. A lock-contended or runaway
+  // query with no timeout holds its pool connection indefinitely — under load
+  // that queues every other request behind it just to acquire a connection.
+  DATABASE_STATEMENT_TIMEOUT: z.coerce.number().int().min(1).optional(),
   AUTH_SECRET: z.string().min(32, "AUTH_SECRET must be at least 32 characters"),
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
   JWT_EXPIRES_IN: z.string().default("30d"),

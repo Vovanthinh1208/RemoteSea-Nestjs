@@ -32,3 +32,44 @@ describe("AlertsService.remove", () => {
     expect(deleteAlert).toHaveBeenCalledWith("alert-1");
   });
 });
+
+describe("AlertsService.dispatchCron", () => {
+  it("skips a run that starts while a previous one on this instance is still in progress", async () => {
+    let resolveFindActive!: (alerts: []) => void;
+    const findActiveAlerts = jest.fn(
+      () =>
+        new Promise<[]>((resolve) => {
+          resolveFindActive = resolve;
+        }),
+    );
+    const service = new AlertsService(
+      { findActiveAlerts } as unknown as AlertsRepository,
+      {} as EmailService,
+    );
+
+    // Starts, synchronously marks itself in-progress, then awaits findActiveAlerts.
+    const first = service.dispatchCron();
+    // Starts while the flag is still set — should short-circuit without
+    // touching the repository at all.
+    const secondResult = await service.dispatchCron();
+
+    expect(secondResult).toEqual({ processed: 0, sent: 0 });
+    expect(findActiveAlerts).toHaveBeenCalledTimes(1);
+
+    resolveFindActive([]);
+    await expect(first).resolves.toEqual({ processed: 0, sent: 0 });
+  });
+
+  it("allows a new run once the previous one has finished", async () => {
+    const findActiveAlerts = jest.fn().mockResolvedValue([]);
+    const service = new AlertsService(
+      { findActiveAlerts } as unknown as AlertsRepository,
+      {} as EmailService,
+    );
+
+    await service.dispatchCron();
+    await service.dispatchCron();
+
+    expect(findActiveAlerts).toHaveBeenCalledTimes(2);
+  });
+});

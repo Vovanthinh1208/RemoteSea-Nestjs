@@ -10,6 +10,15 @@ import { EmailService } from "@/common/services/email.service";
 @Injectable()
 export class AlertsService {
   private readonly logger = new Logger(AlertsService.name);
+  // Guards against two dispatchCron() runs overlapping on this instance — e.g.
+  // the external scheduler's own HTTP timeout is shorter than a full run and
+  // it retries. Per-alert double-send is already prevented by claimForSend's
+  // atomic conditional update regardless, so this isn't a correctness fix —
+  // it just stops a slow run from doubling findActiveAlerts()/job-matching
+  // query load on the DB at exactly the moment it's already running slow.
+  // Process-local only: it does nothing for two *different* replicas racing,
+  // same scope as this app's in-memory rate limiter and cache.
+  private dispatchInProgress = false;
 
   constructor(
     private readonly alertsRepository: AlertsRepository,
@@ -36,22 +45,34 @@ export class AlertsService {
   }
 
   async dispatchCron(): Promise<CronDispatchResult> {
-    const now = Date.now();
-    const alerts = await this.alertsRepository.findActiveAlerts();
-
-    let sent = 0;
-
-    // Processed in bounded-size chunks (not all at once) so a large batch doesn't
-    // fire hundreds of simultaneous outbound email requests in one burst.
-    for (let i = 0; i < alerts.length; i += SEND_CONCURRENCY) {
-      const chunk = alerts.slice(i, i + SEND_CONCURRENCY);
-      const results = await Promise.all(
-        chunk.map((alert) => this.dispatchOne(alert, now)),
+    if (this.dispatchInProgress) {
+      this.logger.warn(
+        "Skipped dispatchCron: a previous run on this instance is still in progress.",
       );
-      sent += results.filter(Boolean).length;
+      return { processed: 0, sent: 0 };
     }
 
-    return { processed: alerts.length, sent };
+    this.dispatchInProgress = true;
+    try {
+      const now = Date.now();
+      const alerts = await this.alertsRepository.findActiveAlerts();
+
+      let sent = 0;
+
+      // Processed in bounded-size chunks (not all at once) so a large batch doesn't
+      // fire hundreds of simultaneous outbound email requests in one burst.
+      for (let i = 0; i < alerts.length; i += SEND_CONCURRENCY) {
+        const chunk = alerts.slice(i, i + SEND_CONCURRENCY);
+        const results = await Promise.all(
+          chunk.map((alert) => this.dispatchOne(alert, now)),
+        );
+        sent += results.filter(Boolean).length;
+      }
+
+      return { processed: alerts.length, sent };
+    } finally {
+      this.dispatchInProgress = false;
+    }
   }
 
   private async dispatchOne(

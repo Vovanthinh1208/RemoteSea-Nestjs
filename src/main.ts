@@ -1,25 +1,47 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
+import type { RawBodyRequest } from "@nestjs/common";
+import type { Request } from "express";
 import { ConfigService } from "@nestjs/config";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import helmet from "helmet";
 import compression from "compression";
+import express from "express";
 import { AppModule } from "./app.module";
 import { GlobalExceptionFilter } from "@/core/filters/global-exception.filter";
 import { LoggingInterceptor } from "@/core/interceptors/logging.interceptor";
+import { RateLimitHeadersInterceptor } from "@/core/interceptors/rate-limit-headers.interceptor";
 import { requestIdMiddleware } from "@/core/middleware/request-id.middleware";
 import type { EnvConfig } from "@/core/config/env.validation";
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    rawBody: true,
-  });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.enableShutdownHooks();
 
   // Must run before every other middleware below: LoggingInterceptor and any
   // handler/service that wants to tag its own log lines all read req.id.
   app.use(requestIdMiddleware);
+
+  // Only POST /billing/webhook needs the raw request bytes (Stripe's signature
+  // check requires the exact original body). This used to be `rawBody: true`
+  // on NestFactory.create, which attaches req.rawBody on every request app-wide
+  // — every job/application/profile mutation carried an extra Buffer copy of
+  // its own body for a field only this one route ever reads. Registered here,
+  // before Nest's own global body-parser is set up inside app.listen() below,
+  // so it claims this path's body first (body-parser's req._body marker then
+  // makes Nest's json() parser skip it for this route, unaffected everywhere
+  // else). verify mirrors Nest's own rawBody option exactly, so
+  // billing.controller.ts's req.rawBody read needs no change.
+  app.use(
+    "/billing/webhook",
+    express.raw({
+      type: "application/json",
+      verify: (req: RawBodyRequest<Request>, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
 
   const config = app.get(ConfigService<EnvConfig, true>);
 
@@ -62,11 +84,14 @@ async function bootstrap(): Promise<void> {
   // job list and job-detail responses carry full description/requirements text on
   // every row and were previously going out uncompressed. Applied before the
   // Swagger setup below is fine — it only affects response bodies, not the raw
-  // request body the Stripe webhook route needs (that's { rawBody: true } above,
-  // a request-parsing concern, unrelated to response compression).
+  // request body the Stripe webhook route needs (that's the scoped express.raw()
+  // above, a request-parsing concern, unrelated to response compression).
   app.use(compression());
   app.useGlobalFilters(new GlobalExceptionFilter());
-  app.useGlobalInterceptors(new LoggingInterceptor());
+  app.useGlobalInterceptors(
+    new LoggingInterceptor(),
+    new RateLimitHeadersInterceptor(),
+  );
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle("RemoteSEA API")

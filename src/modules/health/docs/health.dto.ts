@@ -27,3 +27,8 @@ export class HealthErrorResponseDto {
   @ApiProperty({ enum: ["disconnected"], example: "disconnected" })
   db!: "disconnected";
 }
+
+export class HealthLiveResponseDto {
+  @ApiProperty({ enum: ["ok"], example: "ok" })
+  status!: "ok";
+}

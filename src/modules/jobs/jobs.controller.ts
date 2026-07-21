@@ -9,8 +9,10 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from "@nestjs/common";
+import type { Request } from "express";
 import { JobsService } from "./jobs.service";
 import { listJobsSchema, type ListJobsDto } from "./dto/list-jobs.dto";
 import { createJobSchema, type CreateJobDto } from "./dto/create-job.dto";
@@ -62,6 +64,7 @@ export class JobsController {
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
   create(
+    @Req() req: Request,
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(createJobSchema)) body: CreateJobDto,
   ) {
@@ -69,6 +72,7 @@ export class JobsController {
       `job-create:${user.id}`,
       RATE_LIMITS.CREATE.limit,
       RATE_LIMITS.CREATE.windowMs,
+      req,
     );
     return this.jobsService.create(user.id, body);
   }
@@ -83,6 +87,7 @@ export class JobsController {
   @Patch(":id")
   @UseGuards(JwtAuthGuard, JobOwnershipGuard)
   update(
+    @Req() req: Request,
     @CurrentResource() job: JobWithOwner,
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(updateJobSchema)) body: UpdateJobDto,
@@ -91,6 +96,7 @@ export class JobsController {
       `job-update:${user.id}`,
       RATE_LIMITS.UPDATE.limit,
       RATE_LIMITS.UPDATE.windowMs,
+      req,
     );
     return this.jobsService.update(job, user, body);
   }

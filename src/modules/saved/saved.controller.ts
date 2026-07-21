@@ -7,8 +7,10 @@ import {
   Param,
   Put,
   Query,
+  Req,
   UseGuards,
 } from "@nestjs/common";
+import type { Request } from "express";
 import { SavedService } from "./saved.service";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
@@ -54,11 +56,16 @@ export class SavedController {
   @ApiSaveJob()
   @Put(":jobId")
   @HttpCode(HttpStatus.OK)
-  save(@CurrentUser() user: AuthenticatedUser, @Param("jobId") jobId: string) {
+  save(
+    @Req() req: Request,
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("jobId") jobId: string,
+  ) {
     this.rateLimitService.enforce(
       `saved-toggle:${user.id}`,
       RATE_LIMITS.TOGGLE.limit,
       RATE_LIMITS.TOGGLE.windowMs,
+      req,
     );
     return this.savedService.save(user.id, jobId);
   }
@@ -67,6 +74,7 @@ export class SavedController {
   @Delete(":jobId")
   @HttpCode(HttpStatus.OK)
   unsave(
+    @Req() req: Request,
     @CurrentUser() user: AuthenticatedUser,
     @Param("jobId") jobId: string,
   ) {
@@ -74,6 +82,7 @@ export class SavedController {
       `saved-toggle:${user.id}`,
       RATE_LIMITS.TOGGLE.limit,
       RATE_LIMITS.TOGGLE.windowMs,
+      req,
     );
     return this.savedService.unsave(user.id, jobId);
   }

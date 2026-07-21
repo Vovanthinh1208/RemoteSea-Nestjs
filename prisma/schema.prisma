@@ -276,6 +276,11 @@ model JobCategory {
   category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@id([jobId, categoryId])
+  // The composite PK is ordered (jobId, categoryId), so it doesn't serve a
+  // lookup by categoryId alone efficiently — SalaryRepository walks
+  // Category -> jobs (filtering job_categories by categoryId) to compute
+  // salary benchmarks, which needed exactly this index.
+  @@index([categoryId])
   @@map("job_categories")
 }
 

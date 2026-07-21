@@ -1,3 +1,4 @@
+import type { Request } from "express";
 import { RateLimitService } from "./rate-limit.service";
 import { TooManyRequestsApiException } from "@/common/exceptions/api.exception";
 
@@ -50,5 +51,23 @@ describe("RateLimitService.enforce", () => {
     expect(() => service.enforce("key", 1, 60_000)).toThrow(
       TooManyRequestsApiException,
     );
+  });
+
+  it("stashes { limit, remaining } on the request when one is passed", () => {
+    const service = new RateLimitService();
+    const request = {} as Request;
+    service.enforce("key", 5, 60_000, request);
+    expect(request.rateLimitInfo).toEqual({ limit: 5, remaining: 4 });
+  });
+
+  it("does not touch the request when the limit is exceeded", () => {
+    const service = new RateLimitService();
+    const request = {} as Request;
+    service.enforce("key", 1, 60_000, request);
+    expect(() => service.enforce("key", 1, 60_000, request)).toThrow(
+      TooManyRequestsApiException,
+    );
+    // Still reflects the last successful check, not the rejected one.
+    expect(request.rateLimitInfo).toEqual({ limit: 1, remaining: 0 });
   });
 });

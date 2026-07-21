@@ -30,6 +30,7 @@ export class BillingController {
   @Post("checkout")
   @UseGuards(JwtAuthGuard, JobPayerOwnershipGuard)
   async checkout(
+    @Req() req: Request,
     @CurrentUser() user: AuthenticatedUser,
     @CurrentResource() job: JobPayer,
     @Body(new ZodValidationPipe(checkoutSchema)) _body: CheckoutDto,
@@ -38,6 +39,7 @@ export class BillingController {
       `checkout:${user.id}`,
       RATE_LIMITS.CHECKOUT.limit,
       RATE_LIMITS.CHECKOUT.windowMs,
+      req,
     );
     return this.billingService.createCheckoutSession(job, user.id);
   }

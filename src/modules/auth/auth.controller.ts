@@ -72,6 +72,7 @@ export class AuthController {
       `register:${clientIp(req)}`,
       RATE_LIMITS.REGISTER.limit,
       RATE_LIMITS.REGISTER.windowMs,
+      req,
     );
     return this.authService.register(body);
   }
@@ -87,6 +88,7 @@ export class AuthController {
       `login-ip:${clientIp(req)}`,
       RATE_LIMITS.LOGIN.limit,
       RATE_LIMITS.LOGIN.windowMs,
+      req,
     );
     // body.email is already normalized by loginSchema (emailSchema), so this and the
     // actual auth lookup in validateCredentials are guaranteed to agree on identity.
@@ -94,6 +96,7 @@ export class AuthController {
       `login-email:${body.email}`,
       RATE_LIMITS.LOGIN.limit,
       RATE_LIMITS.LOGIN.windowMs,
+      req,
     );
 
     const user = await this.authService.validateCredentials(
@@ -178,6 +181,7 @@ export class AuthController {
       `forgot:${clientIp(req)}`,
       RATE_LIMITS.FORGOT_PASSWORD.limit,
       RATE_LIMITS.FORGOT_PASSWORD.windowMs,
+      req,
     );
     await this.authService.forgotPassword(body.email);
     return { message: "If that email exists, a reset link was sent." };
@@ -194,6 +198,7 @@ export class AuthController {
       `reset:${clientIp(req)}`,
       RATE_LIMITS.RESET_PASSWORD.limit,
       RATE_LIMITS.RESET_PASSWORD.windowMs,
+      req,
     );
     await this.authService.resetPassword(body.token, body.password);
     return { message: "Password updated" };

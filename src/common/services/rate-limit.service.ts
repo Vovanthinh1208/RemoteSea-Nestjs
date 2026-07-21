@@ -10,6 +10,15 @@ export type RateLimitResult = {
   retryAfter: number;
 };
 
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      rateLimitInfo?: { limit: number; remaining: number };
+    }
+  }
+}
+
 /**
  * In-memory fixed-window limiter, scoped per process. Correct for a single
  * instance; behind multiple replicas each holds its own counters, so the
@@ -51,11 +60,25 @@ export class RateLimitService {
     return { allowed: true, remaining: limit - bucket.count, retryAfter: 0 };
   }
 
-  /** Throws TooManyRequestsApiException if the bucket for `key` is exhausted. */
-  enforce(key: string, limit: number, windowMs: number): void {
+  /**
+   * Throws TooManyRequestsApiException if the bucket for `key` is exhausted.
+   * When `request` is passed, stashes { limit, remaining } on it so
+   * RateLimitHeadersInterceptor can surface X-RateLimit-* on a successful
+   * response — previously the only signal a client ever got was Retry-After,
+   * and only once it was already blocked.
+   */
+  enforce(
+    key: string,
+    limit: number,
+    windowMs: number,
+    request?: Request,
+  ): void {
     const result = this.check(key, limit, windowMs);
     if (!result.allowed) {
       throw new TooManyRequestsApiException(result.retryAfter);
+    }
+    if (request) {
+      request.rateLimitInfo = { limit, remaining: result.remaining };
     }
   }
 }
