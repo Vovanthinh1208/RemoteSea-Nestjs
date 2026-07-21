@@ -185,13 +185,13 @@ Redirects to Google's consent screen, then on callback looks up/creates the user
 
 - **Auth**: `GoogleAuthGuard` (`AuthGuard("google")`) · **Rate limit**: None
 - **Success response**: `302 Found` redirect (no JSON body)
-- **Errors**: a Google profile with no email throws a raw `Error` (not an `HttpException`) → falls through to `500 { "error": "Internal server error" }` instead of a clean `401`. Passport auth denial → default `401` with Nest's default body shape (`{ statusCode, message, error }`), not the app's usual `{ error }` shape.
+- **Errors**: `401 { "error": "Unauthorized", "code": "AUTHENTICATION_REQUIRED" }` for both a denied Passport auth and a Google profile with no verified email — `GoogleAuthGuard` overrides `handleRequest` (same as `JwtAuthGuard`) so every failure path returns the app's usual `{ error, code }` shape instead of falling through to Nest's default body or an unwrapped 500.
 
 ---
 
 ### GET /auth/github · GET /auth/github/callback
 
-Same flow as Google, via `GithubAuthGuard`. Only registered if `AUTH_GITHUB_ID`/`AUTH_GITHUB_SECRET` are set. Same error-shape caveats (missing public email → `500`).
+Same flow as Google, via `GithubAuthGuard`. Only registered if `AUTH_GITHUB_ID`/`AUTH_GITHUB_SECRET` are set. Same error handling (including the missing-verified-email case).
 
 ---
 

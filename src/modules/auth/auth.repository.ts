@@ -31,13 +31,6 @@ export class AuthRepository {
     });
   }
 
-  updateUserPassword(email: string, passwordHash: string): Promise<User> {
-    return this.prisma.user.update({
-      where: { email },
-      data: { passwordHash },
-    });
-  }
-
   async createVerificationToken(
     identifier: string,
     token: string,

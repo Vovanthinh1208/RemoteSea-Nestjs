@@ -86,7 +86,16 @@ export class BillingService {
         signature,
         webhookSecret,
       );
-    } catch {
+    } catch (error) {
+      // The client only ever gets the generic message below — never these
+      // details — but without logging them server-side, a misconfigured
+      // STRIPE_WEBHOOK_SECRET (every legitimate Stripe delivery fails this
+      // exact check) looks identical to a forged request: "jobs never go
+      // paid" with nothing in the logs to explain why.
+      this.logger.warn(
+        "Stripe webhook signature verification failed",
+        error instanceof Error ? error.message : error,
+      );
       throw new BadRequestApiException(
         "Invalid signature",
         ErrorCode.INVALID_WEBHOOK_SIGNATURE,
