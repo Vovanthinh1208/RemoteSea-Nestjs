@@ -1,10 +1,10 @@
 import { Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import type {
   Application,
   ApplicationStatus,
   EmployerProfile,
   JobStatus,
-  Prisma,
 } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 
@@ -132,19 +132,30 @@ export class EmployerRepository {
   async getEmployerJobStats(employerId: string): Promise<{
     totalApps: number;
     shortlisted: number;
-    offered: Array<{ appliedAt: Date; updatedAt: Date }>;
+    avgTimeToHireInDays: number;
   }> {
-    const [totalApps, shortlisted, offered] = await Promise.all([
+    const [totalApps, shortlisted, avgRows] = await Promise.all([
       this.prisma.application.count({ where: { job: { employerId } } }),
       this.prisma.application.count({
         where: { job: { employerId }, status: "SHORTLISTED" },
       }),
-      this.prisma.application.findMany({
-        where: { job: { employerId }, status: "OFFERED" },
-        select: { appliedAt: true, updatedAt: true },
-      }),
+      // Averages appliedAt -> updatedAt in SQL instead of pulling every OFFERED
+      // application row (unbounded per employer) into app memory just to
+      // average two dates in JS.
+      this.prisma.$queryRaw<Array<{ avgDays: number | null }>>(Prisma.sql`
+        SELECT AVG(EXTRACT(EPOCH FROM (a."updatedAt" - a."appliedAt")) / 86400.0)::float AS "avgDays"
+        FROM applications a
+        JOIN jobs j ON j.id = a."jobId"
+        WHERE j."employerId" = ${employerId} AND a.status = 'OFFERED'
+      `),
     ]);
-    return { totalApps, shortlisted, offered };
+
+    const avgDays = avgRows[0]?.avgDays ?? null;
+    return {
+      totalApps,
+      shortlisted,
+      avgTimeToHireInDays: avgDays === null ? 0 : Math.round(avgDays * 10) / 10,
+    };
   }
 
   findJobWithEmployerOwner(id: string) {

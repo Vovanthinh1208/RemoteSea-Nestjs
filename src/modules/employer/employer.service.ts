@@ -25,7 +25,6 @@ import {
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { ApplicationWithJobOwner } from "./guards/application-ownership.guard";
-import { computeAvgTimeToHireInDays } from "./employer.util";
 
 @Injectable()
 export class EmployerService {
@@ -156,17 +155,18 @@ export class EmployerService {
       );
     }
 
-    const [jobs, { totalApps, shortlisted, offered }] = await Promise.all([
-      this.employerRepository.findJobsByEmployer(employer.id, dto.status),
-      this.employerRepository.getEmployerJobStats(employer.id),
-    ]);
+    const [jobs, { totalApps, shortlisted, avgTimeToHireInDays }] =
+      await Promise.all([
+        this.employerRepository.findJobsByEmployer(employer.id, dto.status),
+        this.employerRepository.getEmployerJobStats(employer.id),
+      ]);
 
     return {
       jobs,
       stats: {
         totalApps,
         shortlisted,
-        avgTimeToHireInDays: computeAvgTimeToHireInDays(offered),
+        avgTimeToHireInDays,
       },
     };
   }
