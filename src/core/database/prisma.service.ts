@@ -5,13 +5,21 @@ import {
   OnModuleInit,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import type { EnvConfig } from "@/core/config/env.validation";
 import { withPoolParams } from "./db-url.util";
 
+// Below this, a query is unremarkable and only surfaces in dev's debug log; at
+// or above it, it's logged as a warning in every environment, including
+// production — this is the only per-query timing signal the app has, since
+// there's no APM/tracing wired up. Picked as "clearly not a fast indexed
+// lookup" rather than tuned against real production percentiles (none
+// recorded yet); revisit once this has run against real traffic.
+export const SLOW_QUERY_THRESHOLD_MS = 200;
+
 @Injectable()
 export class PrismaService
-  extends PrismaClient
+  extends PrismaClient<Prisma.PrismaClientOptions, "query" | "error" | "warn">
   implements OnModuleInit, OnModuleDestroy
 {
   private readonly logger = new Logger(PrismaService.name);
@@ -27,14 +35,31 @@ export class PrismaService
           ),
         },
       },
-      log:
-        process.env.NODE_ENV === "development"
-          ? ["query", "error", "warn"]
-          : ["error"],
+      // Event (not stdout) emission for all three: lets every query's duration
+      // be inspected here instead of only ever seeing Prisma's own formatting,
+      // and routes error/warn through the same Nest Logger as the rest of the
+      // app instead of a separate unstructured stdout stream.
+      log: [
+        { emit: "event", level: "query" },
+        { emit: "event", level: "error" },
+        { emit: "event", level: "warn" },
+      ],
     });
   }
 
   async onModuleInit(): Promise<void> {
+    // event/query params can contain user input (emails, tokens); only the SQL
+    // text + duration are logged, never event.params.
+    this.$on("query", (event) => {
+      if (event.duration >= SLOW_QUERY_THRESHOLD_MS) {
+        this.logger.warn(`Slow query (${event.duration}ms): ${event.query}`);
+      } else if (process.env.NODE_ENV === "development") {
+        this.logger.debug(`${event.query} (${event.duration}ms)`);
+      }
+    });
+    this.$on("error", (event) => this.logger.error(event.message));
+    this.$on("warn", (event) => this.logger.warn(event.message));
+
     const maxAttempts = 5;
     const delayMs = 2_000;
 

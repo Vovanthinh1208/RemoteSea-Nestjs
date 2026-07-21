@@ -7,6 +7,8 @@ import helmet from "helmet";
 import compression from "compression";
 import { AppModule } from "./app.module";
 import { GlobalExceptionFilter } from "@/core/filters/global-exception.filter";
+import { LoggingInterceptor } from "@/core/interceptors/logging.interceptor";
+import { requestIdMiddleware } from "@/core/middleware/request-id.middleware";
 import type { EnvConfig } from "@/core/config/env.validation";
 
 async function bootstrap(): Promise<void> {
@@ -14,6 +16,10 @@ async function bootstrap(): Promise<void> {
     rawBody: true,
   });
   app.enableShutdownHooks();
+
+  // Must run before every other middleware below: LoggingInterceptor and any
+  // handler/service that wants to tag its own log lines all read req.id.
+  app.use(requestIdMiddleware);
 
   const config = app.get(ConfigService<EnvConfig, true>);
 
@@ -60,6 +66,7 @@ async function bootstrap(): Promise<void> {
   // a request-parsing concern, unrelated to response compression).
   app.use(compression());
   app.useGlobalFilters(new GlobalExceptionFilter());
+  app.useGlobalInterceptors(new LoggingInterceptor());
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle("RemoteSEA API")
