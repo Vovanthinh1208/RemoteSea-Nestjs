@@ -76,14 +76,15 @@ export class ApplicationsRepository {
 
   /** DB-side status breakdown for dashboard stats — avoids shipping every row to the
    * client just to count them (see TalentDashboard's application-status tiles). */
-  getStatusCountsByTalentId(
+  async getStatusCountsByTalentId(
     talentId: string,
   ): Promise<Array<{ status: ApplicationStatus; count: number }>> {
-    return this.prisma.application
-      .groupBy({ by: ["status"], where: { talentId }, _count: true })
-      .then((rows) =>
-        rows.map((row) => ({ status: row.status, count: row._count })),
-      );
+    const rows = await this.prisma.application.groupBy({
+      by: ["status"],
+      where: { talentId },
+      _count: true,
+    });
+    return rows.map((row) => ({ status: row.status, count: row._count }));
   }
 
   findByJobAndTalent(
