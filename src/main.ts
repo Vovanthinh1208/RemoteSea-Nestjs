@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { RawBodyRequest } from "@nestjs/common";
+import { Logger } from "@nestjs/common";
 import type { Request } from "express";
 import { ConfigService } from "@nestjs/config";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
@@ -14,6 +15,26 @@ import { LoggingInterceptor } from "@/core/interceptors/logging.interceptor";
 import { RateLimitHeadersInterceptor } from "@/core/interceptors/rate-limit-headers.interceptor";
 import { requestIdMiddleware } from "@/core/middleware/request-id.middleware";
 import type { EnvConfig } from "@/core/config/env.validation";
+
+// Node 15+ already terminates the process on an unhandled rejection by
+// default — but *only* when nothing is listening for the event. Registering
+// a handler at all suppresses that default, so this one must explicitly
+// exit itself to keep the exact same fail-fast behavior; the only change is
+// that the reason gets logged first instead of just a bare stderr dump.
+// Without this, a bug that produces a genuinely unhandled rejection anywhere
+// in the app leaves no structured trace of what actually happened.
+const bootstrapLogger = new Logger("Process");
+process.on("unhandledRejection", (reason) => {
+  bootstrapLogger.error(
+    "Unhandled promise rejection — exiting",
+    reason instanceof Error ? reason.stack : reason,
+  );
+  process.exit(1);
+});
+process.on("uncaughtException", (error) => {
+  bootstrapLogger.error("Uncaught exception — exiting", error.stack);
+  process.exit(1);
+});
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);

@@ -58,6 +58,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      # --audit-level=critical, and no continue-on-error: this repo currently
+      # carries known moderate/high production vulnerabilities that only clear
+      # with a NestJS v10->v11 major bump (tracked separately, not a quick fix)
+      # — gating on those today would fail every PR for an unrelated reason.
+      # Blocking on *critical* still catches a real regression without that
+      # false-positive noise; continue-on-error previously meant this step
+      # could never fail CI regardless of severity.
       - name: Security Audit
-        run: npm audit --omit=dev
-        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=critical
