@@ -39,17 +39,23 @@ export class ViewCountBuffer implements OnModuleDestroy {
     const batch = this.pending;
     this.pending = new Map();
 
-    for (const [jobId, count] of batch) {
-      try {
-        await this.jobsRepository.incrementViewCountBy(jobId, count);
-      } catch (error) {
-        // Same policy as the old per-view fire-and-forget: log and drop.
-        this.logger.warn(
-          `Failed to flush ${count} view(s) for job ${jobId}`,
-          error instanceof Error ? error.stack : error,
-        );
-      }
-    }
+    // Concurrent, not one-at-a-time — these are independent updates to
+    // different job rows, so there's no reason to pay N sequential DB
+    // round-trips on every flush tick instead of letting Prisma's own
+    // connection pool bound the real concurrency.
+    await Promise.all(
+      Array.from(batch, ([jobId, count]) =>
+        this.jobsRepository
+          .incrementViewCountBy(jobId, count)
+          .catch((error: unknown) => {
+            // Same policy as the old per-view fire-and-forget: log and drop.
+            this.logger.warn(
+              `Failed to flush ${count} view(s) for job ${jobId}`,
+              error instanceof Error ? error.stack : error,
+            );
+          }),
+      ),
+    );
   }
 
   async onModuleDestroy(): Promise<void> {

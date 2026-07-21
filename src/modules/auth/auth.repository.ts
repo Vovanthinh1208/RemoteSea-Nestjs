@@ -95,13 +95,26 @@ export class AuthRepository {
         update: {},
       });
 
-      await tx.account.create({
-        data: {
+      // Upsert, not create: the existingAccount check above is a fast-path read
+      // outside this transaction, so two concurrent callbacks for the same
+      // provider+providerAccountId (double-click, provider redirect retry) can
+      // both reach here with existingAccount still null. A plain create would
+      // let the second one hit @@unique([provider, providerAccountId]) and
+      // fail its whole login with a 409 instead of signing in.
+      await tx.account.upsert({
+        where: {
+          provider_providerAccountId: {
+            provider: params.provider,
+            providerAccountId: params.providerAccountId,
+          },
+        },
+        create: {
           userId: user.id,
           type: "oauth",
           provider: params.provider,
           providerAccountId: params.providerAccountId,
         },
+        update: {},
       });
 
       return user;
