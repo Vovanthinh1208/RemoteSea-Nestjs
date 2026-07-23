@@ -1,8 +1,9 @@
 import { Injectable } from "@nestjs/common";
-import type { Prisma, Job } from "@prisma/client";
+import { Prisma, type Job } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 import {
   activeJobBaseWhere,
+  buildSearchRankedIdsQuery,
   facetSelect,
   type FacetRow,
 } from "./job-search.util";
@@ -61,6 +62,17 @@ export class JobsRepository {
       where: activeJobBaseWhere(),
       select: facetSelect,
     });
+  }
+
+  // Rank isn't a real jobs column, so Prisma's fluent client can't ORDER BY
+  // it — the caller (JobsService.listBySearch) re-sorts a normal `findMany`
+  // page using this array's order instead. See buildSearchRankedIdsQuery for
+  // why the match/rank itself is computed here in raw SQL.
+  async findSearchRankedIds(q: string): Promise<string[]> {
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>(
+      buildSearchRankedIdsQuery(q),
+    );
+    return rows.map((row) => row.id);
   }
 
   async findActiveById(id: string) {

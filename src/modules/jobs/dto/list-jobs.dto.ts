@@ -31,7 +31,11 @@ export const listJobsSchema = paginationQuerySchema.extend({
   timezone: toArray(timezoneKeyEnum),
   salaryMin: z.coerce.number().int().positive().optional(),
   salaryMax: z.coerce.number().int().positive().optional(),
-  sort: z.enum(["recent", "salary", "featured"]).optional(),
+  // "relevance" only has an effect combined with `q` (see job-search.util.ts's
+  // buildSearchRankedIdsQuery) — it's also the implicit default whenever `q`
+  // is present and `sort` is omitted, so this is here mainly so a caller can
+  // ask for it explicitly and so the enum documents that the value exists.
+  sort: z.enum(["recent", "salary", "featured", "relevance"]).optional(),
 });
 
 export type ListJobsDto = z.infer<typeof listJobsSchema>;

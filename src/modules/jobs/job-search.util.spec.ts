@@ -1,10 +1,39 @@
 import {
   buildJobOrderBy,
   buildJobWhere,
+  buildSearchRankedIdsQuery,
   computeFacets,
+  SEARCH_CANDIDATE_LIMIT,
   type FacetRow,
 } from "./job-search.util";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
+
+describe("buildSearchRankedIdsQuery", () => {
+  it("parameterizes the search term instead of interpolating it into the SQL text", () => {
+    const query = buildSearchRankedIdsQuery("'; DROP TABLE jobs; --");
+
+    expect(query.sql).not.toContain("DROP TABLE");
+    // The term appears twice (the @@ match and the ts_rank_cd ORDER BY), plus
+    // SEARCH_CANDIDATE_LIMIT for the LIMIT clause — as bound parameters, not
+    // string-concatenated into the query text.
+    expect(query.values).toEqual([
+      "'; DROP TABLE jobs; --",
+      "'; DROP TABLE jobs; --",
+      SEARCH_CANDIDATE_LIMIT,
+    ]);
+  });
+
+  it("only matches ACTIVE, published jobs via websearch_to_tsquery on searchVector", () => {
+    const query = buildSearchRankedIdsQuery("remote engineer");
+
+    expect(query.sql).toContain("status = 'ACTIVE'");
+    expect(query.sql).toContain('"publishedAt" <= now()');
+    expect(query.sql).toContain(
+      "\"searchVector\" @@ websearch_to_tsquery('english',",
+    );
+    expect(query.sql).toContain("ORDER BY ts_rank_cd(");
+  });
+});
 
 const row = (overrides: Partial<FacetRow>): FacetRow => ({
   jobType: "FULL_TIME",

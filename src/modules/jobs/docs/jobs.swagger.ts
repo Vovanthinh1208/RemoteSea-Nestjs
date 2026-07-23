@@ -48,6 +48,8 @@ export const ApiListJobs = () =>
       description:
         "Public job search/listing — only jobs with `status: ACTIVE` that are already published are returned. " +
         "Ordered `isFeatured desc, publishedAt desc` by default, or `salaryMax desc, publishedAt desc` when `sort=salary`. " +
+        "When `q` is given, results are ranked by full-text relevance (Postgres `tsvector`/`ts_rank_cd`, title weighted above " +
+        "description) instead, unless `sort` is explicitly set to `recent`/`salary`/`featured`. " +
         "`type`/`level`/`category`/`timezone` each accept either a single value (repeat the same query key for multiple, " +
         "e.g. `type=CONTRACT&type=FREELANCE`) — ported from the original app's richer jobs/page.tsx filter set, which " +
         "was never a REST endpoint in the original app. `facets` in the response is always computed over ALL active jobs, " +
@@ -58,7 +60,8 @@ export const ApiListJobs = () =>
       name: "q",
       required: false,
       type: String,
-      description: "Free-text search over title/description",
+      description:
+        "Full-text search over title/description, ranked by relevance (see `sort`)",
     }),
     ApiQuery({
       name: "type",
@@ -113,8 +116,9 @@ export const ApiListJobs = () =>
     ApiQuery({
       name: "sort",
       required: false,
-      enum: ["recent", "salary", "featured"],
-      description: "Default: recent (featured-first, then newest)",
+      enum: ["recent", "salary", "featured", "relevance"],
+      description:
+        "Default: featured-first, then newest — or relevance when `q` is given",
     }),
     ApiQuery({ name: "page", required: false, type: Number, example: 1 }),
     ApiQuery({ name: "limit", required: false, type: Number, example: 20 }),

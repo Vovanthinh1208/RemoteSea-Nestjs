@@ -1,4 +1,5 @@
-import type { Prisma, JobType, ExperienceLevel } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { JobType, ExperienceLevel } from "@prisma/client";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
 
 /**
@@ -102,6 +103,34 @@ export function buildJobWhere(query: ListJobsDto): Prisma.JobWhereInput {
   }
 
   return { ...activeJobBaseWhere(), ...(and.length ? { AND: and } : {}) };
+}
+
+// searchVector (20260723100000_add_job_search_vector) isn't declared in
+// schema.prisma — Prisma's schema DSL can't express a generated tsvector
+// column or its GIN index without extra preview features, and nothing needs
+// the fluent client for it — so ranked search only ever runs as raw SQL, with
+// the ordered id list threaded back into a normal Prisma `where: { id: { in
+// } } }` for everything else (JobsService.list()). This caps how many
+// candidates the ranking query considers, the same way findFacetRows() loads
+// the full active-job set into memory rather than paginating in SQL —
+// reasonable at this app's scale; revisit if that stops holding.
+export const SEARCH_CANDIDATE_LIMIT = 2000;
+
+// websearch_to_tsquery (not to_tsquery/plainto_tsquery) because it never
+// throws on arbitrary user input — stray `&`, `|`, `:`, or unbalanced
+// parentheses degrade gracefully instead of raising a syntax error the way
+// to_tsquery would.
+export function buildSearchRankedIdsQuery(q: string): Prisma.Sql {
+  return Prisma.sql`
+    SELECT id
+    FROM "jobs"
+    WHERE status = 'ACTIVE'
+      AND "publishedAt" IS NOT NULL
+      AND "publishedAt" <= now()
+      AND "searchVector" @@ websearch_to_tsquery('english', ${q})
+    ORDER BY ts_rank_cd("searchVector", websearch_to_tsquery('english', ${q})) DESC
+    LIMIT ${SEARCH_CANDIDATE_LIMIT}
+  `;
 }
 
 export function buildJobOrderBy(
