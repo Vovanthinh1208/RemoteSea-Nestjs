@@ -7,8 +7,23 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import type { Response } from "express";
-import { TooManyRequestsApiException } from "@/common/exceptions/api.exception";
+import {
+  ApiException,
+  TooManyRequestsApiException,
+} from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
+
+// Falls back to INTERNAL_ERROR for any status this map doesn't cover — those
+// only ever reach here via a framework/library exception this app didn't
+// throw itself, so there's no more specific code to give it.
+const FALLBACK_CODE_BY_STATUS: Partial<Record<number, ErrorCode>> = {
+  400: ErrorCode.BAD_REQUEST,
+  401: ErrorCode.UNAUTHORIZED,
+  403: ErrorCode.FORBIDDEN,
+  404: ErrorCode.NOT_FOUND,
+  409: ErrorCode.CONFLICT,
+  429: ErrorCode.RATE_LIMITED,
+};
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -25,14 +40,30 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       return;
     }
 
+    // Every exception application code throws is one of these — already the
+    // { error, code } shape from its own constructor, pass through as-is.
+    if (exception instanceof ApiException) {
+      response.status(exception.getStatus()).json(exception.getResponse());
+      return;
+    }
+
     if (exception instanceof HttpException) {
+      // Not one of ours: e.g. Nest's own 404 when no route matches a request
+      // at all (thrown before any application code runs, so it can never be
+      // an ApiException), or a framework/library exception. Without this,
+      // these leaked Nest's default { statusCode, message, error } shape —
+      // the one thing every other error response in this API deliberately
+      // avoids.
       const status = exception.getStatus();
       const body = exception.getResponse();
-      response
-        .status(status)
-        .json(
-          typeof body === "object" && body !== null ? body : { error: body },
-        );
+      const message =
+        typeof body === "object" && body !== null && "message" in body
+          ? (body as { message: unknown }).message
+          : exception.message;
+      response.status(status).json({
+        error: message,
+        code: FALLBACK_CODE_BY_STATUS[status] ?? ErrorCode.INTERNAL_ERROR,
+      });
       return;
     }
 
