@@ -63,7 +63,12 @@ module.exports = {
           "^node-inspect/lib/_inspect$",
           "^node-inspect/lib/internal/inspect_client$",
           "^node-inspect/lib/internal/inspect_repl$",
-          "^async_hooks$",
+          // Not actually deprecated (this is dependency-cruiser's stock generated
+          // list, not audited before now) — AsyncLocalStorage, the part of
+          // async_hooks this repo uses (see core/logging/request-context.ts), has
+          // been Node's stable, recommended API for request-scoped context
+          // propagation since Node 16.
+          // "^async_hooks$",
           "^punycode$",
           "^domain$",
           "^constants$",
@@ -122,6 +127,45 @@ module.exports = {
         // _and_ (e.g.) a devDependency - don't consider type-only dependency
         // types for this rule
         dependencyTypesNot: ["type-only"],
+      },
+    },
+
+    /* project-specific architecture boundaries — these encode invariants that were
+       previously only true by convention/manual review (verified once, by hand,
+       across every service and module file), not because anything would have
+       failed CI if a future PR broke them. */
+    {
+      name: "no-cross-module-repository-imports",
+      severity: "error",
+      comment:
+        "A file outside a feature module imports that module's repository directly. " +
+        "Repositories are internal to their own module — every service in this repo " +
+        "already only touches its own module's repository; cross-module access goes " +
+        "through the owning module's service instead (import the Module, inject the " +
+        "Service — the same pattern talent/employer already use for UploadsService). " +
+        "Importing another module's repository bypasses whatever validation/business " +
+        "rules that module's service layer enforces around its own data.",
+      from: {
+        path: "^src/modules/([^/]+)/",
+      },
+      to: {
+        path: "^src/modules/[^/]+/[A-Za-z-]+\\.repository\\.ts$",
+        pathNot: "^src/modules/$1/",
+      },
+    },
+    {
+      name: "no-common-or-core-importing-modules",
+      severity: "error",
+      comment:
+        "src/common/ and src/core/ are the foundational layer every feature module " +
+        "depends on — never the other way around. A dependency in this direction " +
+        "usually means something feature-specific leaked into a shared utility, or " +
+        "a common/core file should actually live under modules/ instead.",
+      from: {
+        path: "^src/(?:common|core)/",
+      },
+      to: {
+        path: "^src/modules/",
       },
     },
 
