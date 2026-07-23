@@ -1,4 +1,10 @@
-import { computeFacets, type FacetRow } from "./job-search.util";
+import {
+  buildJobOrderBy,
+  buildJobWhere,
+  computeFacets,
+  type FacetRow,
+} from "./job-search.util";
+import type { ListJobsDto } from "./dto/list-jobs.dto";
 
 const row = (overrides: Partial<FacetRow>): FacetRow => ({
   jobType: "FULL_TIME",
@@ -80,5 +86,50 @@ describe("computeFacets", () => {
       Product: 0,
       Marketing: 0,
     });
+  });
+});
+
+describe("buildJobOrderBy", () => {
+  it("orders by salaryMax for sort=salary", () => {
+    expect(buildJobOrderBy("salary")).toEqual([
+      { salaryMax: "desc" },
+      { publishedAt: "desc" },
+    ]);
+  });
+
+  it("orders by publishedAt only for sort=recent, ignoring isFeatured", () => {
+    expect(buildJobOrderBy("recent")).toEqual([{ publishedAt: "desc" }]);
+  });
+
+  it("puts featured jobs first for sort=featured and for no sort at all", () => {
+    const expected = [{ isFeatured: "desc" }, { publishedAt: "desc" }];
+    expect(buildJobOrderBy("featured")).toEqual(expected);
+    expect(buildJobOrderBy(undefined)).toEqual(expected);
+  });
+});
+
+describe("buildJobWhere", () => {
+  const baseQuery: ListJobsDto = { page: 1, limit: 20 };
+
+  it("filters by a single country the same as before it accepted arrays", () => {
+    const where = buildJobWhere({ ...baseQuery, country: ["Vietnam"] });
+    expect(where).toMatchObject({
+      AND: [{ country: { in: ["Vietnam"] } }],
+    });
+  });
+
+  it("filters by multiple countries", () => {
+    const where = buildJobWhere({
+      ...baseQuery,
+      country: ["Vietnam", "Singapore"],
+    });
+    expect(where).toMatchObject({
+      AND: [{ country: { in: ["Vietnam", "Singapore"] } }],
+    });
+  });
+
+  it("omits the country condition entirely when none is given", () => {
+    const where = buildJobWhere(baseQuery);
+    expect(where).not.toHaveProperty("AND");
   });
 });

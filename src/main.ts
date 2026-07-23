@@ -2,7 +2,7 @@ import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { RawBodyRequest } from "@nestjs/common";
-import { Logger } from "@nestjs/common";
+import { Logger, VERSION_NEUTRAL, VersioningType } from "@nestjs/common";
 import type { Request } from "express";
 import { ConfigService } from "@nestjs/config";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
@@ -45,6 +45,19 @@ async function bootstrap(): Promise<void> {
   // give every log line request-id correlation.
   app.useLogger(new AppLogger());
   app.enableShutdownHooks();
+
+  // Infrastructure only — changes nothing about any route today. Every
+  // existing controller has no @Version() decorator, so each one resolves to
+  // VERSION_NEUTRAL and keeps its exact current path (confirmed by reading
+  // @nestjs/core's route-path-factory.js: VERSION_NEUTRAL is explicitly
+  // excluded from the URL). This just makes `@Version("2")` on some future
+  // route (served at /v2/...) possible without a project-wide migration —
+  // there was no way to introduce a breaking change to one endpoint without
+  // breaking every existing caller of it before this.
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: VERSION_NEUTRAL,
+  });
 
   // Must run before every other middleware below: LoggingInterceptor and any
   // handler/service that wants to tag its own log lines all read req.id.

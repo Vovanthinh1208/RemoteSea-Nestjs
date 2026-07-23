@@ -23,7 +23,10 @@ export const listJobsSchema = paginationQuerySchema.extend({
   q: z.string().max(200).optional(),
   type: toArray(jobTypeSchema),
   level: toArray(experienceLevelSchema),
-  country: z.string().max(100).optional(),
+  // Array like every other multi-select filter here (was single-value only) —
+  // `?country=Vietnam` still works unchanged via toArray's single-value
+  // coercion; `?country=Vietnam&country=Singapore` is the new capability.
+  country: toArray(z.string().max(100)),
   category: toArray(z.string().max(100)),
   timezone: toArray(timezoneKeyEnum),
   salaryMin: z.coerce.number().int().positive().optional(),

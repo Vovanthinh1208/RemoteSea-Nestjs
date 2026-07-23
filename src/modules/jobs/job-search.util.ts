@@ -84,8 +84,8 @@ export function buildJobWhere(query: ListJobsDto): Prisma.JobWhereInput {
   if (query.level?.length) {
     and.push({ level: { in: query.level } });
   }
-  if (query.country) {
-    and.push({ country: query.country });
+  if (query.country?.length) {
+    and.push({ country: { in: query.country } });
   }
   if (query.category?.length) {
     and.push({
@@ -109,6 +109,10 @@ export function buildJobOrderBy(
 ): Prisma.JobOrderByWithRelationInput[] {
   if (sort === "salary")
     return [{ salaryMax: "desc" }, { publishedAt: "desc" }];
+  // "recent" used to silently fall through to the same isFeatured-first order
+  // as "featured"/the default — the two were indistinguishable despite being
+  // separate, documented values of the same enum (list-jobs.dto.ts).
+  if (sort === "recent") return [{ publishedAt: "desc" }];
   return [{ isFeatured: "desc" }, { publishedAt: "desc" }];
 }
 
