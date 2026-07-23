@@ -160,9 +160,14 @@ module.exports = {
         "src/common/ and src/core/ are the foundational layer every feature module " +
         "depends on — never the other way around. A dependency in this direction " +
         "usually means something feature-specific leaked into a shared utility, or " +
-        "a common/core file should actually live under modules/ instead.",
+        "a common/core file should actually live under modules/ instead. Spec files " +
+        "are exempt: a cross-cutting test like permission-matrix.spec.ts legitimately " +
+        "needs to import every controller to verify a system-wide property (every " +
+        "route's guards/roles) — that's a test-time concern, not a runtime dependency " +
+        "the production module graph carries.",
       from: {
         path: "^src/(?:common|core)/",
+        pathNot: "\\.spec\\.ts$",
       },
       to: {
         path: "^src/modules/",
