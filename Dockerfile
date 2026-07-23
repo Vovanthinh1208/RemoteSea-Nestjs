@@ -21,7 +21,7 @@ COPY prisma ./prisma
 COPY tsconfig.json nest-cli.json ./
 COPY src ./src
 RUN npx prisma generate
-RUN npm run build
+RUN NODE_OPTIONS=--max-old-space-size=4096 npm run build
 
 # ─── Production dependencies only ──────────────────────────────────────────
 FROM base AS prod-deps
