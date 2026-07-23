@@ -21,7 +21,10 @@ COPY prisma ./prisma
 COPY tsconfig.json nest-cli.json ./
 COPY src ./src
 RUN npx prisma generate
-RUN NODE_OPTIONS=--max-old-space-size=8192 npm run build
+RUN NODE_OPTIONS=--max-old-space-size=8192 npm run build; \
+    echo "--- build stage: /app/dist contents ---"; \
+    ls -la /app/dist || echo "/app/dist does not exist"; \
+    test -f /app/dist/main.js || (echo "ERROR: /app/dist/main.js was not produced by the build" && exit 1)
 
 # ─── Production dependencies only ──────────────────────────────────────────
 FROM base AS prod-deps
