@@ -39,7 +39,8 @@ export const buildRecentMonthKeys = (count: number, from: Date): MonthKey[] => {
     );
     keys.push({
       key: monthKeyOf(monthStart),
-      label: MONTH_LABELS[monthStart.getUTCMonth()],
+      // getUTCMonth() is always 0-11, always in range for this 12-entry array.
+      label: MONTH_LABELS[monthStart.getUTCMonth()]!,
     });
   }
   return keys;
@@ -71,6 +72,10 @@ export const buildMonthlyRevenueBuckets = (
     if (monthIndex === undefined) continue;
 
     const bucket = months[monthIndex];
+    // monthIndex always comes from monthIndexByKey, built directly from
+    // months' own indices two lines up — always a valid index in practice,
+    // but the guard makes that provable instead of assumed.
+    if (!bucket) continue;
     if (job.planType === "STANDARD") bucket.standard += amount;
     else if (job.planType === "FEATURED") bucket.featured += amount;
     else bucket.handsOn += amount;
@@ -117,7 +122,11 @@ export const computeRevenueTotals = (
 ): { allTime: number; thisMonth: number } => {
   const allTime = mix.reduce((sum, m) => sum + m.amount, 0);
   const currentMonth = months[currentMonthIndex];
-  const thisMonth =
-    currentMonth.standard + currentMonth.featured + currentMonth.handsOn;
+  // AdminService's only caller always passes an in-bounds index, but this is
+  // a public utility function — an out-of-range index (a future caller's
+  // bug) now degrades to $0 for the current month instead of throwing.
+  const thisMonth = currentMonth
+    ? currentMonth.standard + currentMonth.featured + currentMonth.handsOn
+    : 0;
   return { allTime, thisMonth };
 };

@@ -17,23 +17,23 @@ const withRequestId = (message: unknown): unknown => {
  * have a Request object in scope.
  */
 export class AppLogger extends ConsoleLogger {
-  log(message: unknown, ...optionalParams: unknown[]): void {
+  override log(message: unknown, ...optionalParams: unknown[]): void {
     super.log(withRequestId(message), ...optionalParams);
   }
 
-  error(message: unknown, ...optionalParams: unknown[]): void {
+  override error(message: unknown, ...optionalParams: unknown[]): void {
     super.error(withRequestId(message), ...optionalParams);
   }
 
-  warn(message: unknown, ...optionalParams: unknown[]): void {
+  override warn(message: unknown, ...optionalParams: unknown[]): void {
     super.warn(withRequestId(message), ...optionalParams);
   }
 
-  debug(message: unknown, ...optionalParams: unknown[]): void {
+  override debug(message: unknown, ...optionalParams: unknown[]): void {
     super.debug(withRequestId(message), ...optionalParams);
   }
 
-  verbose(message: unknown, ...optionalParams: unknown[]): void {
+  override verbose(message: unknown, ...optionalParams: unknown[]): void {
     super.verbose(withRequestId(message), ...optionalParams);
   }
 }

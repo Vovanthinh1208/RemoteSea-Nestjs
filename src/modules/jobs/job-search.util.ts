@@ -189,20 +189,25 @@ export const computeFacets = (rows: FacetRow[]): Facets => {
     category: zeroCounts(FILTER_OPTIONS.category),
   };
 
+  // Every index below is guaranteed present: zeroCounts() pre-populated
+  // facets.jobType/seniority/timezone/category from these exact same
+  // FILTER_OPTIONS arrays (JOBTYPE_LABEL_BY_ENUM/SENIORITY_LABEL_BY_LEVEL are
+  // built from the same source, and the category branch is gated on
+  // TRACKED_CATEGORY_NAMES, itself built from FILTER_OPTIONS.category).
   for (const row of rows) {
     const jobTypeLabel = JOBTYPE_LABEL_BY_ENUM.get(row.jobType);
-    if (jobTypeLabel !== undefined) facets.jobType[jobTypeLabel] += 1;
+    if (jobTypeLabel !== undefined) facets.jobType[jobTypeLabel]! += 1;
 
     const seniorityLabel = SENIORITY_LABEL_BY_LEVEL.get(row.level);
-    if (seniorityLabel !== undefined) facets.seniority[seniorityLabel] += 1;
+    if (seniorityLabel !== undefined) facets.seniority[seniorityLabel]! += 1;
 
     for (const key of FILTER_OPTIONS.timezone) {
-      if (matchesTz(row, key)) facets.timezone[key] += 1;
+      if (matchesTz(row, key)) facets.timezone[key]! += 1;
     }
 
     for (const { category } of row.categories) {
       if (TRACKED_CATEGORY_NAMES.has(category.name)) {
-        facets.category[category.name] += 1;
+        facets.category[category.name]! += 1;
       }
     }
   }

@@ -17,23 +17,23 @@ export type JobPayer = NonNullable<
  */
 @Injectable()
 export class JobPayerOwnershipGuard extends OwnershipGuardBase<JobPayer> {
-  protected readonly notFoundOnMismatch = true;
-  protected readonly notFoundMessage = "Job not found";
-  protected readonly notFoundCode = ErrorCode.JOB_NOT_FOUND;
+  protected override readonly notFoundOnMismatch = true;
+  protected override readonly notFoundMessage = "Job not found";
+  protected override readonly notFoundCode = ErrorCode.JOB_NOT_FOUND;
 
   constructor(private readonly billingRepository: BillingRepository) {
     super();
   }
 
-  protected extractResourceId(request: Request): string {
+  protected override extractResourceId(request: Request): string {
     return (request.body as { jobId?: string } | undefined)?.jobId ?? "";
   }
 
-  protected loadResource(jobId: string): Promise<JobPayer | null> {
+  protected override loadResource(jobId: string): Promise<JobPayer | null> {
     return this.billingRepository.findJobWithEmployer(jobId);
   }
 
-  protected getOwnerUserId(job: JobPayer): string {
+  protected override getOwnerUserId(job: JobPayer): string {
     return job.employer.userId;
   }
 }

@@ -13,10 +13,10 @@ import { ErrorCode } from "@/common/exceptions/error-codes";
 type Resource = { id: string; ownerId: string };
 
 class TestGuard extends OwnershipGuardBase<Resource> {
-  protected readonly bypassRoles: UserRole[];
-  protected readonly notFoundOnMismatch: boolean;
-  protected readonly notFoundCode: ErrorCode;
-  protected readonly forbiddenCode: ErrorCode;
+  protected override readonly bypassRoles: UserRole[];
+  protected override readonly notFoundOnMismatch: boolean;
+  protected override readonly notFoundCode: ErrorCode;
+  protected override readonly forbiddenCode: ErrorCode;
 
   constructor(
     private readonly resource: Resource | null,
@@ -34,11 +34,11 @@ class TestGuard extends OwnershipGuardBase<Resource> {
     this.forbiddenCode = options.forbiddenCode ?? ErrorCode.FORBIDDEN;
   }
 
-  protected loadResource(): Promise<Resource | null> {
+  protected override loadResource(): Promise<Resource | null> {
     return Promise.resolve(this.resource);
   }
 
-  protected getOwnerUserId(resource: Resource): string {
+  protected override getOwnerUserId(resource: Resource): string {
     return resource.ownerId;
   }
 }

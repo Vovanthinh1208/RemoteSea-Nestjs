@@ -9,7 +9,10 @@ export class GoogleAuthGuard extends AuthGuard("google") {
   // UnauthorizedException ({ statusCode, message, error }) instead of this
   // app's { error, code } convention that every other endpoint uses — same fix
   // JwtAuthGuard already applies for the bearer-token path.
-  handleRequest<TUser = unknown>(err: unknown, user: TUser | false): TUser {
+  override handleRequest<TUser = unknown>(
+    err: unknown,
+    user: TUser | false,
+  ): TUser {
     if (err || !user) {
       throw new UnauthorizedApiException(
         "Unauthorized",

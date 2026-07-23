@@ -49,7 +49,11 @@ export abstract class OwnershipGuardBase<T> implements CanActivate {
   /** Default: read from the route's :id param. Override to read from elsewhere (e.g. body). */
   protected extractResourceId(request: Request): string {
     const id = request.params.id;
-    return Array.isArray(id) ? id[0] : id;
+    // Neither branch is a real case for this app's routes today (no route
+    // repeats the :id segment, and Express always populates a matched :id
+    // param) — both fall through to "" (a resourceId that matches nothing,
+    // same as any other malformed id) instead of a runtime crash.
+    return (Array.isArray(id) ? id[0] : id) ?? "";
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

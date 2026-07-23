@@ -10,18 +10,23 @@ export type ApplicationWithJobOwner = NonNullable<
 /** Guards PATCH /employer/applications/:id — no admin bypass. */
 @Injectable()
 export class ApplicationOwnershipGuard extends OwnershipGuardBase<ApplicationWithJobOwner> {
-  protected readonly notFoundCode = ErrorCode.APPLICATION_NOT_FOUND;
-  protected readonly forbiddenCode = ErrorCode.APPLICATION_ACCESS_DENIED;
+  protected override readonly notFoundCode = ErrorCode.APPLICATION_NOT_FOUND;
+  protected override readonly forbiddenCode =
+    ErrorCode.APPLICATION_ACCESS_DENIED;
 
   constructor(private readonly employerRepository: EmployerRepository) {
     super();
   }
 
-  protected loadResource(id: string): Promise<ApplicationWithJobOwner | null> {
+  protected override loadResource(
+    id: string,
+  ): Promise<ApplicationWithJobOwner | null> {
     return this.employerRepository.findApplicationWithJobOwner(id);
   }
 
-  protected getOwnerUserId(application: ApplicationWithJobOwner): string {
+  protected override getOwnerUserId(
+    application: ApplicationWithJobOwner,
+  ): string {
     return application.job.employer.userId;
   }
 }
