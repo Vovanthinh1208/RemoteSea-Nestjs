@@ -14,6 +14,7 @@ import { GlobalExceptionFilter } from "@/core/filters/global-exception.filter";
 import { LoggingInterceptor } from "@/core/interceptors/logging.interceptor";
 import { RateLimitHeadersInterceptor } from "@/core/interceptors/rate-limit-headers.interceptor";
 import { requestIdMiddleware } from "@/core/middleware/request-id.middleware";
+import { AppLogger } from "@/core/logging/app-logger";
 import type { EnvConfig } from "@/core/config/env.validation";
 
 // Node 15+ already terminates the process on an unhandled rejection by
@@ -38,6 +39,11 @@ process.on("uncaughtException", (error) => {
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Shared by every `new Logger(X.name)` call site app-wide (Nest's Logger
+  // class delegates to whatever instance is registered here) — see
+  // app-logger.ts for why this is the one place that needs to change to
+  // give every log line request-id correlation.
+  app.useLogger(new AppLogger());
   app.enableShutdownHooks();
 
   // Must run before every other middleware below: LoggingInterceptor and any

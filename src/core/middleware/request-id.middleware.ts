@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import type { NextFunction, Request, Response } from "express";
+import { requestContext } from "@/core/logging/request-context";
 
 export const REQUEST_ID_HEADER = "x-request-id";
 
@@ -34,9 +35,11 @@ export const resolveRequestId = (
 
 /**
  * Assigns req.id (a stable per-request correlation id used by LoggingInterceptor
- * and available to any handler/service that wants to tag its own logs) and
- * echoes it back so a caller — or an upstream proxy — can correlate a response
- * with server-side logs.
+ * and available to any handler/service that wants to tag its own logs), echoes
+ * it back so a caller — or an upstream proxy — can correlate a response with
+ * server-side logs, and runs the rest of the request inside requestContext so
+ * every log line written anywhere during it — not just req.id readers — picks
+ * up the same id via AppLogger.
  */
 export function requestIdMiddleware(
   req: Request,
@@ -46,5 +49,5 @@ export function requestIdMiddleware(
   const id = resolveRequestId(req.headers[REQUEST_ID_HEADER]);
   req.id = id;
   res.setHeader(REQUEST_ID_HEADER, id);
-  next();
+  requestContext.run({ requestId: id }, next);
 }
