@@ -22,7 +22,10 @@ import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import { CurrentResource } from "@/common/authorization/current-resource.decorator";
-import { RateLimitService } from "@/common/services/rate-limit.service";
+import {
+  RateLimitService,
+  clientIp,
+} from "@/common/services/rate-limit.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import {
   JobOwnershipGuard,
@@ -55,7 +58,16 @@ export class JobsController {
     "Cache-Control",
     "public, max-age=0, s-maxage=60, stale-while-revalidate=30",
   )
-  list(@Query(new ZodValidationPipe(listJobsSchema)) query: ListJobsDto) {
+  list(
+    @Req() req: Request,
+    @Query(new ZodValidationPipe(listJobsSchema)) query: ListJobsDto,
+  ) {
+    this.rateLimitService.enforce(
+      `job-list:${clientIp(req)}`,
+      RATE_LIMITS.LIST.limit,
+      RATE_LIMITS.LIST.windowMs,
+      req,
+    );
     return this.jobsService.list(query);
   }
 

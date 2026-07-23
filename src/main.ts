@@ -83,24 +83,33 @@ async function bootstrap(): Promise<void> {
   // overrides below (the later path-scoped helmet re-sets the headers for
   // /docs requests, so last write wins there).
   app.use(helmet());
-  app.use(
-    "/docs",
-    helmet({
-      // Swagger UI ships an inline bootstrap script and inline styles, and
-      // pings validator.swagger.io for its "valid spec" badge — the default
-      // CSP blocks all three. Relaxing just these directives (rather than
-      // disabling CSP outright) keeps helmet's other protections intact
-      // (frameguard, HSTS, nosniff, etc.) even on /docs.
-      contentSecurityPolicy: {
-        directives: {
-          ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-          "script-src": ["'self'", "'unsafe-inline'"],
-          "style-src": ["'self'", "'unsafe-inline'"],
-          "img-src": ["'self'", "data:", "https://validator.swagger.io"],
+
+  // Swagger's full schema (every endpoint, DTO, response shape) is a
+  // deliberate information-disclosure surface — fine for local/CI use, not
+  // for a deployed instance a stranger can browse to map the whole API.
+  // Skipped entirely in production, not just left unlinked: an unlisted
+  // route is still a reachable route.
+  const isProduction = config.get("NODE_ENV", { infer: true }) === "production";
+  if (!isProduction) {
+    app.use(
+      "/docs",
+      helmet({
+        // Swagger UI ships an inline bootstrap script and inline styles, and
+        // pings validator.swagger.io for its "valid spec" badge — the default
+        // CSP blocks all three. Relaxing just these directives (rather than
+        // disabling CSP outright) keeps helmet's other protections intact
+        // (frameguard, HSTS, nosniff, etc.) even on /docs.
+        contentSecurityPolicy: {
+          directives: {
+            ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+            "script-src": ["'self'", "'unsafe-inline'"],
+            "style-src": ["'self'", "'unsafe-inline'"],
+            "img-src": ["'self'", "data:", "https://validator.swagger.io"],
+          },
         },
-      },
-    }),
-  );
+      }),
+    );
+  }
   // gzips response bodies over ~1KB (compression's default threshold) — the admin
   // job list and job-detail responses carry full description/requirements text on
   // every row and were previously going out uncompressed. Applied before the
@@ -114,19 +123,21 @@ async function bootstrap(): Promise<void> {
     new RateLimitHeadersInterceptor(),
   );
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle("RemoteSEA API")
-    .setDescription(
-      "REST API for RemoteSEA, a remote job platform for Southeast Asia. See docs/API.md in the repo for the full hand-written reference.",
-    )
-    .setVersion("1.0")
-    .addBearerAuth(
-      { type: "http", scheme: "bearer", bearerFormat: "JWT" },
-      "bearer",
-    )
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup("docs", app, document);
+  if (!isProduction) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle("RemoteSEA API")
+      .setDescription(
+        "REST API for RemoteSEA, a remote job platform for Southeast Asia. See docs/API.md in the repo for the full hand-written reference.",
+      )
+      .setVersion("1.0")
+      .addBearerAuth(
+        { type: "http", scheme: "bearer", bearerFormat: "JWT" },
+        "bearer",
+      )
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup("docs", app, document);
+  }
 
   const port = config.get("PORT", { infer: true });
   await app.listen(port);
