@@ -252,6 +252,13 @@ model Job {
   @@index([status, isFeatured, publishedAt])
   @@index([employerId])
   @@index([planPaid, paidAt])
+  // Covers GET /jobs?country=... and the timezone-bucket filters (job-search.util.ts's
+  // tzCondition) — country equality combined with the status filter every search
+  // already applies, previously unindexed together.
+  @@index([status, country])
+  // Covers GET /jobs?sort=salary (buildJobOrderBy), which orders by salaryMax
+  // with no index to back it — previously a full sort over every ACTIVE row.
+  @@index([status, salaryMax])
   @@map("jobs")
 }
 
