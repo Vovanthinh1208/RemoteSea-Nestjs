@@ -2,10 +2,11 @@ import { Injectable } from "@nestjs/common";
 import { Prisma, type Job } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 import {
-  activeJobBaseWhere,
+  buildCategoryFacetsQuery,
+  buildFacetCountsQuery,
   buildSearchRankedIdsQuery,
-  facetSelect,
-  type FacetRow,
+  type CategoryFacetRow,
+  type FacetCountsRow,
 } from "./job-search.util";
 import { omitInternalJobFields } from "@/common/types/job-with-relations.type";
 import {
@@ -57,11 +58,21 @@ export class JobsRepository {
     return this.prisma.job.count({ where });
   }
 
-  findFacetRows(): Promise<FacetRow[]> {
-    return this.prisma.job.findMany({
-      where: activeJobBaseWhere(),
-      select: facetSelect,
-    });
+  // See buildFacetCountsQuery/buildCategoryFacetsQuery for why this is two
+  // small aggregate queries instead of loading every active job into memory.
+  // A bare aggregate with no GROUP BY always returns exactly one row (even
+  // over zero matching jobs, every COUNT(*) FILTER is just 0), so rows[0] is
+  // never actually missing.
+  findFacetCounts(): Promise<FacetCountsRow> {
+    return this.prisma
+      .$queryRaw<FacetCountsRow[]>(buildFacetCountsQuery())
+      .then((rows) => rows[0]!);
+  }
+
+  findCategoryFacetCounts(): Promise<CategoryFacetRow[]> {
+    return this.prisma.$queryRaw<CategoryFacetRow[]>(
+      buildCategoryFacetsQuery(),
+    );
   }
 
   // Rank isn't a real jobs column, so Prisma's fluent client can't ORDER BY

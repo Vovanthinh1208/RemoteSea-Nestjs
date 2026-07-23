@@ -1,5 +1,4 @@
 import { Prisma } from "@prisma/client";
-import type { JobType, ExperienceLevel } from "@prisma/client";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
 
 /**
@@ -34,18 +33,6 @@ export const FILTER_OPTIONS = {
   timezone: ["sea", "async", "SG", "AU", "US"],
   seniority: ["Entry", "Mid", "Senior"],
   category: ["Engineering", "Design", "Data", "Product", "Marketing"],
-};
-
-export const JOBTYPE_TO_ENUMS: Record<string, JobType[]> = {
-  "Full-time": ["FULL_TIME"],
-  Contract: ["CONTRACT", "FREELANCE"],
-  "Part-time": ["PART_TIME"],
-};
-
-export const SENIORITY_TO_LEVELS: Record<string, ExperienceLevel[]> = {
-  Entry: ["ENTRY"],
-  Mid: ["MID"],
-  Senior: ["SENIOR", "LEAD", "EXECUTIVE"],
 };
 
 export function activeJobBaseWhere(): Prisma.JobWhereInput {
@@ -111,8 +98,7 @@ export function buildJobWhere(query: ListJobsDto): Prisma.JobWhereInput {
 // the fluent client for it — so ranked search only ever runs as raw SQL, with
 // the ordered id list threaded back into a normal Prisma `where: { id: { in
 // } } }` for everything else (JobsService.list()). This caps how many
-// candidates the ranking query considers, the same way findFacetRows() loads
-// the full active-job set into memory rather than paginating in SQL —
+// candidates the ranking query considers rather than paginating in SQL —
 // reasonable at this app's scale; revisit if that stops holding.
 export const SEARCH_CANDIDATE_LIMIT = 2000;
 
@@ -152,98 +138,110 @@ export type Facets = {
   category: Record<string, number>;
 };
 
-export type FacetRow = {
-  jobType: JobType;
-  level: ExperienceLevel;
-  country: string | null;
-  timezone: string | null;
-  categories: Array<{ category: { name: string } }>;
-};
-
-export const facetSelect = {
-  jobType: true,
-  level: true,
-  country: true,
-  timezone: true,
-  categories: { select: { category: { select: { name: true } } } },
-} satisfies Prisma.JobSelect;
-
-const matchesTz = (row: FacetRow, key: string): boolean => {
-  if (key === "sea") {
-    return (
-      (row.country !== null && SEA_COUNTRIES.includes(row.country)) ||
-      (row.timezone?.includes("+7") ?? false) ||
-      (row.timezone?.includes("+8") ?? false)
-    );
-  }
-
-  if (key === "async") {
-    return row.timezone?.toLowerCase().includes("async") ?? false;
-  }
-
-  return row.country === TZ_COUNTRY[key];
-};
-
-// jobType/seniority buckets are mutually exclusive (every JobType/
-// ExperienceLevel enum value maps to exactly one FILTER_OPTIONS label), so a
-// reverse lookup turns "which bucket does this row belong to" into one Map
-// read instead of testing every label against every row.
-const buildReverseLookup = <TValue extends string>(
-  labelToValues: Record<string, TValue[]>,
-): Map<TValue, string> => {
-  const lookup = new Map<TValue, string>();
-  for (const [label, values] of Object.entries(labelToValues)) {
-    for (const value of values) lookup.set(value, label);
-  }
-  return lookup;
-};
-
-const JOBTYPE_LABEL_BY_ENUM = buildReverseLookup(JOBTYPE_TO_ENUMS);
-const SENIORITY_LABEL_BY_LEVEL = buildReverseLookup(SENIORITY_TO_LEVELS);
-const TRACKED_CATEGORY_NAMES = new Set(FILTER_OPTIONS.category);
-
 const zeroCounts = (keys: readonly string[]): Record<string, number> =>
   Object.fromEntries(keys.map((key) => [key, 0]));
 
+export type FacetCountsRow = {
+  jobtype_fulltime: number;
+  jobtype_contract: number;
+  jobtype_parttime: number;
+  seniority_entry: number;
+  seniority_mid: number;
+  seniority_senior: number;
+  tz_sea: number;
+  tz_async: number;
+  tz_sg: number;
+  tz_au: number;
+  tz_us: number;
+};
+
+export type CategoryFacetRow = { name: string; count: number };
+
 /**
- * Single pass over `rows` instead of 17 separate `.filter().length` calls (4
- * jobType + 3 seniority + 5 timezone + 5 category) — each of those walked the
- * full active-jobs set on its own, so building the same facets object used to
- * cost O(17 × rows.length) plus 17 throwaway intermediate arrays. Timezone and
- * category buckets aren't mutually exclusive (a row can match more than one
- * timezone key, or belong to more than one tracked category), so those still
- * check each row individually — just within this one pass, not their own.
+ * Facets used to be computed by pulling every active job's jobType/level/
+ * country/timezone/categories into Node (findFacetRows(), no LIMIT) and
+ * reducing them in one JS pass. That cost grows linearly with the active-job
+ * count on every cache-miss (every 60s — see JobsService) regardless of how
+ * few people are actually browsing: rows fetched over the wire, held in
+ * memory, and walked in JS just to produce 17 integers. Postgres can produce
+ * the same 17 integers itself via conditional aggregation, so the DB never
+ * sends more than one row (plus up to 5 category rows) back to the app.
+ *
+ * jobType/seniority conditions mirror FILTER_OPTIONS' bucket definitions
+ * exactly (each row belongs to exactly one bucket); timezone conditions
+ * mirror tzCondition() exactly (a row can count toward more than one bucket,
+ * same as before — each COUNT(*) FILTER is independent).
  */
-export const computeFacets = (rows: FacetRow[]): Facets => {
-  const facets: Facets = {
-    jobType: zeroCounts(FILTER_OPTIONS.jobType),
-    timezone: zeroCounts(FILTER_OPTIONS.timezone),
-    seniority: zeroCounts(FILTER_OPTIONS.seniority),
-    category: zeroCounts(FILTER_OPTIONS.category),
-  };
+export function buildFacetCountsQuery(): Prisma.Sql {
+  const seaCountries = Prisma.join(SEA_COUNTRIES);
+  return Prisma.sql`
+    SELECT
+      COUNT(*) FILTER (WHERE "jobType" = 'FULL_TIME')::int AS jobtype_fulltime,
+      COUNT(*) FILTER (WHERE "jobType" IN ('CONTRACT', 'FREELANCE'))::int AS jobtype_contract,
+      COUNT(*) FILTER (WHERE "jobType" = 'PART_TIME')::int AS jobtype_parttime,
+      COUNT(*) FILTER (WHERE level = 'ENTRY')::int AS seniority_entry,
+      COUNT(*) FILTER (WHERE level = 'MID')::int AS seniority_mid,
+      COUNT(*) FILTER (WHERE level IN ('SENIOR', 'LEAD', 'EXECUTIVE'))::int AS seniority_senior,
+      COUNT(*) FILTER (
+        WHERE country IN (${seaCountries}) OR timezone LIKE '%+7%' OR timezone LIKE '%+8%'
+      )::int AS tz_sea,
+      COUNT(*) FILTER (WHERE timezone ILIKE '%async%')::int AS tz_async,
+      COUNT(*) FILTER (WHERE country = ${TZ_COUNTRY.SG})::int AS tz_sg,
+      COUNT(*) FILTER (WHERE country = ${TZ_COUNTRY.AU})::int AS tz_au,
+      COUNT(*) FILTER (WHERE country = ${TZ_COUNTRY.US})::int AS tz_us
+    FROM "jobs"
+    WHERE status = 'ACTIVE' AND "publishedAt" IS NOT NULL AND "publishedAt" <= now()
+  `;
+}
 
-  // Every index below is guaranteed present: zeroCounts() pre-populated
-  // facets.jobType/seniority/timezone/category from these exact same
-  // FILTER_OPTIONS arrays (JOBTYPE_LABEL_BY_ENUM/SENIORITY_LABEL_BY_LEVEL are
-  // built from the same source, and the category branch is gated on
-  // TRACKED_CATEGORY_NAMES, itself built from FILTER_OPTIONS.category).
-  for (const row of rows) {
-    const jobTypeLabel = JOBTYPE_LABEL_BY_ENUM.get(row.jobType);
-    if (jobTypeLabel !== undefined) facets.jobType[jobTypeLabel]! += 1;
+// Categories aren't mutually exclusive and live in a join table, so they're a
+// separate GROUP BY rather than another COUNT(*) FILTER column above.
+export function buildCategoryFacetsQuery(): Prisma.Sql {
+  const trackedNames = Prisma.join(FILTER_OPTIONS.category);
+  return Prisma.sql`
+    SELECT c.name, COUNT(*)::int AS count
+    FROM job_categories jc
+    JOIN categories c ON c.id = jc."categoryId"
+    JOIN jobs j ON j.id = jc."jobId"
+    WHERE j.status = 'ACTIVE'
+      AND j."publishedAt" IS NOT NULL
+      AND j."publishedAt" <= now()
+      AND c.name IN (${trackedNames})
+    GROUP BY c.name
+  `;
+}
 
-    const seniorityLabel = SENIORITY_LABEL_BY_LEVEL.get(row.level);
-    if (seniorityLabel !== undefined) facets.seniority[seniorityLabel]! += 1;
-
-    for (const key of FILTER_OPTIONS.timezone) {
-      if (matchesTz(row, key)) facets.timezone[key]! += 1;
-    }
-
-    for (const { category } of row.categories) {
-      if (TRACKED_CATEGORY_NAMES.has(category.name)) {
-        facets.category[category.name]! += 1;
-      }
-    }
+export const assembleFacets = (
+  counts: FacetCountsRow,
+  categoryRows: CategoryFacetRow[],
+): Facets => {
+  // buildCategoryFacetsQuery already filters to tracked names in SQL, but this
+  // stays defensive about it — only counts that land on a key zeroCounts()
+  // actually declared get written, so an untracked name can't sneak a stray
+  // key into the response.
+  const category = zeroCounts(FILTER_OPTIONS.category);
+  for (const row of categoryRows) {
+    if (row.name in category) category[row.name] = row.count;
   }
 
-  return facets;
+  return {
+    jobType: {
+      "Full-time": counts.jobtype_fulltime,
+      Contract: counts.jobtype_contract,
+      "Part-time": counts.jobtype_parttime,
+    },
+    seniority: {
+      Entry: counts.seniority_entry,
+      Mid: counts.seniority_mid,
+      Senior: counts.seniority_senior,
+    },
+    timezone: {
+      sea: counts.tz_sea,
+      async: counts.tz_async,
+      SG: counts.tz_sg,
+      AU: counts.tz_au,
+      US: counts.tz_us,
+    },
+    category,
+  };
 };

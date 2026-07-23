@@ -32,11 +32,26 @@ const admin: AuthenticatedUser = {
   role: "ADMIN",
 };
 
+const zeroFacetCounts = {
+  jobtype_fulltime: 0,
+  jobtype_contract: 0,
+  jobtype_parttime: 0,
+  seniority_entry: 0,
+  seniority_mid: 0,
+  seniority_senior: 0,
+  tz_sea: 0,
+  tz_async: 0,
+  tz_sg: 0,
+  tz_au: 0,
+  tz_us: 0,
+};
+
 const makeService = (repoOverrides: Partial<JobsRepository> = {}) => {
   const repo = {
     update: jest.fn(),
     updateIfEditable: jest.fn(),
-    findFacetRows: jest.fn().mockResolvedValue([]),
+    findFacetCounts: jest.fn().mockResolvedValue(zeroFacetCounts),
+    findCategoryFacetCounts: jest.fn().mockResolvedValue([]),
     ...repoOverrides,
   } as unknown as JobsRepository;
   const viewCounts = { record: jest.fn() };

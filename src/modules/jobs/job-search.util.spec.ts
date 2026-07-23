@@ -1,10 +1,12 @@
 import {
+  assembleFacets,
+  buildCategoryFacetsQuery,
+  buildFacetCountsQuery,
   buildJobOrderBy,
   buildJobWhere,
   buildSearchRankedIdsQuery,
-  computeFacets,
   SEARCH_CANDIDATE_LIMIT,
-  type FacetRow,
+  type FacetCountsRow,
 } from "./job-search.util";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
 
@@ -35,18 +37,24 @@ describe("buildSearchRankedIdsQuery", () => {
   });
 });
 
-const row = (overrides: Partial<FacetRow>): FacetRow => ({
-  jobType: "FULL_TIME",
-  level: "MID",
-  country: null,
-  timezone: null,
-  categories: [],
-  ...overrides,
-});
+const zeroCounts: FacetCountsRow = {
+  jobtype_fulltime: 0,
+  jobtype_contract: 0,
+  jobtype_parttime: 0,
+  seniority_entry: 0,
+  seniority_mid: 0,
+  seniority_senior: 0,
+  tz_sea: 0,
+  tz_async: 0,
+  tz_sg: 0,
+  tz_au: 0,
+  tz_us: 0,
+};
 
-describe("computeFacets", () => {
-  it("zero-fills every declared option even when no row matches it", () => {
-    const facets = computeFacets([]);
+describe("assembleFacets", () => {
+  it("zero-fills every tracked category even when no row matches it", () => {
+    const facets = assembleFacets(zeroCounts, []);
+
     expect(facets.jobType).toEqual({
       "Full-time": 0,
       Contract: 0,
@@ -69,52 +77,75 @@ describe("computeFacets", () => {
     });
   });
 
-  it("buckets jobType and seniority as mutually exclusive counts", () => {
-    const facets = computeFacets([
-      row({ jobType: "FULL_TIME", level: "ENTRY" }),
-      row({ jobType: "CONTRACT", level: "LEAD" }),
-      row({ jobType: "FREELANCE", level: "EXECUTIVE" }),
-      row({ jobType: "PART_TIME", level: "SENIOR" }),
-    ]);
+  it("maps each raw aggregate column to its public facet label", () => {
+    const facets = assembleFacets(
+      {
+        ...zeroCounts,
+        jobtype_fulltime: 3,
+        jobtype_contract: 2,
+        jobtype_parttime: 1,
+        seniority_entry: 1,
+        seniority_mid: 4,
+        seniority_senior: 3,
+        tz_sea: 2,
+        tz_async: 1,
+        tz_sg: 1,
+        tz_au: 0,
+        tz_us: 1,
+      },
+      [],
+    );
 
     expect(facets.jobType).toEqual({
-      "Full-time": 1,
-      Contract: 2, // CONTRACT and FREELANCE both roll up to "Contract"
+      "Full-time": 3,
+      Contract: 2,
       "Part-time": 1,
     });
-    expect(facets.seniority).toEqual({ Entry: 1, Mid: 0, Senior: 3 });
-  });
-
-  it("counts a row toward every timezone bucket it matches, not just one", () => {
-    // Vietnam + "async" in its timezone label matches both "sea" and "async".
-    const facets = computeFacets([
-      row({ country: "Vietnam", timezone: "Async / UTC+7" }),
-      row({ country: "Singapore" }),
-      row({ country: "United States" }),
-    ]);
-
+    expect(facets.seniority).toEqual({ Entry: 1, Mid: 4, Senior: 3 });
     expect(facets.timezone).toEqual({ sea: 2, async: 1, SG: 1, AU: 0, US: 1 });
   });
 
-  it("counts a row toward every tracked category it belongs to, ignoring untracked ones", () => {
-    const facets = computeFacets([
-      row({
-        categories: [
-          { category: { name: "Engineering" } },
-          { category: { name: "Data" } },
-          { category: { name: "Not Tracked" } },
-        ],
-      }),
-      row({ categories: [{ category: { name: "Engineering" } }] }),
+  it("fills in category counts from the join-table query, ignoring untracked names", () => {
+    const facets = assembleFacets(zeroCounts, [
+      { name: "Engineering", count: 5 },
+      { name: "Data", count: 2 },
+      { name: "Not Tracked", count: 99 },
     ]);
 
     expect(facets.category).toEqual({
-      Engineering: 2,
+      Engineering: 5,
       Design: 0,
-      Data: 1,
+      Data: 2,
       Product: 0,
       Marketing: 0,
     });
+  });
+});
+
+describe("buildFacetCountsQuery", () => {
+  it("only counts ACTIVE, published jobs, with no user input to parameterize", () => {
+    const query = buildFacetCountsQuery();
+
+    expect(query.sql).toContain("status = 'ACTIVE'");
+    expect(query.sql).toContain('"publishedAt" <= now()');
+    expect(query.sql).toContain("FILTER");
+  });
+});
+
+describe("buildCategoryFacetsQuery", () => {
+  it("joins job_categories/categories/jobs and groups by category name", () => {
+    const query = buildCategoryFacetsQuery();
+
+    expect(query.sql).toContain("GROUP BY c.name");
+    expect(query.sql).toContain("j.status = 'ACTIVE'");
+    // The 5 tracked category names are bound parameters, not inlined text.
+    expect(query.values).toEqual([
+      "Engineering",
+      "Design",
+      "Data",
+      "Product",
+      "Marketing",
+    ]);
   });
 });
 

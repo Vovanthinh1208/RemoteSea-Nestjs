@@ -7,9 +7,9 @@ import type { ListJobsDto } from "./dto/list-jobs.dto";
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
 import {
+  assembleFacets,
   buildJobOrderBy,
   buildJobWhere,
-  computeFacets,
   type Facets,
 } from "./job-search.util";
 import { uniqueSlug } from "@/common/utils/slugify";
@@ -51,7 +51,13 @@ export class JobsService {
         this.cache,
         FACETS_CACHE_KEY,
         FACETS_CACHE_TTL_MS,
-        async () => computeFacets(await this.jobsRepository.findFacetRows()),
+        async () => {
+          const [counts, categoryRows] = await Promise.all([
+            this.jobsRepository.findFacetCounts(),
+            this.jobsRepository.findCategoryFacetCounts(),
+          ]);
+          return assembleFacets(counts, categoryRows);
+        },
       ),
     ]);
 
