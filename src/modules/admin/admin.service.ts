@@ -109,11 +109,22 @@ export class AdminService {
     const { action, note } = dto;
     const employerEmail = job.employer.user.email;
 
-    // The status change is already committed by the time we email below — a
-    // notification failure must not surface as a failed review, since a retry
-    // would then hit the PENDING_REVIEW guard above with no way to redo it.
+    // The upfront status check above can go stale (another admin's review, or
+    // an unrelated status change, landing between that read and this write) —
+    // approveJob/rejectJob re-check PENDING_REVIEW atomically at write time
+    // and return null if it no longer holds, so this can't double-fire the
+    // approve/reject email + write the way a plain `update` could.
     if (action === "approve") {
       const updated = await this.adminRepository.approveJob(id);
+      if (!updated) {
+        throw new BadRequestApiException(
+          `Job is no longer pending review`,
+          ErrorCode.JOB_NOT_PENDING_REVIEW,
+        );
+      }
+      // The status change is already committed by the time we email below — a
+      // notification failure must not surface as a failed review, since a retry
+      // would then hit the PENDING_REVIEW guard above with no way to redo it.
       runInBackground(
         this.emailService.sendJobLiveEmail(employerEmail, job.title, job.slug),
         this.logger,
@@ -123,6 +134,12 @@ export class AdminService {
     }
 
     const updated = await this.adminRepository.rejectJob(id, note ?? null);
+    if (!updated) {
+      throw new BadRequestApiException(
+        `Job is no longer pending review`,
+        ErrorCode.JOB_NOT_PENDING_REVIEW,
+      );
+    }
     runInBackground(
       this.emailService.sendJobRejectedEmail(
         employerEmail,

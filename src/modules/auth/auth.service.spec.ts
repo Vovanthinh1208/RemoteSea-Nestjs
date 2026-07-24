@@ -1,4 +1,5 @@
 import * as bcrypt from "bcrypt";
+import { Prisma } from "@prisma/client";
 import { AuthService } from "./auth.service";
 import type { AuthRepository } from "./auth.repository";
 import type { EmailService } from "@/common/services/email.service";
@@ -7,6 +8,7 @@ import {
   ConflictApiException,
   UnauthorizedApiException,
 } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 
 jest.mock("bcrypt");
 
@@ -65,6 +67,36 @@ describe("AuthService.register", () => {
       }),
     ).rejects.toBeInstanceOf(ConflictApiException);
     expect(authRepository.createUser).not.toHaveBeenCalled();
+  });
+
+  it("maps a P2002 race on the unique email constraint to EMAIL_ALREADY_REGISTERED, not a generic conflict", async () => {
+    const { service } = makeService({
+      authRepository: {
+        // Fast path sees no existing user — a concurrent duplicate signup
+        // still races past this and hits the DB constraint below.
+        findUserByEmail: jest.fn().mockResolvedValue(null),
+        createUser: jest.fn().mockRejectedValue(
+          new Prisma.PrismaClientKnownRequestError("duplicate", {
+            code: "P2002",
+            clientVersion: "5.22.0",
+          }),
+        ),
+      },
+    });
+
+    const error = await service
+      .register({
+        name: "A",
+        email: "a@b.com",
+        password: "password123",
+        role: "TALENT",
+      })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ConflictApiException);
+    expect((error as ConflictApiException).getResponse()).toMatchObject({
+      code: ErrorCode.EMAIL_ALREADY_REGISTERED,
+    });
   });
 
   it("hashes the password and generates a talent slug only for TALENT signups", async () => {

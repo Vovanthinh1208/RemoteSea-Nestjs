@@ -6,6 +6,7 @@ import { JwtService } from "@nestjs/jwt";
 // interchangeable between the two ($2a/$2b both verify).
 import * as bcrypt from "bcrypt";
 import * as crypto from "crypto";
+import { Prisma } from "@prisma/client";
 import { AuthRepository } from "./auth.repository";
 import { AuthMapper } from "./auth.mapper";
 import { RESET_TOKEN_TTL_MS } from "./constants";
@@ -46,13 +47,33 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_SALT_ROUNDS);
-    const user = await this.authRepository.createUser({
-      name: dto.name,
-      email: dto.email,
-      passwordHash,
-      role: dto.role,
-      talentSlug: dto.role === "TALENT" ? uniqueSlug(dto.name) : undefined,
-    });
+    let user: RegisteredUser;
+    try {
+      user = await this.authRepository.createUser({
+        name: dto.name,
+        email: dto.email,
+        passwordHash,
+        role: dto.role,
+        talentSlug: dto.role === "TALENT" ? uniqueSlug(dto.name) : undefined,
+      });
+    } catch (error) {
+      // The findUserByEmail check above is only a fast path — two concurrent
+      // signups for the same email can both pass it before either writes,
+      // and the loser hits the users_email_key unique constraint. Without
+      // this, that race surfaces as GlobalExceptionFilter's generic P2002 ->
+      // ErrorCode.CONFLICT instead of the same EMAIL_ALREADY_REGISTERED the
+      // fast path above already promises callers for this exact condition.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        throw new ConflictApiException(
+          "Email already registered",
+          ErrorCode.EMAIL_ALREADY_REGISTERED,
+        );
+      }
+      throw error;
+    }
 
     // The account is already created above — a welcome-email failure must not
     // turn a successful signup into a 500 (a retry would then wrongly hit
