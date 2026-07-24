@@ -151,12 +151,14 @@ describe("JobsService.list", () => {
     const findSearchRankedIds = jest
       .fn()
       .mockResolvedValue(["best", "mid", "worst"]);
+    // All three ranked candidates also satisfy the other filters.
+    const findIds = jest.fn().mockResolvedValue(["best", "mid", "worst"]);
     // Deliberately returned in a different order than rankedIds, the way an
     // unordered Postgres `id IN (...)` scan would.
     const findMany = jest
       .fn()
       .mockResolvedValue([job("worst"), job("best"), job("mid")]);
-    const { service } = makeService({ findSearchRankedIds, findMany });
+    const { service } = makeService({ findSearchRankedIds, findIds, findMany });
 
     const result = await service.list({
       page: 1,
@@ -164,8 +166,34 @@ describe("JobsService.list", () => {
       q: "engineer",
     } as never);
 
+    expect(findMany).toHaveBeenCalledWith(
+      { id: { in: ["best", "mid", "worst"] } },
+      0,
+      3,
+    );
     expect(result.jobs).toEqual([job("best"), job("mid"), job("worst")]);
     expect(result.pagination.total).toBe(3);
+  });
+
+  it("with q and no explicit sort, drops ranked candidates that fail the other filters and paginates the survivors", async () => {
+    const findSearchRankedIds = jest
+      .fn()
+      .mockResolvedValue(["best", "mid", "worst"]);
+    // "mid" matched the search but not the other filters (e.g. country) —
+    // findIds is the source of truth for which candidates survive.
+    const findIds = jest.fn().mockResolvedValue(["best", "worst"]);
+    const findMany = jest.fn().mockResolvedValue([job("best")]);
+    const { service } = makeService({ findSearchRankedIds, findIds, findMany });
+
+    const result = await service.list({
+      page: 1,
+      limit: 1,
+      q: "engineer",
+    } as never);
+
+    expect(findMany).toHaveBeenCalledWith({ id: { in: ["best"] } }, 0, 1);
+    expect(result.jobs).toEqual([job("best")]);
+    expect(result.pagination.total).toBe(2);
   });
 
   it("with q and an explicit sort=salary, honors the explicit sort over relevance", async () => {

@@ -58,6 +58,16 @@ export class JobsRepository {
     return this.prisma.job.count({ where });
   }
 
+  // id-only, no joins — for JobsService.listBySearch to learn which of the
+  // (already-ranked) search candidates also satisfy the other filters,
+  // without paying for jobListItemSelect's employer/categories/skills joins
+  // on rows that are only ever used to compute a page slice + total.
+  findIds(where: Prisma.JobWhereInput): Promise<string[]> {
+    return this.prisma.job
+      .findMany({ where, select: { id: true } })
+      .then((rows) => rows.map((row) => row.id));
+  }
+
   // See buildFacetCountsQuery/buildCategoryFacetsQuery for why this is two
   // small aggregate queries instead of loading every active job into memory.
   // A bare aggregate with no GROUP BY always returns exactly one row (even

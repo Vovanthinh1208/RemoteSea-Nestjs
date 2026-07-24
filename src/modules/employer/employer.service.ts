@@ -3,7 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 import {
   EmployerRepository,
-  type ProfileWithApplicationCounts,
+  type ProfileWithJobCount,
   type PublicEmployerProfile,
 } from "./employer.repository";
 import { ALLOWED_TRANSITIONS } from "./constants";
@@ -82,24 +82,18 @@ export class EmployerService {
 
   async getProfile(
     userId: string,
-  ): Promise<
-    Omit<ProfileWithApplicationCounts, "jobs"> & { totalApplications: number }
-  > {
-    const profile =
-      await this.employerRepository.findProfileWithApplicationCounts(userId);
+  ): Promise<ProfileWithJobCount & { totalApplications: number }> {
+    const [profile, totalApplications] = await Promise.all([
+      this.employerRepository.findProfileWithJobCount(userId),
+      this.employerRepository.countApplicationsForOwner(userId),
+    ]);
     assertFound(
       profile,
       "Profile not found",
       ErrorCode.EMPLOYER_PROFILE_NOT_FOUND,
     );
 
-    const { jobs, ...rest } = profile;
-    const totalApplications = jobs.reduce(
-      (sum, j) => sum + j._count.applications,
-      0,
-    );
-
-    return { ...rest, totalApplications };
+    return { ...profile, totalApplications };
   }
 
   async updateProfile(

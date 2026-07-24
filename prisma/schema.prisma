@@ -345,8 +345,12 @@ model JobAlert {
   user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   categories AlertCategory[]
 
-  @@index([userId])
-  @@index([isActive])
+  // Composite, not single-column: findByUser (alerts.repository.ts) filters
+  // userId and orders by createdAt desc; findActiveAlerts filters isActive
+  // and orders by lastSentAt (nulls first) — each composite index lets
+  // Postgres satisfy its query's filter+sort from the index alone.
+  @@index([userId, createdAt])
+  @@index([isActive, lastSentAt])
   @@map("job_alerts")
 }
 
@@ -359,7 +363,9 @@ model SavedJob {
   job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   @@id([userId, jobId])
-  @@index([userId])
+  // Composite so findAllForUser's userId filter + createdAt desc sort
+  // (saved.repository.ts) is satisfied by the index alone, not a separate sort.
+  @@index([userId, createdAt])
   @@map("saved_jobs")
 }
 

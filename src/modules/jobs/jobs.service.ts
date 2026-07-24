@@ -118,18 +118,28 @@ export class JobsService {
     }
 
     // rankedIds is already ordered best-match-first; findMany has no matching
-    // orderBy to give it, so all surviving matches (bounded by
-    // SEARCH_CANDIDATE_LIMIT) are fetched and paginated in JS instead.
-    const matches = await this.jobsRepository.findMany(
-      where,
+    // orderBy to give it. Rather than fetching every surviving match (up to
+    // SEARCH_CANDIDATE_LIMIT) with its full employer/categories/skills joins
+    // just to slice one page out of it in JS, first narrow rankedIds down to
+    // the ids that also satisfy `where` with a cheap id-only query, then only
+    // pay for the joined select on the one page actually being returned.
+    const matchingIds = new Set(await this.jobsRepository.findIds(where));
+    const orderedIds = rankedIds.filter((id) => matchingIds.has(id));
+    const pageIds = orderedIds.slice(skip, skip + limit);
+    if (pageIds.length === 0) return { jobs: [], total: orderedIds.length };
+
+    const pageJobs = await this.jobsRepository.findMany(
+      { id: { in: pageIds } },
       0,
-      rankedIds.length,
+      pageIds.length,
     );
-    const rankOf = new Map(rankedIds.map((id, index) => [id, index]));
-    const sorted = [...matches].sort(
+    // findMany's `id: { in: pageIds } }` doesn't preserve pageIds' order, so
+    // re-sort the (small, page-sized) result to match relevance rank.
+    const rankOf = new Map(pageIds.map((id, index) => [id, index]));
+    const jobs = [...pageJobs].sort(
       (a, b) => (rankOf.get(a.id) ?? 0) - (rankOf.get(b.id) ?? 0),
     );
-    return { jobs: sorted.slice(skip, skip + limit), total: sorted.length };
+    return { jobs, total: orderedIds.length };
   }
 
   async getActiveById(id: string) {

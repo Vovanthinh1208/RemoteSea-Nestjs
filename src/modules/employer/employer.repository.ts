@@ -31,14 +31,13 @@ export type PublicEmployerProfile = Prisma.EmployerProfileGetPayload<{
   select: typeof profileSelect;
 }>;
 
-const profileWithApplicationCountsSelect = {
+const profileWithJobCountSelect = {
   ...profileSelect,
   _count: { select: { jobs: true } },
-  jobs: { select: { _count: { select: { applications: true } } } },
 } satisfies Prisma.EmployerProfileSelect;
 
-export type ProfileWithApplicationCounts = Prisma.EmployerProfileGetPayload<{
-  select: typeof profileWithApplicationCountsSelect;
+export type ProfileWithJobCount = Prisma.EmployerProfileGetPayload<{
+  select: typeof profileWithJobCountSelect;
 }>;
 
 @Injectable()
@@ -84,12 +83,19 @@ export class EmployerRepository {
     return profile;
   }
 
-  findProfileWithApplicationCounts(
-    userId: string,
-  ): Promise<ProfileWithApplicationCounts | null> {
+  findProfileWithJobCount(userId: string): Promise<ProfileWithJobCount | null> {
     return this.prisma.employerProfile.findUnique({
       where: { userId },
-      select: profileWithApplicationCountsSelect,
+      select: profileWithJobCountSelect,
+    });
+  }
+
+  // A single aggregate instead of loading every job row's per-job application
+  // count into memory just to sum them (the previous approach, and also
+  // unbounded — unlike findJobsByEmployer it had no cap on job count either).
+  countApplicationsForOwner(userId: string): Promise<number> {
+    return this.prisma.application.count({
+      where: { job: { employer: { userId } } },
     });
   }
 
