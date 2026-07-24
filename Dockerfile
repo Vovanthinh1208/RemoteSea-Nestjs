@@ -18,7 +18,7 @@ FROM base AS build
 COPY package.json package-lock.json ./
 COPY --from=deps /app/node_modules ./node_modules
 COPY prisma ./prisma
-COPY tsconfig.json nest-cli.json ./
+COPY tsconfig.json tsconfig.build.json nest-cli.json ./
 COPY src ./src
 RUN npx prisma generate
 RUN NODE_OPTIONS=--max-old-space-size=8192 npm run build; \
