@@ -43,18 +43,31 @@ export class ViewCountBuffer implements OnModuleDestroy {
     // different job rows, so there's no reason to pay N sequential DB
     // round-trips on every flush tick instead of letting Prisma's own
     // connection pool bound the real concurrency.
-    await Promise.all(
+    const results = await Promise.all(
       Array.from(batch, ([jobId, count]) =>
         this.jobsRepository
           .incrementViewCountBy(jobId, count)
+          .then(() => true)
           .catch((error: unknown) => {
             // Same policy as the old per-view fire-and-forget: log and drop.
             this.logger.warn(
               `Failed to flush ${count} view(s) for job ${jobId}`,
               error instanceof Error ? error.stack : error,
             );
+            return false;
           }),
       ),
+    );
+
+    // debug (not log): this fires every VIEW_COUNT_FLUSH_INTERVAL_MS across
+    // every instance whenever there's been any traffic, unlike the alerts
+    // cron below which only runs when its (much less frequent) scheduler
+    // fires — a per-tick `log` line here would just be noise most of the
+    // time. Still gives an operator something to grep for "were flushes
+    // succeeding" during an incident, without a debug build.
+    const failed = results.filter((ok) => !ok).length;
+    this.logger.debug(
+      `Flushed view counts for ${batch.size} job(s)${failed ? ` (${failed} failed)` : ""}`,
     );
   }
 

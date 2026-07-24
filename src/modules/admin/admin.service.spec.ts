@@ -1,3 +1,4 @@
+import { Logger } from "@nestjs/common";
 import { AdminService } from "./admin.service";
 import type { AdminRepository } from "./admin.repository";
 import type { EmployerService } from "@/modules/employer/employer.service";
@@ -59,7 +60,7 @@ describe("AdminService.reviewJob", () => {
     });
 
     const error = await service
-      .reviewJob("job-1", { action: "approve" })
+      .reviewJob("job-1", { action: "approve" }, "admin-1")
       .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(BadRequestApiException);
@@ -77,7 +78,7 @@ describe("AdminService.reviewJob", () => {
     });
 
     const error = await service
-      .reviewJob("job-1", { action: "reject" })
+      .reviewJob("job-1", { action: "reject" }, "admin-1")
       .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(BadRequestApiException);
@@ -98,10 +99,35 @@ describe("AdminService.reviewJob", () => {
       },
     });
 
-    const result = await service.reviewJob("job-1", { action: "approve" });
+    const result = await service.reviewJob(
+      "job-1",
+      { action: "approve" },
+      "admin-1",
+    );
 
     expect(result.status).toBe("ACTIVE");
     expect(emailService.sendJobLiveEmail).toHaveBeenCalled();
+  });
+
+  // There's no audit table for admin actions — this log line is the only
+  // record of who approved/rejected a job, so it's worth pinning in a test.
+  it("logs the acting admin's id on approval, for an audit trail no table exists for", async () => {
+    const logSpy = jest.spyOn(Logger.prototype, "log").mockImplementation();
+    const { service } = makeService({
+      adminRepository: {
+        findJobWithEmployerEmail: jest.fn().mockResolvedValue(pendingJob),
+      },
+      jobsService: {
+        approveForReview: jest
+          .fn()
+          .mockResolvedValue({ status: "ACTIVE", publishedAt: new Date() }),
+      },
+    });
+
+    await service.reviewJob("job-1", { action: "approve" }, "admin-42");
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("admin-42"));
+    logSpy.mockRestore();
   });
 });
 
@@ -114,7 +140,7 @@ describe("AdminService.updateEmployer", () => {
       employerService: { setVerified: jest.fn().mockResolvedValue(undefined) },
     });
 
-    await service.updateEmployer("emp-1", { action: "verify" });
+    await service.updateEmployer("emp-1", { action: "verify" }, "admin-1");
 
     expect(employerService.setVerified).toHaveBeenCalledWith("emp-1", true);
   });
@@ -127,7 +153,7 @@ describe("AdminService.updateEmployer", () => {
       employerService: { suspend: jest.fn().mockResolvedValue(undefined) },
     });
 
-    await service.updateEmployer("emp-1", { action: "suspend" });
+    await service.updateEmployer("emp-1", { action: "suspend" }, "admin-1");
 
     expect(employerService.suspend).toHaveBeenCalledWith("emp-1");
   });

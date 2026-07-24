@@ -66,6 +66,7 @@ export class AdminService {
   async updateEmployer(
     id: string,
     dto: UpdateEmployerDto,
+    adminId: string,
   ): Promise<{ success: true }> {
     const employer = await this.adminRepository.findEmployerById(id);
     if (!employer) {
@@ -80,6 +81,11 @@ export class AdminService {
     } else {
       await this.employerService.suspend(id);
     }
+    // No audit table for this today — logging the actor is the only record
+    // of "who verified/suspended this employer" available during an
+    // incident or dispute.
+    const verb = dto.action === "verify" ? "verified" : "suspended";
+    this.logger.log(`Employer ${id} ${verb} by admin ${adminId}`);
 
     return { success: true };
   }
@@ -98,7 +104,7 @@ export class AdminService {
     return { jobs, pagination: buildPagination(page, limit, total) };
   }
 
-  async reviewJob(id: string, dto: ReviewJobDto) {
+  async reviewJob(id: string, dto: ReviewJobDto, adminId: string) {
     const job = await this.adminRepository.findJobWithEmployerEmail(id);
     if (!job) {
       throw new NotFoundApiException("Job not found", ErrorCode.JOB_NOT_FOUND);
@@ -127,6 +133,9 @@ export class AdminService {
           ErrorCode.JOB_NOT_PENDING_REVIEW,
         );
       }
+      // No audit table for this today — logging the actor is the only record
+      // of "who approved this job" available during an incident or dispute.
+      this.logger.log(`Job ${id} approved by admin ${adminId}`);
       // The status change is already committed by the time we email below — a
       // notification failure must not surface as a failed review, since a retry
       // would then hit the PENDING_REVIEW guard above with no way to redo it.
@@ -145,6 +154,7 @@ export class AdminService {
         ErrorCode.JOB_NOT_PENDING_REVIEW,
       );
     }
+    this.logger.log(`Job ${id} rejected by admin ${adminId}`);
     runInBackground(
       this.emailService.sendJobRejectedEmail(
         employerEmail,

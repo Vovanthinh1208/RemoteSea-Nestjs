@@ -164,7 +164,7 @@ export class AuthService {
     runInBackground(
       this.emailService.sendPasswordResetEmail(email, token),
       this.logger,
-      "Failed to send password-reset email",
+      `Failed to send password-reset email for user ${user.id}`,
     );
   }
 

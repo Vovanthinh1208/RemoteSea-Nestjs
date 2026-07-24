@@ -69,6 +69,13 @@ export class AlertsService {
         sent += results.filter(Boolean).length;
       }
 
+      // Logged unconditionally (including processed=0) — this cron only runs
+      // over HTTP, so without this the only trace of a successful run is a
+      // generic access-log line with no counts, making "not running" and
+      // "running with nothing to send" indistinguishable from the logs alone.
+      this.logger.log(
+        `dispatchCron finished: processed ${alerts.length} alert(s), sent ${sent} email(s) in ${Date.now() - now}ms`,
+      );
       return { processed: alerts.length, sent };
     } finally {
       this.dispatchInProgress = false;
