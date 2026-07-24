@@ -126,6 +126,41 @@ describe("GlobalExceptionFilter", () => {
     );
   });
 
+  it("maps a salary-range CHECK constraint violation to a 400, not the generic 500 fallback", () => {
+    const filter = new GlobalExceptionFilter();
+    const { host, response } = makeHost();
+
+    // Reproduces the exact shape observed empirically against Prisma
+    // 5.22.0: a CHECK constraint violation on a normal (non-$queryRaw)
+    // Prisma Client call has no known P-code, just this error class with
+    // the raw driver message.
+    const error = new Prisma.PrismaClientUnknownRequestError(
+      'Error occurred during query execution: ... violates check constraint "jobs_salary_range_check" ...',
+      { clientVersion: "5.22.0" },
+    );
+    filter.catch(error, host);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: ErrorCode.SALARY_RANGE_INVALID }),
+    );
+  });
+
+  it("falls back to a generic 500 for an unrelated PrismaClientUnknownRequestError", () => {
+    const filter = new GlobalExceptionFilter();
+    const { host, response } = makeHost();
+
+    const error = new Prisma.PrismaClientUnknownRequestError(
+      "connection reset",
+      {
+        clientVersion: "5.22.0",
+      },
+    );
+    filter.catch(error, host);
+
+    expect(response.status).toHaveBeenCalledWith(500);
+  });
+
   it("falls back to a generic 500 for an unrecognized Prisma error code", () => {
     const filter = new GlobalExceptionFilter();
     const { host, response } = makeHost();

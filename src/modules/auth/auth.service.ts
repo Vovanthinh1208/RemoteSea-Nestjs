@@ -178,10 +178,19 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
-    await this.authRepository.consumePasswordReset(
+    const consumed = await this.authRepository.consumePasswordReset(
       record.identifier,
       token,
       passwordHash,
     );
+    // false means a concurrent request already consumed this token between
+    // the read above and this write (see consumePasswordReset) — same
+    // response as an expired/unknown token, not a crash or a silent no-op.
+    if (!consumed) {
+      throw new BadRequestApiException(
+        "Invalid or expired token",
+        ErrorCode.INVALID_OR_EXPIRED_TOKEN,
+      );
+    }
   }
 }

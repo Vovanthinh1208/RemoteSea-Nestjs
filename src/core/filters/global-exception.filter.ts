@@ -103,6 +103,29 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       }
     }
 
+    // A Postgres CHECK constraint violation (e.g. jobs_salary_range_check,
+    // talent_profiles_desired_salary_range_check — see the migration that
+    // added them) on a *normal* Prisma Client call — not $queryRaw, which
+    // would be P2010 instead — doesn't map to a known P-code in this Prisma
+    // version (verified empirically against 5.22.0: it surfaces as
+    // PrismaClientUnknownRequestError with no `.code` at all, just the raw
+    // driver message). These constraints exist specifically to catch a race
+    // that application-level validation on a pre-write read can't (two
+    // concurrent partial updates to the same row, each individually valid
+    // against a stale view of the other field) — without this, hitting that
+    // race would 500 instead of giving the same clean 400 a non-racing
+    // invalid request already gets from SalaryRange.create/merge.
+    if (
+      exception instanceof Prisma.PrismaClientUnknownRequestError &&
+      exception.message.includes("salary_range_check")
+    ) {
+      response.status(400).json({
+        error: "salaryMax must be greater than or equal to salaryMin",
+        code: ErrorCode.SALARY_RANGE_INVALID,
+      });
+      return;
+    }
+
     this.logger.error(exception instanceof Error ? exception.stack : exception);
     response
       .status(500)

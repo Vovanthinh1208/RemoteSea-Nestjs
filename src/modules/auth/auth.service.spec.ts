@@ -28,7 +28,7 @@ const makeService = (overrides?: {
     findOrCreateOAuthUser: jest.fn(),
     createVerificationToken: jest.fn(),
     findVerificationToken: jest.fn(),
-    consumePasswordReset: jest.fn(),
+    consumePasswordReset: jest.fn().mockResolvedValue(true),
     ...overrides?.authRepository,
   };
   const emailService = {
@@ -377,5 +377,22 @@ describe("AuthService.resetPassword", () => {
       "t1",
       "new-hash",
     );
+  });
+
+  it("rejects when a concurrent request already consumed this token (consumePasswordReset returns false)", async () => {
+    const { service } = makeService({
+      authRepository: {
+        findVerificationToken: jest.fn().mockResolvedValue({
+          identifier: "a@b.com",
+          token: "t1",
+          expires: new Date(Date.now() + 1000 * 60 * 60),
+        }),
+        consumePasswordReset: jest.fn().mockResolvedValue(false),
+      },
+    });
+
+    await expect(
+      service.resetPassword("t1", "newpassword123"),
+    ).rejects.toBeInstanceOf(BadRequestApiException);
   });
 });
