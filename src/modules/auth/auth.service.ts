@@ -119,6 +119,27 @@ export class AuthService {
     return { accessToken: this.jwtService.sign(payload) };
   }
 
+  // The inverse of issueToken — kept in this service (not AuthController) so
+  // token issuance and verification live in one place instead of the
+  // controller reaching around AuthService into JwtService directly, the way
+  // it used to. Returns null (never throws) for any invalid/expired/missing
+  // token: GET /session's contract is "who is the caller, if anyone" — an
+  // absent-or-bad token means anonymous, not a request error.
+  verifySession(
+    authorizationHeader: string | undefined,
+  ): AuthenticatedUser | null {
+    if (!authorizationHeader?.startsWith("Bearer ")) return null;
+
+    try {
+      const payload = this.jwtService.verify<JwtPayload>(
+        authorizationHeader.slice("Bearer ".length),
+      );
+      return AuthMapper.fromPayload(payload);
+    } catch {
+      return null;
+    }
+  }
+
   async validateOAuthLogin(profile: OAuthProfile): Promise<AuthenticatedUser> {
     const user = await this.authRepository.findOrCreateOAuthUser(profile);
     return AuthMapper.toAuthenticatedUser(user);

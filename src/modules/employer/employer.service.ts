@@ -140,6 +140,17 @@ export class EmployerService {
     return updated;
   }
 
+  // Admin-triggered (AdminService.verifyEmployer/suspendEmployer), not
+  // self-service — but the write itself belongs here, not reimplemented in
+  // AdminRepository, since this module owns the EmployerProfile domain.
+  setVerified(id: string, isVerified: boolean) {
+    return this.employerRepository.setVerified(id, isVerified);
+  }
+
+  suspend(id: string): Promise<void> {
+    return this.employerRepository.suspend(id);
+  }
+
   async listJobs(userId: string, dto: ListEmployerJobsDto) {
     const employer = await this.employerRepository.findProfileByUserId(userId);
     if (!employer) {

@@ -8,5 +8,8 @@ import { ViewCountBuffer } from "./view-count.buffer";
 @Module({
   controllers: [JobsController],
   providers: [JobsService, JobsRepository, JobOwnershipGuard, ViewCountBuffer],
+  // AdminModule calls JobsService.approveForReview/rejectForReview for
+  // admin-triggered job moderation — see admin.service.ts.
+  exports: [JobsService],
 })
 export class JobsModule {}

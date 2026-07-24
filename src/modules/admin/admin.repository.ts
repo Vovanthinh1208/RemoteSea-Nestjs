@@ -59,26 +59,6 @@ export class AdminRepository {
     });
   }
 
-  verifyEmployer(id: string): Promise<EmployerProfile> {
-    return this.prisma.employerProfile.update({
-      where: { id },
-      data: { isVerified: true },
-    });
-  }
-
-  async suspendEmployer(id: string): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.employerProfile.update({
-        where: { id },
-        data: { isVerified: false },
-      }),
-      this.prisma.job.updateMany({
-        where: { employerId: id, status: "ACTIVE" },
-        data: { status: "CLOSED" },
-      }),
-    ]);
-  }
-
   // Explicit select matching remotesea-web's AdminJob type field-for-field (verified
   // against actual usage in src/features/admin/**) — was a root-level `include`,
   // which pulls every Job scalar (description/requirements/benefits text+array
@@ -147,42 +127,6 @@ export class AdminRepository {
         status: true,
         employer: { select: { user: { select: { email: true } } } },
       },
-    });
-  }
-
-  // Conditional updateMany (not a plain update), same pattern as
-  // JobsRepository.updateIfEditable — re-checks PENDING_REVIEW atomically at
-  // write time. Without this, two concurrent reviews of the same job (or a
-  // review racing another status change) could both pass reviewJob()'s
-  // upfront status check and double-fire the approve/reject email + write.
-  async approveJob(
-    id: string,
-  ): Promise<Pick<Job, "status" | "publishedAt"> | null> {
-    const { count } = await this.prisma.job.updateMany({
-      where: { id, status: "PENDING_REVIEW" },
-      data: { status: "ACTIVE", publishedAt: new Date(), reviewNote: null },
-    });
-    if (count === 0) return null;
-
-    return this.prisma.job.findUnique({
-      where: { id },
-      select: { status: true, publishedAt: true },
-    });
-  }
-
-  async rejectJob(
-    id: string,
-    note: string | null,
-  ): Promise<Pick<Job, "status" | "publishedAt"> | null> {
-    const { count } = await this.prisma.job.updateMany({
-      where: { id, status: "PENDING_REVIEW" },
-      data: { status: "REJECTED", reviewNote: note },
-    });
-    if (count === 0) return null;
-
-    return this.prisma.job.findUnique({
-      where: { id },
-      select: { status: true, publishedAt: true },
     });
   }
 

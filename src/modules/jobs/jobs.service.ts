@@ -218,4 +218,18 @@ export class JobsService {
     }
     return updated;
   }
+
+  // Admin-triggered (AdminService.reviewJob), not owner-triggered — but the
+  // PENDING_REVIEW -> ACTIVE/REJECTED transition itself belongs here, not
+  // reimplemented in AdminRepository, since this module owns every Job
+  // status transition. Null means the atomic re-check found the job already
+  // moved on (e.g. a second concurrent review) — the caller maps that to
+  // JOB_NOT_PENDING_REVIEW.
+  approveForReview(id: string) {
+    return this.jobsRepository.approveJob(id);
+  }
+
+  rejectForReview(id: string, note: string | null) {
+    return this.jobsRepository.rejectJob(id, note);
+  }
 }

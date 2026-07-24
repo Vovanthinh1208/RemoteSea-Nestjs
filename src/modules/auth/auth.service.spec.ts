@@ -20,7 +20,7 @@ jest.mock("bcrypt");
 const makeService = (overrides?: {
   authRepository?: Partial<AuthRepository>;
   emailService?: Partial<EmailService>;
-  jwtService?: { sign: jest.Mock };
+  jwtService?: { sign: jest.Mock; verify?: jest.Mock };
 }) => {
   const authRepository = {
     findUserByEmail: jest.fn(),
@@ -38,6 +38,7 @@ const makeService = (overrides?: {
   };
   const jwtService = overrides?.jwtService ?? {
     sign: jest.fn().mockReturnValue("signed.jwt.token"),
+    verify: jest.fn(),
   };
 
   const service = new AuthService(
@@ -244,6 +245,51 @@ describe("AuthService.issueToken", () => {
       role: "TALENT",
     });
     expect(result).toEqual({ accessToken: "signed.jwt.token" });
+  });
+});
+
+describe("AuthService.verifySession", () => {
+  it("returns null when there's no Authorization header", () => {
+    const { service } = makeService();
+    expect(service.verifySession(undefined)).toBeNull();
+  });
+
+  it("returns null for a non-Bearer Authorization header", () => {
+    const { service } = makeService();
+    expect(service.verifySession("Basic abc123")).toBeNull();
+  });
+
+  it("returns null (not a throw) for an invalid/expired token", () => {
+    const verify = jest.fn().mockImplementation(() => {
+      throw new Error("jwt expired");
+    });
+    const { service } = makeService({
+      jwtService: { sign: jest.fn(), verify },
+    });
+
+    expect(service.verifySession("Bearer bad.token")).toBeNull();
+  });
+
+  it("maps a valid token's payload to an AuthenticatedUser", () => {
+    const verify = jest.fn().mockReturnValue({
+      sub: "u1",
+      email: "a@b.com",
+      name: "A",
+      role: "TALENT",
+    });
+    const { service } = makeService({
+      jwtService: { sign: jest.fn(), verify },
+    });
+
+    const result = service.verifySession("Bearer good.token");
+
+    expect(verify).toHaveBeenCalledWith("good.token");
+    expect(result).toEqual({
+      id: "u1",
+      email: "a@b.com",
+      name: "A",
+      role: "TALENT",
+    });
   });
 });
 

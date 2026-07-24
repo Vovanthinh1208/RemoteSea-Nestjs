@@ -162,4 +162,42 @@ export class JobsRepository {
     const job = await this.prisma.job.findUnique({ where: { id } });
     return job && omitInternalJobFields(job);
   }
+
+  // Conditional updateMany (not a plain update) — re-checks PENDING_REVIEW
+  // atomically at write time, same reasoning as updateIfEditable above.
+  // Without this, two concurrent admin reviews of the same job (or a review
+  // racing another status change) could both pass AdminService.reviewJob's
+  // upfront status check and double-fire the approve email + write. Owned
+  // here (not AdminRepository) since Job status transitions are this
+  // module's domain rule regardless of which module triggers them.
+  async approveJob(
+    id: string,
+  ): Promise<Pick<Job, "status" | "publishedAt"> | null> {
+    const { count } = await this.prisma.job.updateMany({
+      where: { id, status: "PENDING_REVIEW" },
+      data: { status: "ACTIVE", publishedAt: new Date(), reviewNote: null },
+    });
+    if (count === 0) return null;
+
+    return this.prisma.job.findUnique({
+      where: { id },
+      select: { status: true, publishedAt: true },
+    });
+  }
+
+  async rejectJob(
+    id: string,
+    note: string | null,
+  ): Promise<Pick<Job, "status" | "publishedAt"> | null> {
+    const { count } = await this.prisma.job.updateMany({
+      where: { id, status: "PENDING_REVIEW" },
+      data: { status: "REJECTED", reviewNote: note },
+    });
+    if (count === 0) return null;
+
+    return this.prisma.job.findUnique({
+      where: { id },
+      select: { status: true, publishedAt: true },
+    });
+  }
 }

@@ -15,5 +15,8 @@ import { UploadsModule } from "@/modules/uploads/uploads.module";
     EmployerJobOwnershipGuard,
     ApplicationOwnershipGuard,
   ],
+  // AdminModule calls EmployerService.setVerified/suspend for admin-triggered
+  // employer moderation — see admin.service.ts.
+  exports: [EmployerService],
 })
 export class EmployerModule {}

@@ -1,5 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { AdminRepository } from "./admin.repository";
+import { EmployerService } from "@/modules/employer/employer.service";
+import { JobsService } from "@/modules/jobs/jobs.service";
 import type { ListEmployersDto } from "./dto/list-employers.dto";
 import type { UpdateEmployerDto } from "./dto/update-employer.dto";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
@@ -32,6 +34,8 @@ export class AdminService {
 
   constructor(
     private readonly adminRepository: AdminRepository,
+    private readonly employerService: EmployerService,
+    private readonly jobsService: JobsService,
     private readonly emailService: EmailService,
   ) {}
 
@@ -72,9 +76,9 @@ export class AdminService {
     }
 
     if (dto.action === "verify") {
-      await this.adminRepository.verifyEmployer(id);
+      await this.employerService.setVerified(id, true);
     } else {
-      await this.adminRepository.suspendEmployer(id);
+      await this.employerService.suspend(id);
     }
 
     return { success: true };
@@ -111,11 +115,12 @@ export class AdminService {
 
     // The upfront status check above can go stale (another admin's review, or
     // an unrelated status change, landing between that read and this write) —
-    // approveJob/rejectJob re-check PENDING_REVIEW atomically at write time
-    // and return null if it no longer holds, so this can't double-fire the
-    // approve/reject email + write the way a plain `update` could.
+    // approveForReview/rejectForReview re-check PENDING_REVIEW atomically at
+    // write time and return null if it no longer holds, so this can't
+    // double-fire the approve/reject email + write the way a plain `update`
+    // could.
     if (action === "approve") {
-      const updated = await this.adminRepository.approveJob(id);
+      const updated = await this.jobsService.approveForReview(id);
       if (!updated) {
         throw new BadRequestApiException(
           `Job is no longer pending review`,
@@ -133,7 +138,7 @@ export class AdminService {
       return updated;
     }
 
-    const updated = await this.adminRepository.rejectJob(id, note ?? null);
+    const updated = await this.jobsService.rejectForReview(id, note ?? null);
     if (!updated) {
       throw new BadRequestApiException(
         `Job is no longer pending review`,

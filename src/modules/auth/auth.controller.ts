@@ -10,10 +10,8 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { JwtService } from "@nestjs/jwt";
 import type { Request, Response } from "express";
 import { AuthService } from "./auth.service";
-import { AuthMapper } from "./auth.mapper";
 import { GoogleAuthGuard } from "./guards/google-auth.guard";
 import { GithubAuthGuard } from "./guards/github-auth.guard";
 import { registerSchema, type RegisterDto } from "./dto/register.dto";
@@ -33,10 +31,7 @@ import {
   clientIp,
 } from "@/common/services/rate-limit.service";
 import type { EnvConfig } from "@/core/config/env.validation";
-import type {
-  AuthenticatedUser,
-  JwtPayload,
-} from "@/common/interfaces/authenticated-user.interface";
+import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import type { OAuthProfile } from "./interfaces";
 import {
   ApiAuthTag,
@@ -57,7 +52,6 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly rateLimitService: RateLimitService,
-    private readonly jwtService: JwtService,
     private readonly config: ConfigService<EnvConfig, true>,
   ) {}
 
@@ -108,20 +102,8 @@ export class AuthController {
 
   @ApiSession()
   @Get("session")
-  async session(
-    @Req() req: Request,
-  ): Promise<{ user: AuthenticatedUser | null }> {
-    const header = req.headers.authorization;
-    if (!header?.startsWith("Bearer ")) return { user: null };
-
-    try {
-      const payload = this.jwtService.verify<JwtPayload>(
-        header.slice("Bearer ".length),
-      );
-      return { user: AuthMapper.fromPayload(payload) };
-    } catch {
-      return { user: null };
-    }
+  session(@Req() req: Request): { user: AuthenticatedUser | null } {
+    return { user: this.authService.verifySession(req.headers.authorization) };
   }
 
   @ApiGoogleLogin()
