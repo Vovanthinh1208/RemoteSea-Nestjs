@@ -159,7 +159,33 @@ async function bootstrap(): Promise<void> {
   }
 
   const port = config.get("PORT", { infer: true });
-  await app.listen(port);
+  const server = await app.listen(port);
+
+  // Node's http.Server defaults (keepAliveTimeout: 5s, headersTimeout: 60s)
+  // assume nothing sits in front of it. This app always runs behind a reverse
+  // proxy/load balancer (see TRUST_PROXY_HOPS above) — virtually every one of
+  // those (nginx, Railway, Render, Fly, ALB) keeps its own client connections
+  // alive well past 5s. If the proxy reuses a keep-alive connection to send a
+  // new request at the exact moment Node's 5s timer has just closed that
+  // socket, the request hits a connection that's already gone — surfacing to
+  // end users as an intermittent 502, not a clean error from this app. Raising
+  // both past any realistic upstream idle timeout closes that race; headers
+  // must stay greater than keepAlive (Node enforces this at the socket level).
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 66_000;
+
+  // Raising keepAliveTimeout above has a side effect on shutdown: Nest's
+  // enableShutdownHooks (above) closes this same server via a bare
+  // httpServer.close(resolve) on SIGTERM, which waits for every socket to
+  // end on its own — including idle keep-alive ones, which now only time
+  // out after up to 65s instead of 5s. That risks missing the orchestrator's
+  // SIGTERM->SIGKILL grace window (commonly 10-30s) before onModuleDestroy
+  // (Prisma disconnect, ViewCountBuffer's final flush) ever runs. Force-
+  // closing idle sockets — not all sockets — the moment shutdown starts
+  // keeps genuinely in-flight requests draining normally while removing the
+  // part of the wait this app just made 13x longer.
+  process.on("SIGTERM", () => server.closeIdleConnections());
+  process.on("SIGINT", () => server.closeIdleConnections());
 }
 
 void bootstrap();

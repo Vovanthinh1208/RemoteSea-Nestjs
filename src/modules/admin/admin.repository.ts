@@ -2,7 +2,10 @@ import { Injectable } from "@nestjs/common";
 import type { EmployerProfile, Job, JobStatus, PlanType } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 
-type EmployerListItem = EmployerProfile & {
+type EmployerListItem = Pick<
+  EmployerProfile,
+  "id" | "companyName" | "isVerified"
+> & {
   user: { email: string };
   _count: { jobs: number };
   jobs: { planType: PlanType }[];
@@ -43,7 +46,15 @@ export class AdminRepository {
         skip,
         take,
         orderBy: { createdAt: "desc" },
-        include: {
+        // Narrow select, not include — the admin employer list only ever
+        // renders id/companyName/isVerified/jobCount/totalSpend (see
+        // EmployerListItemDto in docs/admin.dto.ts); include was pulling
+        // every EmployerProfile column, including the description @db.Text
+        // field, into every paginated page for no reason.
+        select: {
+          id: true,
+          companyName: true,
+          isVerified: true,
           user: { select: { email: true } },
           _count: { select: { jobs: true } },
           jobs: { where: { planPaid: true }, select: { planType: true } },

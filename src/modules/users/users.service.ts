@@ -11,10 +11,14 @@ import {
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { BCRYPT_SALT_ROUNDS } from "@/common/constants/bcrypt.constants";
+import { UploadsService } from "@/modules/uploads/uploads.service";
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly usersRepository: UsersRepository) {}
+  constructor(
+    private readonly usersRepository: UsersRepository,
+    private readonly uploadsService: UploadsService,
+  ) {}
 
   updateName(
     userId: string,
@@ -37,7 +41,18 @@ export class UsersService {
       );
     }
 
+    // Read before the cascade-delete below removes the only DB record of
+    // these keys (see findProfileFileUrls); cleanup itself runs after the
+    // delete commits, best-effort — bare void is safe here because
+    // deleteObjectByUrl catches and logs its own failures internally, same
+    // as the profile-update call sites in employer.service.ts/talent.service.ts.
+    const { resumeUrl, logoUrl } =
+      await this.usersRepository.findProfileFileUrls(userId);
+
     await this.usersRepository.deleteUser(userId);
+
+    if (resumeUrl) void this.uploadsService.deleteObjectByUrl(resumeUrl);
+    if (logoUrl) void this.uploadsService.deleteObjectByUrl(logoUrl);
   }
 
   async changePassword(

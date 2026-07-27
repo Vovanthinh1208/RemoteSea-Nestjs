@@ -21,6 +21,30 @@ export class UsersRepository {
     return this.prisma.user.delete({ where: { id } });
   }
 
+  // Read before deleteUser so the caller can best-effort clean up the S3
+  // object these reference — TalentProfile/EmployerProfile cascade-delete
+  // with the User row (see the schema's onDelete: Cascade), so once that
+  // completes there's no longer any DB record of the resume/logo's key to
+  // find it by. Without this read, the file would sit orphaned in the
+  // bucket forever (same "nothing else ever cleans this up" gap that
+  // uploads.service.ts's deleteObjectByUrl already closes for profile
+  // *updates* — this closes it for account deletion instead).
+  async findProfileFileUrls(
+    userId: string,
+  ): Promise<{ resumeUrl: string | null; logoUrl: string | null }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        talent: { select: { resumeUrl: true } },
+        employer: { select: { logoUrl: true } },
+      },
+    });
+    return {
+      resumeUrl: user?.talent?.resumeUrl ?? null,
+      logoUrl: user?.employer?.logoUrl ?? null,
+    };
+  }
+
   // Backs UsersService.deleteAccount's upfront check — jobs.employerId's FK
   // is ON DELETE RESTRICT specifically so a User delete can't cascade through
   // EmployerProfile and silently wipe other users' Application/SavedJob rows

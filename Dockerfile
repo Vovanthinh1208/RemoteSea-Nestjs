@@ -37,6 +37,13 @@ RUN npm ci --omit=dev
 # ─── Runner ─────────────────────────────────────────────────────────────────
 FROM base AS runner
 ENV NODE_ENV=production
+# ~75% of the production container's 1GB memory limit. Left unset, V8 sizes
+# its heap from its own default heuristic instead of the container's actual
+# limit, growing past it under memory pressure and getting hard OOM-killed by
+# the orchestrator instead of GC-ing proactively as it approaches a
+# deliberately-set ceiling. Revisit this value if the container's memory
+# limit ever changes.
+ENV NODE_OPTIONS=--max-old-space-size=768
 RUN addgroup -S nodejs && adduser -S nestjs -G nodejs
 
 COPY --from=prod-deps /app/node_modules ./node_modules

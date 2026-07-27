@@ -73,3 +73,12 @@ export class TooManyRequestsApiException extends ApiException {
     );
   }
 }
+
+export class ServiceUnavailableApiException extends ApiException {
+  constructor(
+    message = "This service is temporarily unavailable. Please try again shortly.",
+    code: ErrorCode = ErrorCode.SERVICE_UNAVAILABLE,
+  ) {
+    super(HttpStatus.SERVICE_UNAVAILABLE, message, code);
+  }
+}
