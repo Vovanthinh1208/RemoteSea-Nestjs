@@ -5,7 +5,10 @@ import type { User } from "@prisma/client";
 import { UsersRepository } from "./users.repository";
 import type { UpdateUserDto } from "./dto/update-user.dto";
 import type { ChangePasswordDto } from "./dto/change-password.dto";
-import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import {
+  BadRequestApiException,
+  ConflictApiException,
+} from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { BCRYPT_SALT_ROUNDS } from "@/common/constants/bcrypt.constants";
 
@@ -21,6 +24,19 @@ export class UsersService {
   }
 
   async deleteAccount(userId: string): Promise<void> {
+    // jobs.employerId is ON DELETE RESTRICT specifically to make this
+    // unconditionally safe — but check first and give a clear, actionable
+    // error rather than letting the delete fail with a raw FK-violation.
+    // Only ever non-zero for an EMPLOYER-role user (a TALENT has no
+    // EmployerProfile, so this is always 0 for them).
+    const jobCount = await this.usersRepository.countEmployerJobs(userId);
+    if (jobCount > 0) {
+      throw new ConflictApiException(
+        `Cannot delete account with ${jobCount} active job posting(s) — close or transfer them first`,
+        ErrorCode.ACTIVE_JOBS_PREVENT_DELETION,
+      );
+    }
+
     await this.usersRepository.deleteUser(userId);
   }
 

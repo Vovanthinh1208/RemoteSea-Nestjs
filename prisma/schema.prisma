@@ -184,26 +184,34 @@ model TalentSkill {
 // ─── Employer ─────────────────────────────────────────────────────────────────
 
 model EmployerProfile {
-  id          String   @id @default(cuid())
-  userId      String   @unique
+  id          String    @id @default(cuid())
+  userId      String    @unique
   companyName String
-  slug        String   @unique
+  slug        String    @unique
   logoUrl     String?
   websiteUrl  String?
-  description String?  @db.Text
+  description String?   @db.Text
   industry    String?
   size        String?
   founded     Int?
   hqCountry   String?
   hqCity      String?
-  isVerified  Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isVerified  Boolean   @default(false)
+  // Neither is derivable from updatedAt: a later profile edit (updateProfile)
+  // moves updatedAt without touching verification status, and re-verifying
+  // after a suspension would otherwise erase the original suspension time.
+  verifiedAt  DateTime?
+  suspendedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobs Job[]
 
-  @@index([isVerified])
+  // Composite, not single-column: AdminRepository.findEmployers filters
+  // isVerified and orders by createdAt desc — the plain isVerified index
+  // only covered the filter half, forcing a separate sort.
+  @@index([isVerified, createdAt])
   @@map("employer_profiles")
 }
 
@@ -239,10 +247,24 @@ model Job {
   applyCount       Int             @default(0)
   publishedAt      DateTime?
   expiresAt        DateTime?
+  // Approval already has a natural audit timestamp in publishedAt (set the
+  // moment JobsRepository.approveJob runs) — rejection had nothing: status
+  // flipped to REJECTED with no record of when, so an owner's later edit
+  // (which moves updatedAt) erases the only trace of the original rejection
+  // time.
+  rejectedAt       DateTime?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
-  employer     EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  // Restrict, not Cascade: this used to cascade all the way from a User
+  // delete (User -> EmployerProfile -> Job -> Application/SavedJob), so an
+  // employer self-deleting their account silently destroyed every talent's
+  // application history and saved-job bookmarks for that employer's
+  // postings — data those other users never chose to delete. Restrict makes
+  // that impossible at the database level: UsersService.deleteAccount now
+  // checks for and blocks on existing jobs before attempting the delete,
+  // and this constraint is the backstop if that check is ever bypassed.
+  employer     EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Restrict)
   skills       JobSkill[]
   applications Application[]
   categories   JobCategory[]
@@ -250,7 +272,15 @@ model Job {
 
   @@index([status, publishedAt])
   @@index([status, isFeatured, publishedAt])
-  @@index([employerId])
+  // Composite, not single-column: EmployerRepository.findJobsByEmployer
+  // filters employerId (+ optional status) and orders by createdAt desc —
+  // the plain employerId index only covered the filter half, forcing a
+  // separate sort on every employer's job-list page.
+  @@index([employerId, createdAt])
+  // AdminRepository.findJobs filters status and orders by createdAt asc —
+  // distinct from the publishedAt-ordered indexes above (the moderation
+  // queue sorts oldest-pending-first, not by publish date).
+  @@index([status, createdAt])
   @@index([planPaid, paidAt])
   // Covers GET /jobs?country=... and the timezone-bucket filters (job-search.util.ts's
   // tzCondition) — country equality combined with the status filter every search

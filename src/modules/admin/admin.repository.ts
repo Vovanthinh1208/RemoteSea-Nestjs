@@ -15,6 +15,7 @@ type JobListItem = Omit<
   | "responsibilities"
   | "applicationUrl"
   | "paidAt"
+  | "rejectedAt"
 > & {
   employer: { companyName: string; isVerified: boolean; slug: string };
   categories: { category: unknown }[];

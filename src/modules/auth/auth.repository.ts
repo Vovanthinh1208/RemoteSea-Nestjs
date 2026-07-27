@@ -10,6 +10,16 @@ export class AuthRepository {
     return this.prisma.user.findUnique({ where: { email } });
   }
 
+  // Narrow existence check for callers that only need to know whether the
+  // email is taken (register's dup-check, forgotPassword) — avoids pulling
+  // every User column, including passwordHash, on these high-traffic paths.
+  findUserIdByEmail(email: string): Promise<Pick<User, "id"> | null> {
+    return this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+  }
+
   findUserById(id: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { id } });
   }

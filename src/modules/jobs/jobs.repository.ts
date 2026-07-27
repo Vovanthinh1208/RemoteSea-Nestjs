@@ -121,11 +121,24 @@ export class JobsRepository {
 
   // updateMany (not update) so a job deleted between the view and the buffered
   // flush is a silent no-op instead of a thrown P2025.
-  async incrementViewCountBy(id: string, count: number): Promise<void> {
-    await this.prisma.job.updateMany({
-      where: { id },
-      data: { viewCount: { increment: count } },
-    });
+  // One statement for the whole flush batch instead of one updateMany per job
+  // id (see ViewCountBuffer.flush) — Prisma's updateMany can't apply a
+  // different increment per row, so this drops to raw SQL with a VALUES list
+  // to keep the per-flush query count constant regardless of how many
+  // distinct jobs were viewed in the window. Ids that no longer exist (job
+  // deleted between view and flush) simply match zero rows, same as before.
+  async incrementViewCounts(counts: Map<string, number>): Promise<void> {
+    if (counts.size === 0) return;
+
+    const rows = Prisma.join(
+      Array.from(counts, ([id, count]) => Prisma.sql`(${id}, ${count})`),
+    );
+    await this.prisma.$executeRaw`
+      UPDATE "jobs" AS j
+      SET "viewCount" = j."viewCount" + v.count
+      FROM (VALUES ${rows}) AS v(id, count)
+      WHERE j.id = v.id
+    `;
   }
 
   findEmployerProfileByUserId(userId: string) {
@@ -191,7 +204,7 @@ export class JobsRepository {
   ): Promise<Pick<Job, "status" | "publishedAt"> | null> {
     const { count } = await this.prisma.job.updateMany({
       where: { id, status: "PENDING_REVIEW" },
-      data: { status: "REJECTED", reviewNote: note },
+      data: { status: "REJECTED", reviewNote: note, rejectedAt: new Date() },
     });
     if (count === 0) return null;
 

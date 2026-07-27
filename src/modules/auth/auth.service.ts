@@ -38,7 +38,7 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto): Promise<RegisteredUser> {
-    const existing = await this.authRepository.findUserByEmail(dto.email);
+    const existing = await this.authRepository.findUserIdByEmail(dto.email);
     if (existing) {
       throw new ConflictApiException(
         "Email already registered",
@@ -146,7 +146,7 @@ export class AuthService {
   }
 
   async forgotPassword(email: string): Promise<void> {
-    const user = await this.authRepository.findUserByEmail(email);
+    const user = await this.authRepository.findUserIdByEmail(email);
     if (!user) return;
 
     const token = crypto.randomBytes(32).toString("hex");

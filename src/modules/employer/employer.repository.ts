@@ -53,8 +53,11 @@ export class EmployerRepository {
     });
   }
 
-  findProfileBySlug(slug: string): Promise<EmployerProfile | null> {
-    return this.prisma.employerProfile.findUnique({ where: { slug } });
+  findProfileBySlug(slug: string): Promise<{ id: string } | null> {
+    return this.prisma.employerProfile.findUnique({
+      where: { slug },
+      select: { id: true },
+    });
   }
 
   async createProfileForUser(
@@ -113,7 +116,10 @@ export class EmployerRepository {
   setVerified(id: string, isVerified: boolean): Promise<EmployerProfile> {
     return this.prisma.employerProfile.update({
       where: { id },
-      data: { isVerified },
+      // Only stamps verifiedAt when actually becoming verified — the
+      // suspend() path below is the one dedicated route to isVerified=false
+      // today, and it stamps its own suspendedAt instead.
+      data: { isVerified, ...(isVerified && { verifiedAt: new Date() }) },
     });
   }
 
@@ -127,7 +133,7 @@ export class EmployerRepository {
     await this.prisma.$transaction([
       this.prisma.employerProfile.update({
         where: { id },
-        data: { isVerified: false },
+        data: { isVerified: false, suspendedAt: new Date() },
       }),
       this.prisma.job.updateMany({
         where: { employerId: id, status: "ACTIVE" },

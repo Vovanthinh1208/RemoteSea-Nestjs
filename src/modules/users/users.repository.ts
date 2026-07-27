@@ -21,6 +21,16 @@ export class UsersRepository {
     return this.prisma.user.delete({ where: { id } });
   }
 
+  // Backs UsersService.deleteAccount's upfront check — jobs.employerId's FK
+  // is ON DELETE RESTRICT specifically so a User delete can't cascade through
+  // EmployerProfile and silently wipe other users' Application/SavedJob rows
+  // (see the migration that changed it). This lets deleteAccount give a
+  // clear error before attempting the delete, rather than surfacing the raw
+  // FK-violation the database would otherwise reject it with.
+  countEmployerJobs(userId: string): Promise<number> {
+    return this.prisma.job.count({ where: { employer: { userId } } });
+  }
+
   findPasswordHash(id: string): Promise<Pick<User, "passwordHash"> | null> {
     return this.prisma.user.findUnique({
       where: { id },

@@ -2,16 +2,16 @@ import { ViewCountBuffer } from "./view-count.buffer";
 import type { JobsRepository } from "./jobs.repository";
 
 const makeBuffer = () => {
-  const incrementViewCountBy = jest.fn().mockResolvedValue(undefined);
+  const incrementViewCounts = jest.fn().mockResolvedValue(undefined);
   const buffer = new ViewCountBuffer({
-    incrementViewCountBy,
+    incrementViewCounts,
   } as unknown as JobsRepository);
-  return { buffer, incrementViewCountBy };
+  return { buffer, incrementViewCounts };
 };
 
 describe("ViewCountBuffer", () => {
-  it("coalesces repeated views of the same job into one increment", async () => {
-    const { buffer, incrementViewCountBy } = makeBuffer();
+  it("coalesces repeated views into one batched call", async () => {
+    const { buffer, incrementViewCounts } = makeBuffer();
 
     buffer.record("job-1");
     buffer.record("job-1");
@@ -19,62 +19,77 @@ describe("ViewCountBuffer", () => {
     buffer.record("job-2");
     await buffer.flush();
 
-    expect(incrementViewCountBy).toHaveBeenCalledTimes(2);
-    expect(incrementViewCountBy).toHaveBeenCalledWith("job-1", 3);
-    expect(incrementViewCountBy).toHaveBeenCalledWith("job-2", 1);
+    expect(incrementViewCounts).toHaveBeenCalledTimes(1);
+    expect(incrementViewCounts).toHaveBeenCalledWith(
+      new Map([
+        ["job-1", 3],
+        ["job-2", 1],
+      ]),
+    );
     await buffer.onModuleDestroy();
   });
 
   it("flushing an empty buffer issues no writes", async () => {
-    const { buffer, incrementViewCountBy } = makeBuffer();
+    const { buffer, incrementViewCounts } = makeBuffer();
 
     await buffer.flush();
 
-    expect(incrementViewCountBy).not.toHaveBeenCalled();
+    expect(incrementViewCounts).not.toHaveBeenCalled();
     await buffer.onModuleDestroy();
   });
 
   it("starts a fresh window after each flush", async () => {
-    const { buffer, incrementViewCountBy } = makeBuffer();
+    const { buffer, incrementViewCounts } = makeBuffer();
 
     buffer.record("job-1");
     await buffer.flush();
     buffer.record("job-1");
     await buffer.flush();
 
-    expect(incrementViewCountBy).toHaveBeenNthCalledWith(1, "job-1", 1);
-    expect(incrementViewCountBy).toHaveBeenNthCalledWith(2, "job-1", 1);
+    expect(incrementViewCounts).toHaveBeenNthCalledWith(
+      1,
+      new Map([["job-1", 1]]),
+    );
+    expect(incrementViewCounts).toHaveBeenNthCalledWith(
+      2,
+      new Map([["job-1", 1]]),
+    );
     await buffer.onModuleDestroy();
   });
 
-  it("keeps flushing other jobs when one write fails, and drops the failed count", async () => {
-    const incrementViewCountBy = jest
+  it("drops the whole window's counts when the batch write fails", async () => {
+    const incrementViewCounts = jest
       .fn()
       .mockRejectedValueOnce(new Error("db down"))
       .mockResolvedValue(undefined);
     const buffer = new ViewCountBuffer({
-      incrementViewCountBy,
+      incrementViewCounts,
     } as unknown as JobsRepository);
 
     buffer.record("job-1");
     buffer.record("job-2");
     await buffer.flush();
 
-    expect(incrementViewCountBy).toHaveBeenCalledTimes(2);
+    expect(incrementViewCounts).toHaveBeenCalledTimes(1);
 
-    // The failed job-1 count is dropped (same policy as the old per-view
-    // fire-and-forget), so a later flush writes nothing for it.
+    // The failed window's counts are dropped (same policy as the old
+    // per-view fire-and-forget), so nothing carries over to the next flush.
+    buffer.record("job-3");
     await buffer.flush();
-    expect(incrementViewCountBy).toHaveBeenCalledTimes(2);
+    expect(incrementViewCounts).toHaveBeenCalledTimes(2);
+    expect(incrementViewCounts).toHaveBeenNthCalledWith(
+      2,
+      new Map([["job-3", 1]]),
+    );
     await buffer.onModuleDestroy();
   });
 
   it("flushes pending counts on shutdown", async () => {
-    const { buffer, incrementViewCountBy } = makeBuffer();
+    const { buffer, incrementViewCounts } = makeBuffer();
 
     buffer.record("job-1");
     await buffer.onModuleDestroy();
 
-    expect(incrementViewCountBy).toHaveBeenCalledWith("job-1", 1);
+    expect(incrementViewCounts).toHaveBeenCalledWith(new Map([["job-1", 1]]));
   });
 });
