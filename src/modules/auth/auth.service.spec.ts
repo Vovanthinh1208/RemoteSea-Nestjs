@@ -24,6 +24,7 @@ const makeService = (overrides?: {
 }) => {
   const authRepository = {
     findUserByEmail: jest.fn(),
+    findUserIdByEmail: jest.fn(),
     createUser: jest.fn(),
     findOrCreateOAuthUser: jest.fn(),
     createVerificationToken: jest.fn(),
@@ -53,9 +54,7 @@ describe("AuthService.register", () => {
   it("rejects a duplicate email", async () => {
     const { service, authRepository } = makeService({
       authRepository: {
-        findUserByEmail: jest
-          .fn()
-          .mockResolvedValue({ id: "u1", email: "a@b.com" }),
+        findUserIdByEmail: jest.fn().mockResolvedValue({ id: "u1" }),
       },
     });
 
@@ -75,7 +74,7 @@ describe("AuthService.register", () => {
       authRepository: {
         // Fast path sees no existing user — a concurrent duplicate signup
         // still races past this and hits the DB constraint below.
-        findUserByEmail: jest.fn().mockResolvedValue(null),
+        findUserIdByEmail: jest.fn().mockResolvedValue(null),
         createUser: jest.fn().mockRejectedValue(
           new Prisma.PrismaClientKnownRequestError("duplicate", {
             code: "P2002",
@@ -110,7 +109,7 @@ describe("AuthService.register", () => {
     });
     const { service } = makeService({
       authRepository: {
-        findUserByEmail: jest.fn().mockResolvedValue(null),
+        findUserIdByEmail: jest.fn().mockResolvedValue(null),
         createUser,
       },
     });
@@ -141,7 +140,7 @@ describe("AuthService.register", () => {
     };
     const { service, emailService } = makeService({
       authRepository: {
-        findUserByEmail: jest.fn().mockResolvedValue(null),
+        findUserIdByEmail: jest.fn().mockResolvedValue(null),
         createUser: jest.fn().mockResolvedValue(registered),
       },
     });
@@ -296,7 +295,7 @@ describe("AuthService.verifySession", () => {
 describe("AuthService.forgotPassword", () => {
   it("is a no-op for an unknown email — no token, no email sent", async () => {
     const { service, authRepository, emailService } = makeService({
-      authRepository: { findUserByEmail: jest.fn().mockResolvedValue(null) },
+      authRepository: { findUserIdByEmail: jest.fn().mockResolvedValue(null) },
     });
 
     await service.forgotPassword("nobody@example.com");
@@ -308,9 +307,7 @@ describe("AuthService.forgotPassword", () => {
   it("creates a token and sends the reset email for a known address", async () => {
     const { service, authRepository, emailService } = makeService({
       authRepository: {
-        findUserByEmail: jest
-          .fn()
-          .mockResolvedValue({ id: "u1", email: "a@b.com" }),
+        findUserIdByEmail: jest.fn().mockResolvedValue({ id: "u1" }),
       },
     });
 

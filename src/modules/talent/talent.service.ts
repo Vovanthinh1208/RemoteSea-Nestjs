@@ -100,7 +100,10 @@ export class TalentService {
 
     // Best-effort — a previous resume being replaced would otherwise sit
     // orphaned in the bucket forever, since nothing else in the app ever cleans
-    // it up.
+    // it up. Bare void (not runInBackground) is safe only because
+    // deleteObjectByUrl catches and logs its own failures internally, so this
+    // promise never rejects — if that internal handling is ever removed, this
+    // becomes an unhandled rejection and should switch to runInBackground.
     if (
       dto.resumeUrl &&
       existing?.resumeUrl &&
