@@ -1,10 +1,12 @@
 import { Injectable } from "@nestjs/common";
-import type { Prisma, Job } from "@prisma/client";
+import { Prisma, type Job } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 import {
-  activeJobBaseWhere,
-  facetSelect,
-  type FacetRow,
+  buildCategoryFacetsQuery,
+  buildFacetCountsQuery,
+  buildSearchRankedIdsQuery,
+  type CategoryFacetRow,
+  type FacetCountsRow,
 } from "./job-search.util";
 import { omitInternalJobFields } from "@/common/types/job-with-relations.type";
 import {
@@ -56,11 +58,42 @@ export class JobsRepository {
     return this.prisma.job.count({ where });
   }
 
-  findFacetRows(): Promise<FacetRow[]> {
-    return this.prisma.job.findMany({
-      where: activeJobBaseWhere(),
-      select: facetSelect,
-    });
+  // id-only, no joins — for JobsService.listBySearch to learn which of the
+  // (already-ranked) search candidates also satisfy the other filters,
+  // without paying for jobListItemSelect's employer/categories/skills joins
+  // on rows that are only ever used to compute a page slice + total.
+  findIds(where: Prisma.JobWhereInput): Promise<string[]> {
+    return this.prisma.job
+      .findMany({ where, select: { id: true } })
+      .then((rows) => rows.map((row) => row.id));
+  }
+
+  // See buildFacetCountsQuery/buildCategoryFacetsQuery for why this is two
+  // small aggregate queries instead of loading every active job into memory.
+  // A bare aggregate with no GROUP BY always returns exactly one row (even
+  // over zero matching jobs, every COUNT(*) FILTER is just 0), so rows[0] is
+  // never actually missing.
+  findFacetCounts(): Promise<FacetCountsRow> {
+    return this.prisma
+      .$queryRaw<FacetCountsRow[]>(buildFacetCountsQuery())
+      .then((rows) => rows[0]!);
+  }
+
+  findCategoryFacetCounts(): Promise<CategoryFacetRow[]> {
+    return this.prisma.$queryRaw<CategoryFacetRow[]>(
+      buildCategoryFacetsQuery(),
+    );
+  }
+
+  // Rank isn't a real jobs column, so Prisma's fluent client can't ORDER BY
+  // it — the caller (JobsService.listBySearch) re-sorts a normal `findMany`
+  // page using this array's order instead. See buildSearchRankedIdsQuery for
+  // why the match/rank itself is computed here in raw SQL.
+  async findSearchRankedIds(q: string): Promise<string[]> {
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>(
+      buildSearchRankedIdsQuery(q),
+    );
+    return rows.map((row) => row.id);
   }
 
   async findActiveById(id: string) {
@@ -88,11 +121,24 @@ export class JobsRepository {
 
   // updateMany (not update) so a job deleted between the view and the buffered
   // flush is a silent no-op instead of a thrown P2025.
-  async incrementViewCountBy(id: string, count: number): Promise<void> {
-    await this.prisma.job.updateMany({
-      where: { id },
-      data: { viewCount: { increment: count } },
-    });
+  // One statement for the whole flush batch instead of one updateMany per job
+  // id (see ViewCountBuffer.flush) — Prisma's updateMany can't apply a
+  // different increment per row, so this drops to raw SQL with a VALUES list
+  // to keep the per-flush query count constant regardless of how many
+  // distinct jobs were viewed in the window. Ids that no longer exist (job
+  // deleted between view and flush) simply match zero rows, same as before.
+  async incrementViewCounts(counts: Map<string, number>): Promise<void> {
+    if (counts.size === 0) return;
+
+    const rows = Prisma.join(
+      Array.from(counts, ([id, count]) => Prisma.sql`(${id}, ${count})`),
+    );
+    await this.prisma.$executeRaw`
+      UPDATE "jobs" AS j
+      SET "viewCount" = j."viewCount" + v.count
+      FROM (VALUES ${rows}) AS v(id, count)
+      WHERE j.id = v.id
+    `;
   }
 
   findEmployerProfileByUserId(userId: string) {
@@ -128,5 +174,43 @@ export class JobsRepository {
 
     const job = await this.prisma.job.findUnique({ where: { id } });
     return job && omitInternalJobFields(job);
+  }
+
+  // Conditional updateMany (not a plain update) — re-checks PENDING_REVIEW
+  // atomically at write time, same reasoning as updateIfEditable above.
+  // Without this, two concurrent admin reviews of the same job (or a review
+  // racing another status change) could both pass AdminService.reviewJob's
+  // upfront status check and double-fire the approve email + write. Owned
+  // here (not AdminRepository) since Job status transitions are this
+  // module's domain rule regardless of which module triggers them.
+  async approveJob(
+    id: string,
+  ): Promise<Pick<Job, "status" | "publishedAt"> | null> {
+    const { count } = await this.prisma.job.updateMany({
+      where: { id, status: "PENDING_REVIEW" },
+      data: { status: "ACTIVE", publishedAt: new Date(), reviewNote: null },
+    });
+    if (count === 0) return null;
+
+    return this.prisma.job.findUnique({
+      where: { id },
+      select: { status: true, publishedAt: true },
+    });
+  }
+
+  async rejectJob(
+    id: string,
+    note: string | null,
+  ): Promise<Pick<Job, "status" | "publishedAt"> | null> {
+    const { count } = await this.prisma.job.updateMany({
+      where: { id, status: "PENDING_REVIEW" },
+      data: { status: "REJECTED", reviewNote: note, rejectedAt: new Date() },
+    });
+    if (count === 0) return null;
+
+    return this.prisma.job.findUnique({
+      where: { id },
+      select: { status: true, publishedAt: true },
+    });
   }
 }

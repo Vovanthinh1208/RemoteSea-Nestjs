@@ -17,19 +17,19 @@ export type AlertOwnerOnly = NonNullable<
  */
 @Injectable()
 export class AlertOwnershipGuard extends OwnershipGuardBase<AlertOwnerOnly> {
-  protected readonly notFoundOnMismatch = true;
-  protected readonly notFoundMessage = "Alert not found";
-  protected readonly notFoundCode = ErrorCode.ALERT_NOT_FOUND;
+  protected override readonly notFoundOnMismatch = true;
+  protected override readonly notFoundMessage = "Alert not found";
+  protected override readonly notFoundCode = ErrorCode.ALERT_NOT_FOUND;
 
   constructor(private readonly alertsRepository: AlertsRepository) {
     super();
   }
 
-  protected loadResource(id: string): Promise<AlertOwnerOnly | null> {
+  protected override loadResource(id: string): Promise<AlertOwnerOnly | null> {
     return this.alertsRepository.findOwnerById(id);
   }
 
-  protected getOwnerUserId(alert: AlertOwnerOnly): string {
+  protected override getOwnerUserId(alert: AlertOwnerOnly): string {
     return alert.userId;
   }
 }

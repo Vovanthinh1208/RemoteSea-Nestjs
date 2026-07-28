@@ -2,7 +2,10 @@ import { Injectable } from "@nestjs/common";
 import type { EmployerProfile, Job, JobStatus, PlanType } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 
-type EmployerListItem = EmployerProfile & {
+type EmployerListItem = Pick<
+  EmployerProfile,
+  "id" | "companyName" | "isVerified"
+> & {
   user: { email: string };
   _count: { jobs: number };
   jobs: { planType: PlanType }[];
@@ -15,6 +18,7 @@ type JobListItem = Omit<
   | "responsibilities"
   | "applicationUrl"
   | "paidAt"
+  | "rejectedAt"
 > & {
   employer: { companyName: string; isVerified: boolean; slug: string };
   categories: { category: unknown }[];
@@ -42,7 +46,15 @@ export class AdminRepository {
         skip,
         take,
         orderBy: { createdAt: "desc" },
-        include: {
+        // Narrow select, not include — the admin employer list only ever
+        // renders id/companyName/isVerified/jobCount/totalSpend (see
+        // EmployerListItemDto in docs/admin.dto.ts); include was pulling
+        // every EmployerProfile column, including the description @db.Text
+        // field, into every paginated page for no reason.
+        select: {
+          id: true,
+          companyName: true,
+          isVerified: true,
           user: { select: { email: true } },
           _count: { select: { jobs: true } },
           jobs: { where: { planPaid: true }, select: { planType: true } },
@@ -57,26 +69,6 @@ export class AdminRepository {
       where: { id },
       select: { id: true },
     });
-  }
-
-  verifyEmployer(id: string): Promise<EmployerProfile> {
-    return this.prisma.employerProfile.update({
-      where: { id },
-      data: { isVerified: true },
-    });
-  }
-
-  async suspendEmployer(id: string): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.employerProfile.update({
-        where: { id },
-        data: { isVerified: false },
-      }),
-      this.prisma.job.updateMany({
-        where: { employerId: id, status: "ACTIVE" },
-        data: { status: "CLOSED" },
-      }),
-    ]);
   }
 
   // Explicit select matching remotesea-web's AdminJob type field-for-field (verified
@@ -147,25 +139,6 @@ export class AdminRepository {
         status: true,
         employer: { select: { user: { select: { email: true } } } },
       },
-    });
-  }
-
-  approveJob(id: string): Promise<Pick<Job, "status" | "publishedAt">> {
-    return this.prisma.job.update({
-      where: { id },
-      data: { status: "ACTIVE", publishedAt: new Date(), reviewNote: null },
-      select: { status: true, publishedAt: true },
-    });
-  }
-
-  rejectJob(
-    id: string,
-    note: string | null,
-  ): Promise<Pick<Job, "status" | "publishedAt">> {
-    return this.prisma.job.update({
-      where: { id },
-      data: { status: "REJECTED", reviewNote: note },
-      select: { status: true, publishedAt: true },
     });
   }
 

@@ -13,10 +13,14 @@ import {
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { BCRYPT_SALT_ROUNDS } from "@/common/constants/bcrypt.constants";
+import { UploadsService } from "@/modules/uploads/uploads.service";
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly usersRepository: UsersRepository) {}
+  constructor(
+    private readonly usersRepository: UsersRepository,
+    private readonly uploadsService: UploadsService,
+  ) {}
 
   updateName(
     userId: string,
@@ -26,7 +30,31 @@ export class UsersService {
   }
 
   async deleteAccount(userId: string): Promise<void> {
+    // jobs.employerId is ON DELETE RESTRICT specifically to make this
+    // unconditionally safe — but check first and give a clear, actionable
+    // error rather than letting the delete fail with a raw FK-violation.
+    // Only ever non-zero for an EMPLOYER-role user (a TALENT has no
+    // EmployerProfile, so this is always 0 for them).
+    const jobCount = await this.usersRepository.countEmployerJobs(userId);
+    if (jobCount > 0) {
+      throw new ConflictApiException(
+        `Cannot delete account with ${jobCount} active job posting(s) — close or transfer them first`,
+        ErrorCode.ACTIVE_JOBS_PREVENT_DELETION,
+      );
+    }
+
+    // Read before the cascade-delete below removes the only DB record of
+    // these keys (see findProfileFileUrls); cleanup itself runs after the
+    // delete commits, best-effort — bare void is safe here because
+    // deleteObjectByUrl catches and logs its own failures internally, same
+    // as the profile-update call sites in employer.service.ts/talent.service.ts.
+    const { resumeUrl, logoUrl } =
+      await this.usersRepository.findProfileFileUrls(userId);
+
     await this.usersRepository.deleteUser(userId);
+
+    if (resumeUrl) void this.uploadsService.deleteObjectByUrl(resumeUrl);
+    if (logoUrl) void this.uploadsService.deleteObjectByUrl(logoUrl);
   }
 
   async changePassword(

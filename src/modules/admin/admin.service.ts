@@ -1,5 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { AdminRepository } from "./admin.repository";
+import { EmployerService } from "@/modules/employer/employer.service";
+import { JobsService } from "@/modules/jobs/jobs.service";
 import type { ListEmployersDto } from "./dto/list-employers.dto";
 import type { UpdateEmployerDto } from "./dto/update-employer.dto";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
@@ -32,6 +34,8 @@ export class AdminService {
 
   constructor(
     private readonly adminRepository: AdminRepository,
+    private readonly employerService: EmployerService,
+    private readonly jobsService: JobsService,
     private readonly emailService: EmailService,
   ) {}
 
@@ -62,6 +66,7 @@ export class AdminService {
   async updateEmployer(
     id: string,
     dto: UpdateEmployerDto,
+    adminId: string,
   ): Promise<{ success: true }> {
     const employer = await this.adminRepository.findEmployerById(id);
     if (!employer) {
@@ -72,10 +77,15 @@ export class AdminService {
     }
 
     if (dto.action === "verify") {
-      await this.adminRepository.verifyEmployer(id);
+      await this.employerService.setVerified(id, true);
     } else {
-      await this.adminRepository.suspendEmployer(id);
+      await this.employerService.suspend(id);
     }
+    // No audit table for this today — logging the actor is the only record
+    // of "who verified/suspended this employer" available during an
+    // incident or dispute.
+    const verb = dto.action === "verify" ? "verified" : "suspended";
+    this.logger.log(`Employer ${id} ${verb} by admin ${adminId}`);
 
     return { success: true };
   }
@@ -94,7 +104,7 @@ export class AdminService {
     return { jobs, pagination: buildPagination(page, limit, total) };
   }
 
-  async reviewJob(id: string, dto: ReviewJobDto) {
+  async reviewJob(id: string, dto: ReviewJobDto, adminId: string) {
     const job = await this.adminRepository.findJobWithEmployerEmail(id);
     if (!job) {
       throw new NotFoundApiException("Job not found", ErrorCode.JOB_NOT_FOUND);
@@ -109,11 +119,26 @@ export class AdminService {
     const { action, note } = dto;
     const employerEmail = job.employer.user.email;
 
-    // The status change is already committed by the time we email below — a
-    // notification failure must not surface as a failed review, since a retry
-    // would then hit the PENDING_REVIEW guard above with no way to redo it.
+    // The upfront status check above can go stale (another admin's review, or
+    // an unrelated status change, landing between that read and this write) —
+    // approveForReview/rejectForReview re-check PENDING_REVIEW atomically at
+    // write time and return null if it no longer holds, so this can't
+    // double-fire the approve/reject email + write the way a plain `update`
+    // could.
     if (action === "approve") {
-      const updated = await this.adminRepository.approveJob(id);
+      const updated = await this.jobsService.approveForReview(id);
+      if (!updated) {
+        throw new BadRequestApiException(
+          `Job is no longer pending review`,
+          ErrorCode.JOB_NOT_PENDING_REVIEW,
+        );
+      }
+      // No audit table for this today — logging the actor is the only record
+      // of "who approved this job" available during an incident or dispute.
+      this.logger.log(`Job ${id} approved by admin ${adminId}`);
+      // The status change is already committed by the time we email below — a
+      // notification failure must not surface as a failed review, since a retry
+      // would then hit the PENDING_REVIEW guard above with no way to redo it.
       runInBackground(
         this.emailService.sendJobLiveEmail(employerEmail, job.title, job.slug),
         this.logger,
@@ -122,7 +147,14 @@ export class AdminService {
       return updated;
     }
 
-    const updated = await this.adminRepository.rejectJob(id, note ?? null);
+    const updated = await this.jobsService.rejectForReview(id, note ?? null);
+    if (!updated) {
+      throw new BadRequestApiException(
+        `Job is no longer pending review`,
+        ErrorCode.JOB_NOT_PENDING_REVIEW,
+      );
+    }
+    this.logger.log(`Job ${id} rejected by admin ${adminId}`);
     runInBackground(
       this.emailService.sendJobRejectedEmail(
         employerEmail,

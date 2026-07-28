@@ -14,7 +14,10 @@ export const createAlertSchema = z.object({
   country: z.string().optional(),
   timezone: z.string().optional(),
   frequency: alertFrequencySchema.default("DAILY"),
-  categoryIds: z.array(z.string().cuid()).optional(),
+  // Bounded like create-job.dto.ts's categoryIds — without a cap a client
+  // could submit an arbitrarily large array, each entry becoming a nested
+  // AlertCategory row on create (see AlertsRepository.create).
+  categoryIds: z.array(z.string().cuid()).max(3).optional(),
 });
 
 export type CreateAlertDto = z.infer<typeof createAlertSchema>;

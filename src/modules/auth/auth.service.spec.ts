@@ -1,4 +1,5 @@
 import * as bcrypt from "bcrypt";
+import { Prisma } from "@prisma/client";
 import { AuthService } from "./auth.service";
 import type { AuthRepository } from "./auth.repository";
 import type { EmailService } from "@/common/services/email.service";
@@ -7,6 +8,7 @@ import {
   ConflictApiException,
   UnauthorizedApiException,
 } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 
 jest.mock("bcrypt");
 
@@ -18,15 +20,16 @@ jest.mock("bcrypt");
 const makeService = (overrides?: {
   authRepository?: Partial<AuthRepository>;
   emailService?: Partial<EmailService>;
-  jwtService?: { sign: jest.Mock };
+  jwtService?: { sign: jest.Mock; verify?: jest.Mock };
 }) => {
   const authRepository = {
     findUserByEmail: jest.fn(),
+    findUserIdByEmail: jest.fn(),
     createUser: jest.fn(),
     findOrCreateOAuthUser: jest.fn(),
     createVerificationToken: jest.fn(),
     findVerificationToken: jest.fn(),
-    consumePasswordReset: jest.fn(),
+    consumePasswordReset: jest.fn().mockResolvedValue(true),
     ...overrides?.authRepository,
   };
   const emailService = {
@@ -36,6 +39,7 @@ const makeService = (overrides?: {
   };
   const jwtService = overrides?.jwtService ?? {
     sign: jest.fn().mockReturnValue("signed.jwt.token"),
+    verify: jest.fn(),
   };
 
   const service = new AuthService(
@@ -50,9 +54,7 @@ describe("AuthService.register", () => {
   it("rejects a duplicate email", async () => {
     const { service, authRepository } = makeService({
       authRepository: {
-        findUserByEmail: jest
-          .fn()
-          .mockResolvedValue({ id: "u1", email: "a@b.com" }),
+        findUserIdByEmail: jest.fn().mockResolvedValue({ id: "u1" }),
       },
     });
 
@@ -67,6 +69,36 @@ describe("AuthService.register", () => {
     expect(authRepository.createUser).not.toHaveBeenCalled();
   });
 
+  it("maps a P2002 race on the unique email constraint to EMAIL_ALREADY_REGISTERED, not a generic conflict", async () => {
+    const { service } = makeService({
+      authRepository: {
+        // Fast path sees no existing user — a concurrent duplicate signup
+        // still races past this and hits the DB constraint below.
+        findUserIdByEmail: jest.fn().mockResolvedValue(null),
+        createUser: jest.fn().mockRejectedValue(
+          new Prisma.PrismaClientKnownRequestError("duplicate", {
+            code: "P2002",
+            clientVersion: "5.22.0",
+          }),
+        ),
+      },
+    });
+
+    const error = await service
+      .register({
+        name: "A",
+        email: "a@b.com",
+        password: "password123",
+        role: "TALENT",
+      })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ConflictApiException);
+    expect((error as ConflictApiException).getResponse()).toMatchObject({
+      code: ErrorCode.EMAIL_ALREADY_REGISTERED,
+    });
+  });
+
   it("hashes the password and generates a talent slug only for TALENT signups", async () => {
     (bcrypt.hash as jest.Mock).mockResolvedValue("hashed-pw");
     const createUser = jest.fn().mockResolvedValue({
@@ -77,7 +109,7 @@ describe("AuthService.register", () => {
     });
     const { service } = makeService({
       authRepository: {
-        findUserByEmail: jest.fn().mockResolvedValue(null),
+        findUserIdByEmail: jest.fn().mockResolvedValue(null),
         createUser,
       },
     });
@@ -108,7 +140,7 @@ describe("AuthService.register", () => {
     };
     const { service, emailService } = makeService({
       authRepository: {
-        findUserByEmail: jest.fn().mockResolvedValue(null),
+        findUserIdByEmail: jest.fn().mockResolvedValue(null),
         createUser: jest.fn().mockResolvedValue(registered),
       },
     });
@@ -215,10 +247,55 @@ describe("AuthService.issueToken", () => {
   });
 });
 
+describe("AuthService.verifySession", () => {
+  it("returns null when there's no Authorization header", () => {
+    const { service } = makeService();
+    expect(service.verifySession(undefined)).toBeNull();
+  });
+
+  it("returns null for a non-Bearer Authorization header", () => {
+    const { service } = makeService();
+    expect(service.verifySession("Basic abc123")).toBeNull();
+  });
+
+  it("returns null (not a throw) for an invalid/expired token", () => {
+    const verify = jest.fn().mockImplementation(() => {
+      throw new Error("jwt expired");
+    });
+    const { service } = makeService({
+      jwtService: { sign: jest.fn(), verify },
+    });
+
+    expect(service.verifySession("Bearer bad.token")).toBeNull();
+  });
+
+  it("maps a valid token's payload to an AuthenticatedUser", () => {
+    const verify = jest.fn().mockReturnValue({
+      sub: "u1",
+      email: "a@b.com",
+      name: "A",
+      role: "TALENT",
+    });
+    const { service } = makeService({
+      jwtService: { sign: jest.fn(), verify },
+    });
+
+    const result = service.verifySession("Bearer good.token");
+
+    expect(verify).toHaveBeenCalledWith("good.token");
+    expect(result).toEqual({
+      id: "u1",
+      email: "a@b.com",
+      name: "A",
+      role: "TALENT",
+    });
+  });
+});
+
 describe("AuthService.forgotPassword", () => {
   it("is a no-op for an unknown email — no token, no email sent", async () => {
     const { service, authRepository, emailService } = makeService({
-      authRepository: { findUserByEmail: jest.fn().mockResolvedValue(null) },
+      authRepository: { findUserIdByEmail: jest.fn().mockResolvedValue(null) },
     });
 
     await service.forgotPassword("nobody@example.com");
@@ -230,9 +307,7 @@ describe("AuthService.forgotPassword", () => {
   it("creates a token and sends the reset email for a known address", async () => {
     const { service, authRepository, emailService } = makeService({
       authRepository: {
-        findUserByEmail: jest
-          .fn()
-          .mockResolvedValue({ id: "u1", email: "a@b.com" }),
+        findUserIdByEmail: jest.fn().mockResolvedValue({ id: "u1" }),
       },
     });
 
@@ -299,5 +374,22 @@ describe("AuthService.resetPassword", () => {
       "t1",
       "new-hash",
     );
+  });
+
+  it("rejects when a concurrent request already consumed this token (consumePasswordReset returns false)", async () => {
+    const { service } = makeService({
+      authRepository: {
+        findVerificationToken: jest.fn().mockResolvedValue({
+          identifier: "a@b.com",
+          token: "t1",
+          expires: new Date(Date.now() + 1000 * 60 * 60),
+        }),
+        consumePasswordReset: jest.fn().mockResolvedValue(false),
+      },
+    });
+
+    await expect(
+      service.resetPassword("t1", "newpassword123"),
+    ).rejects.toBeInstanceOf(BadRequestApiException);
   });
 });

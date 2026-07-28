@@ -5,7 +5,10 @@ import { ErrorCode } from "@/common/exceptions/error-codes";
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard("jwt") {
-  handleRequest<TUser = unknown>(err: unknown, user: TUser | false): TUser {
+  override handleRequest<TUser = unknown>(
+    err: unknown,
+    user: TUser | false,
+  ): TUser {
     if (err || !user) {
       throw new UnauthorizedApiException(
         "Unauthorized",

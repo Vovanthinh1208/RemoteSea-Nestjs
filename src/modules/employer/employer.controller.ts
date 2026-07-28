@@ -66,6 +66,12 @@ export class EmployerController {
     private readonly rateLimitService: RateLimitService,
   ) {}
 
+  // Deliberately no @Roles("EMPLOYER") here, unlike every other route below —
+  // this is the "become an employer" action itself. EmployerRepository.
+  // createProfileForUser() promotes the caller's role to EMPLOYER in the same
+  // transaction that creates the profile, so requiring the EMPLOYER role to
+  // reach this endpoint would make it uncallable by the TALENT/no-employer-
+  // profile-yet users it exists for.
   @ApiCreateEmployerProfile()
   @Post("profile")
   @HttpCode(HttpStatus.CREATED)

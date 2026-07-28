@@ -3,7 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 import {
   EmployerRepository,
-  type ProfileWithApplicationCounts,
+  type ProfileWithJobCount,
   type PublicEmployerProfile,
 } from "./employer.repository";
 import { ALLOWED_TRANSITIONS } from "./constants";
@@ -82,24 +82,18 @@ export class EmployerService {
 
   async getProfile(
     userId: string,
-  ): Promise<
-    Omit<ProfileWithApplicationCounts, "jobs"> & { totalApplications: number }
-  > {
-    const profile =
-      await this.employerRepository.findProfileWithApplicationCounts(userId);
+  ): Promise<ProfileWithJobCount & { totalApplications: number }> {
+    const [profile, totalApplications] = await Promise.all([
+      this.employerRepository.findProfileWithJobCount(userId),
+      this.employerRepository.countApplicationsForOwner(userId),
+    ]);
     assertFound(
       profile,
       "Profile not found",
       ErrorCode.EMPLOYER_PROFILE_NOT_FOUND,
     );
 
-    const { jobs, ...rest } = profile;
-    const totalApplications = jobs.reduce(
-      (sum, j) => sum + j._count.applications,
-      0,
-    );
-
-    return { ...rest, totalApplications };
+    return { ...profile, totalApplications };
   }
 
   async updateProfile(
@@ -139,11 +133,26 @@ export class EmployerService {
 
     // Best-effort — a previous logo being replaced would otherwise sit orphaned
     // in the bucket forever, since nothing else in the app ever cleans it up.
+    // Bare void (not runInBackground) is safe only because deleteObjectByUrl
+    // catches and logs its own failures internally, so this promise never
+    // rejects — if that internal handling is ever removed, this becomes an
+    // unhandled rejection and should switch to runInBackground.
     if (dto.logoUrl && profile.logoUrl && profile.logoUrl !== dto.logoUrl) {
       void this.uploadsService.deleteObjectByUrl(profile.logoUrl);
     }
 
     return updated;
+  }
+
+  // Admin-triggered (AdminService.verifyEmployer/suspendEmployer), not
+  // self-service — but the write itself belongs here, not reimplemented in
+  // AdminRepository, since this module owns the EmployerProfile domain.
+  setVerified(id: string, isVerified: boolean) {
+    return this.employerRepository.setVerified(id, isVerified);
+  }
+
+  suspend(id: string): Promise<void> {
+    return this.employerRepository.suspend(id);
   }
 
   async listJobs(userId: string, dto: ListEmployerJobsDto) {

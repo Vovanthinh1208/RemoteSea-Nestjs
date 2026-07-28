@@ -5,6 +5,7 @@ import type {
   TalentProfile,
 } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
+import { MEMBERSHIP_SET_CAP } from "@/common/constants/membership-set.constants";
 import {
   ownApplicationSelect,
   type ApplicationWithJob,
@@ -65,11 +66,13 @@ export class ApplicationsRepository {
   }
 
   /** Membership set (applied job ids) for client-side "already applied?" checks —
-   * the ApplyButton twin of saved's findJobIdsForUser: no pagination, ids only. */
+   * the ApplyButton twin of saved's findJobIdsForUser: no pagination, ids only
+   * (see MEMBERSHIP_SET_CAP for why the cap isn't page-sized). */
   async findJobIdsByTalentId(talentId: string): Promise<string[]> {
     const rows = await this.prisma.application.findMany({
       where: { talentId },
       select: { jobId: true },
+      take: MEMBERSHIP_SET_CAP,
     });
     return rows.map((row) => row.jobId);
   }

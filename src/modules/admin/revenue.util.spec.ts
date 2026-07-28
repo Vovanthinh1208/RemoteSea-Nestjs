@@ -96,6 +96,7 @@ describe("buildRevenueTransactions", () => {
       employer: { companyName: "Acme" },
     };
     const [transaction] = buildRevenueTransactions([row]);
+    if (!transaction) throw new Error("expected a transaction");
     expect(transaction).toMatchObject({
       jobId: "job-1",
       jobTitle: "Backend Engineer",

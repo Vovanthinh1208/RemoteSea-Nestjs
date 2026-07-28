@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { httpUrlSchema } from "@/common/validation/http-url.schema";
 import { experienceLevelSchema } from "@/common/dto/enums.schema";
+import { trimmedString } from "@/common/validation/trimmed-string.schema";
 
 // Settings > Privacy & data "Profile visibility". PUBLIC = anyone can view
 // GET /talent/:slug (today's behavior for every existing profile — see the
@@ -10,8 +11,8 @@ import { experienceLevelSchema } from "@/common/dto/enums.schema";
 export const talentVisibilitySchema = z.enum(["PUBLIC", "VERIFIED_EMPLOYERS"]);
 
 export const talentProfileSchema = z.object({
-  headline: z.string().max(120).optional(),
-  bio: z.string().max(2000).optional(),
+  headline: trimmedString({ max: 120 }).optional(),
+  bio: trimmedString({ max: 2000 }).optional(),
   location: z.string().optional(),
   country: z.string().optional(),
   timezone: z.string().optional(),

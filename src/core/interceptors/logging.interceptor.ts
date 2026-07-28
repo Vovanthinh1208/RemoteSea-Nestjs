@@ -26,18 +26,24 @@ export class LoggingInterceptor implements NestInterceptor {
     const start = Date.now();
 
     response.on("finish", () => {
-      this.logger.log(
-        JSON.stringify({
-          requestId: request.id,
-          method: request.method,
-          // req.route.path is the matched route pattern ("/jobs/:id"), not the
-          // raw URL — logging raw URLs would blow up log cardinality with one
-          // series per job id instead of one per route.
-          route: request.route?.path ?? request.path,
-          status: response.statusCode,
-          durationMs: Date.now() - start,
-        }),
-      );
+      const status = response.statusCode;
+      const line = JSON.stringify({
+        requestId: request.id,
+        method: request.method,
+        // req.route.path is the matched route pattern ("/jobs/:id"), not the
+        // raw URL — logging raw URLs would blow up log cardinality with one
+        // series per job id instead of one per route.
+        route: request.route?.path ?? request.path,
+        status,
+        durationMs: Date.now() - start,
+      });
+
+      // Every request logged at the same level regardless of outcome meant a
+      // log aggregator couldn't alert on error rate from the access log alone
+      // — it had to parse the JSON body first just to find `status`.
+      if (status >= 500) this.logger.error(line);
+      else if (status >= 400) this.logger.warn(line);
+      else this.logger.log(line);
     });
 
     return next.handle();

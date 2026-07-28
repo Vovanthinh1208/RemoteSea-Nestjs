@@ -15,6 +15,12 @@ type AlertWithCategories = Prisma.JobAlertGetPayload<{
   include: typeof alertWithCategoriesInclude;
 }>;
 
+// Mirrors EmployerRepository's EMPLOYER_JOBS_LIST_CAP: creation is only
+// rate-limited (RATE_LIMITS.CREATE), not capped in total, so without this a
+// long-lived account could accumulate an unbounded number of alerts and every
+// GET /alerts would fetch all of them plus their category joins.
+const USER_ALERTS_LIST_CAP = 200;
+
 @Injectable()
 export class AlertsRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -22,6 +28,7 @@ export class AlertsRepository {
   findByUser(userId: string): Promise<AlertWithCategories[]> {
     return this.prisma.jobAlert.findMany({
       where: { userId },
+      take: USER_ALERTS_LIST_CAP,
       include: alertWithCategoriesInclude,
       orderBy: { createdAt: "desc" },
     });

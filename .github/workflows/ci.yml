@@ -65,5 +65,16 @@ jobs:
       # Blocking on *critical* still catches a real regression without that
       # false-positive noise; continue-on-error previously meant this step
       # could never fail CI regardless of severity.
+      # Retried: the audit endpoint on registry.npmjs.org occasionally returns
+      # a transient 504 (Cloudflare gateway timeout), which makes npm audit
+      # exit non-zero with no vulnerability actually found. Retrying survives
+      # that; a genuine critical finding still fails CI since retries won't
+      # change the result.
       - name: Security Audit
-        run: npm audit --omit=dev --audit-level=critical
+        run: |
+          for attempt in 1 2 3; do
+            npm audit --omit=dev --audit-level=critical && exit 0
+            echo "npm audit attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
+          exit 1

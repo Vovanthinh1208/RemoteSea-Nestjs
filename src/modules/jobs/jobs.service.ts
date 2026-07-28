@@ -1,13 +1,15 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { CACHE_MANAGER, type Cache } from "@nestjs/cache-manager";
+import type { Prisma } from "@prisma/client";
 import { JobsRepository, type PublicJob } from "./jobs.repository";
+import type { JobListItem } from "@/common/types/job-list-item.type";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
 import {
+  assembleFacets,
   buildJobOrderBy,
   buildJobWhere,
-  computeFacets,
   type Facets,
 } from "./job-search.util";
 import { uniqueSlug } from "@/common/utils/slugify";
@@ -40,17 +42,22 @@ export class JobsService {
   async list(query: ListJobsDto) {
     const { page, limit } = query;
     const skip = paginationSkip(page, limit);
-    const where = buildJobWhere(query);
-    const orderBy = buildJobOrderBy(query.sort);
 
-    const [jobs, total, facets] = await Promise.all([
-      this.jobsRepository.findMany(where, skip, limit, orderBy),
-      this.jobsRepository.count(where),
+    const [{ jobs, total }, facets] = await Promise.all([
+      query.q
+        ? this.listBySearch(query, query.q, skip, limit)
+        : this.listByFilter(query, skip, limit),
       getOrSetCache<Facets>(
         this.cache,
         FACETS_CACHE_KEY,
         FACETS_CACHE_TTL_MS,
-        async () => computeFacets(await this.jobsRepository.findFacetRows()),
+        async () => {
+          const [counts, categoryRows] = await Promise.all([
+            this.jobsRepository.findFacetCounts(),
+            this.jobsRepository.findCategoryFacetCounts(),
+          ]);
+          return assembleFacets(counts, categoryRows);
+        },
       ),
     ]);
 
@@ -59,6 +66,80 @@ export class JobsService {
       pagination: buildPagination(page, limit, total),
       facets,
     };
+  }
+
+  private async listByFilter(
+    query: ListJobsDto,
+    skip: number,
+    limit: number,
+  ): Promise<{ jobs: JobListItem[]; total: number }> {
+    const where = buildJobWhere(query);
+    const orderBy = buildJobOrderBy(query.sort);
+
+    const [jobs, total] = await Promise.all([
+      this.jobsRepository.findMany(where, skip, limit, orderBy),
+      this.jobsRepository.count(where),
+    ]);
+    return { jobs, total };
+  }
+
+  // "relevance" (how well a job matches `q`) isn't a jobs column, so it can't
+  // be a Prisma `orderBy` — findSearchRankedIds ranks matches in one raw SQL
+  // query, and every other filter (type/level/country/category/timezone/
+  // salary) still runs through the exact same buildJobWhere() the non-search
+  // path uses, just narrowed to `id: { in: rankedIds } }`. An explicit
+  // sort=salary/recent still wins over relevance — a caller who asked for a
+  // specific order gets it even while searching.
+  private async listBySearch(
+    query: ListJobsDto,
+    q: string,
+    skip: number,
+    limit: number,
+  ): Promise<{ jobs: JobListItem[]; total: number }> {
+    const rankedIds = await this.jobsRepository.findSearchRankedIds(q);
+    if (rankedIds.length === 0) return { jobs: [], total: 0 };
+
+    const where: Prisma.JobWhereInput = {
+      ...buildJobWhere({ ...query, q: undefined }),
+      id: { in: rankedIds },
+    };
+
+    if (query.sort && query.sort !== "relevance") {
+      const [jobs, total] = await Promise.all([
+        this.jobsRepository.findMany(
+          where,
+          skip,
+          limit,
+          buildJobOrderBy(query.sort),
+        ),
+        this.jobsRepository.count(where),
+      ]);
+      return { jobs, total };
+    }
+
+    // rankedIds is already ordered best-match-first; findMany has no matching
+    // orderBy to give it. Rather than fetching every surviving match (up to
+    // SEARCH_CANDIDATE_LIMIT) with its full employer/categories/skills joins
+    // just to slice one page out of it in JS, first narrow rankedIds down to
+    // the ids that also satisfy `where` with a cheap id-only query, then only
+    // pay for the joined select on the one page actually being returned.
+    const matchingIds = new Set(await this.jobsRepository.findIds(where));
+    const orderedIds = rankedIds.filter((id) => matchingIds.has(id));
+    const pageIds = orderedIds.slice(skip, skip + limit);
+    if (pageIds.length === 0) return { jobs: [], total: orderedIds.length };
+
+    const pageJobs = await this.jobsRepository.findMany(
+      { id: { in: pageIds } },
+      0,
+      pageIds.length,
+    );
+    // findMany's `id: { in: pageIds } }` doesn't preserve pageIds' order, so
+    // re-sort the (small, page-sized) result to match relevance rank.
+    const rankOf = new Map(pageIds.map((id, index) => [id, index]));
+    const jobs = [...pageJobs].sort(
+      (a, b) => (rankOf.get(a.id) ?? 0) - (rankOf.get(b.id) ?? 0),
+    );
+    return { jobs, total: orderedIds.length };
   }
 
   async getActiveById(id: string) {
@@ -136,5 +217,19 @@ export class JobsService {
       );
     }
     return updated;
+  }
+
+  // Admin-triggered (AdminService.reviewJob), not owner-triggered — but the
+  // PENDING_REVIEW -> ACTIVE/REJECTED transition itself belongs here, not
+  // reimplemented in AdminRepository, since this module owns every Job
+  // status transition. Null means the atomic re-check found the job already
+  // moved on (e.g. a second concurrent review) — the caller maps that to
+  // JOB_NOT_PENDING_REVIEW.
+  approveForReview(id: string) {
+    return this.jobsRepository.approveJob(id);
+  }
+
+  rejectForReview(id: string, note: string | null) {
+    return this.jobsRepository.rejectJob(id, note);
   }
 }

@@ -1,6 +1,9 @@
+import { Prisma } from "@prisma/client";
 import { ApplicationsService } from "./applications.service";
 import type { ApplicationsRepository } from "./applications.repository";
 import type { ApplicationWithJob } from "./interfaces";
+import { ConflictApiException } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 
 const makeService = (repoOverrides: Partial<ApplicationsRepository> = {}) => {
   const repo = { ...repoOverrides } as unknown as ApplicationsRepository;
@@ -60,5 +63,33 @@ describe("ApplicationsService.getStatusCounts", () => {
     const result = await service.getStatusCounts("user-1");
     expect(result.total).toBe(4);
     expect(result.byStatus.OFFERED).toBe(4);
+  });
+});
+
+describe("ApplicationsService.apply", () => {
+  it("maps a P2002 race on the unique (jobId, talentId) constraint to ALREADY_APPLIED, not a generic conflict", async () => {
+    const service = makeService({
+      findTalentWithUserName: jest
+        .fn()
+        .mockResolvedValue({ id: "talent-1", user: { name: "Talent" } }),
+      // Fast path sees no existing row — a concurrent duplicate request
+      // still races past this and hits the DB constraint below.
+      findByJobAndTalent: jest.fn().mockResolvedValue(null),
+      createAndIncrementApplyCount: jest.fn().mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError("duplicate", {
+          code: "P2002",
+          clientVersion: "5.22.0",
+        }),
+      ),
+    });
+
+    const error = await service
+      .apply("user-1", { jobId: "job-1" } as never)
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ConflictApiException);
+    expect((error as ConflictApiException).getResponse()).toMatchObject({
+      code: ErrorCode.ALREADY_APPLIED,
+    });
   });
 });

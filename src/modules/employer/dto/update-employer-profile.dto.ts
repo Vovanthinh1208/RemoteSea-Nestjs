@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { httpUrlSchema } from "@/common/validation/http-url.schema";
+import { trimmedString } from "@/common/validation/trimmed-string.schema";
 
 const CURRENT_YEAR = new Date().getFullYear();
 
 export const updateEmployerProfileSchema = z.object({
-  companyName: z.string().min(2).max(100).optional(),
+  companyName: trimmedString({ min: 2, max: 100 }).optional(),
   websiteUrl: httpUrlSchema.optional(),
-  description: z.string().max(2000).optional(),
+  description: trimmedString({ max: 2000 }).optional(),
   industry: z.string().max(100).optional(),
   size: z.string().max(50).optional(),
   founded: z.number().int().min(1800).max(CURRENT_YEAR).optional(),

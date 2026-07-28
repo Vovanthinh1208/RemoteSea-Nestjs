@@ -18,10 +18,13 @@ FROM base AS build
 COPY package.json package-lock.json ./
 COPY --from=deps /app/node_modules ./node_modules
 COPY prisma ./prisma
-COPY tsconfig.json nest-cli.json ./
+COPY tsconfig.json tsconfig.build.json nest-cli.json ./
 COPY src ./src
 RUN npx prisma generate
-RUN npm run build
+RUN NODE_OPTIONS=--max-old-space-size=8192 npm run build; \
+    echo "--- build stage: /app/dist contents ---"; \
+    ls -la /app/dist || echo "/app/dist does not exist"; \
+    test -f /app/dist/main.js || (echo "ERROR: /app/dist/main.js was not produced by the build" && exit 1)
 
 # ─── Production dependencies only ──────────────────────────────────────────
 FROM base AS prod-deps
@@ -34,6 +37,13 @@ RUN npm ci --omit=dev
 # ─── Runner ─────────────────────────────────────────────────────────────────
 FROM base AS runner
 ENV NODE_ENV=production
+# ~75% of the production container's 1GB memory limit. Left unset, V8 sizes
+# its heap from its own default heuristic instead of the container's actual
+# limit, growing past it under memory pressure and getting hard OOM-killed by
+# the orchestrator instead of GC-ing proactively as it approaches a
+# deliberately-set ceiling. Revisit this value if the container's memory
+# limit ever changes.
+ENV NODE_OPTIONS=--max-old-space-size=768
 RUN addgroup -S nodejs && adduser -S nestjs -G nodejs
 
 COPY --from=prod-deps /app/node_modules ./node_modules

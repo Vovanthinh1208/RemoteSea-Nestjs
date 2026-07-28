@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { trimmedString } from "@/common/validation/trimmed-string.schema";
 
 export const updateUserSchema = z.object({
-  name: z.string().min(1).max(120),
+  name: trimmedString({ min: 1, max: 120 }),
 });
 
 export type UpdateUserDto = z.infer<typeof updateUserSchema>;

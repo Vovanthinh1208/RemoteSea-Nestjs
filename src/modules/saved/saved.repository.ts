@@ -3,6 +3,7 @@ import type { SavedJob } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 import type { SavedJobWithJob } from "./interfaces";
 import { jobListItemSelect } from "@/common/types/job-list-item.type";
+import { MEMBERSHIP_SET_CAP } from "@/common/constants/membership-set.constants";
 
 @Injectable()
 export class SavedRepository {
@@ -30,11 +31,13 @@ export class SavedRepository {
     return [savedJobs, total];
   }
 
-  /** Membership set for client-side "is this job saved?" checks — no job join, just ids. */
+  /** Membership set for client-side "is this job saved?" checks — no job join,
+   * just ids (see MEMBERSHIP_SET_CAP for why the cap isn't page-sized). */
   async findJobIdsForUser(userId: string): Promise<string[]> {
     const rows = await this.prisma.savedJob.findMany({
       where: { userId },
       select: { jobId: true },
+      take: MEMBERSHIP_SET_CAP,
     });
     return rows.map((row) => row.jobId);
   }

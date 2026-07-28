@@ -10,6 +10,16 @@ export class AuthRepository {
     return this.prisma.user.findUnique({ where: { email } });
   }
 
+  // Narrow existence check for callers that only need to know whether the
+  // email is taken (register's dup-check, forgotPassword) — avoids pulling
+  // every User column, including passwordHash, on these high-traffic paths.
+  findUserIdByEmail(email: string): Promise<Pick<User, "id"> | null> {
+    return this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+  }
+
   findUserById(id: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { id } });
   }
@@ -109,18 +119,34 @@ export class AuthRepository {
     return this.prisma.verificationToken.findUnique({ where: { token } });
   }
 
+  // Interactive transaction (not the array form), and deleteMany + a count
+  // check instead of delete — this is what makes the token single-use under
+  // a race: two concurrent resetPassword calls with the same token (double-
+  // click, a retried request) both pass AuthService.resetPassword's
+  // findVerificationToken/expiry check before either commits here. A plain
+  // `delete` would let the loser hit P2025 (Prisma throws on deleting an
+  // already-gone row) and surface as an inconsistent 404, and — worse — a
+  // naive `deleteMany` with no count check would let the loser's user.update
+  // still apply, silently allowing the same token to be consumed twice.
+  // Checking count first and returning false without ever calling
+  // user.update means the loser's transaction has no effect at all.
   async consumePasswordReset(
     identifier: string,
     token: string,
     passwordHash: string,
-  ): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.user.update({
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.verificationToken.deleteMany({
+        where: { token },
+      });
+      if (count === 0) return false;
+
+      await tx.user.update({
         where: { email: identifier },
         data: { passwordHash },
-      }),
-      this.prisma.verificationToken.delete({ where: { token } }),
-    ]);
+      });
+      return true;
+    });
   }
 
   async findOrCreateOAuthUser(params: {

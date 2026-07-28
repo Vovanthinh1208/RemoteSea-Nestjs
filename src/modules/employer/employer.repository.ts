@@ -31,14 +31,13 @@ export type PublicEmployerProfile = Prisma.EmployerProfileGetPayload<{
   select: typeof profileSelect;
 }>;
 
-const profileWithApplicationCountsSelect = {
+const profileWithJobCountSelect = {
   ...profileSelect,
   _count: { select: { jobs: true } },
-  jobs: { select: { _count: { select: { applications: true } } } },
 } satisfies Prisma.EmployerProfileSelect;
 
-export type ProfileWithApplicationCounts = Prisma.EmployerProfileGetPayload<{
-  select: typeof profileWithApplicationCountsSelect;
+export type ProfileWithJobCount = Prisma.EmployerProfileGetPayload<{
+  select: typeof profileWithJobCountSelect;
 }>;
 
 @Injectable()
@@ -54,8 +53,11 @@ export class EmployerRepository {
     });
   }
 
-  findProfileBySlug(slug: string): Promise<EmployerProfile | null> {
-    return this.prisma.employerProfile.findUnique({ where: { slug } });
+  findProfileBySlug(slug: string): Promise<{ id: string } | null> {
+    return this.prisma.employerProfile.findUnique({
+      where: { slug },
+      select: { id: true },
+    });
   }
 
   async createProfileForUser(
@@ -84,12 +86,19 @@ export class EmployerRepository {
     return profile;
   }
 
-  findProfileWithApplicationCounts(
-    userId: string,
-  ): Promise<ProfileWithApplicationCounts | null> {
+  findProfileWithJobCount(userId: string): Promise<ProfileWithJobCount | null> {
     return this.prisma.employerProfile.findUnique({
       where: { userId },
-      select: profileWithApplicationCountsSelect,
+      select: profileWithJobCountSelect,
+    });
+  }
+
+  // A single aggregate instead of loading every job row's per-job application
+  // count into memory just to sum them (the previous approach, and also
+  // unbounded — unlike findJobsByEmployer it had no cap on job count either).
+  countApplicationsForOwner(userId: string): Promise<number> {
+    return this.prisma.application.count({
+      where: { job: { employer: { userId } } },
     });
   }
 
@@ -102,6 +111,35 @@ export class EmployerRepository {
       data,
       select: profileSelect,
     });
+  }
+
+  setVerified(id: string, isVerified: boolean): Promise<EmployerProfile> {
+    return this.prisma.employerProfile.update({
+      where: { id },
+      // Only stamps verifiedAt when actually becoming verified — the
+      // suspend() path below is the one dedicated route to isVerified=false
+      // today, and it stamps its own suspendedAt instead.
+      data: { isVerified, ...(isVerified && { verifiedAt: new Date() }) },
+    });
+  }
+
+  // Single transaction, not two separate writes: an employer left verified
+  // with all jobs closed (or suspended with jobs still live) is a worse
+  // inconsistency than the suspend failing outright. Moved here (from
+  // AdminRepository) since "what does suspending an employer mean" — the
+  // isVerified flip and the job-closing cascade together — is this module's
+  // domain rule to own, not Admin's to reimplement.
+  async suspend(id: string): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.employerProfile.update({
+        where: { id },
+        data: { isVerified: false, suspendedAt: new Date() },
+      }),
+      this.prisma.job.updateMany({
+        where: { employerId: id, status: "ACTIVE" },
+        data: { status: "CLOSED" },
+      }),
+    ]);
   }
 
   findJobsByEmployer(employerId: string, status?: JobStatus) {

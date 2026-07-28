@@ -1,9 +1,10 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Resend } from "resend";
 import type { EnvConfig } from "@/core/config/env.validation";
 import type { JobWithRelations } from "@/common/types/job-with-relations.type";
 import { escapeHtml } from "@/common/utils/escape-html";
+import { CircuitBreaker } from "@/common/utils/circuit-breaker";
 
 /**
  * Ported from src/lib/email.ts. The original Next.js app renders React Email
@@ -15,13 +16,26 @@ import { escapeHtml } from "@/common/utils/escape-html";
  * service (or a shared package) to restore pixel-identical emails.
  */
 const SEND_TIMEOUT_MS = 10_000;
+// Opens after 5 consecutive failures (a real Resend outage, not one flaky
+// send) and stays open for 30s before letting a single trial through. Without
+// this, a degraded Resend turns every queued send — most visibly the alerts
+// cron's chunks of up to SEND_CONCURRENCY sends — into a full SEND_TIMEOUT_MS
+// wait each, instead of failing the rest of the batch fast once the outage is
+// detected.
+const BREAKER_FAILURE_THRESHOLD = 5;
+const BREAKER_COOLDOWN_MS = 30_000;
 
 @Injectable()
 export class EmailService {
+  private readonly logger = new Logger(EmailService.name);
   private readonly resend: Resend;
   private readonly from: string;
   private readonly appUrl: string;
   private readonly enabled: boolean;
+  private readonly breaker = new CircuitBreaker(
+    BREAKER_FAILURE_THRESHOLD,
+    BREAKER_COOLDOWN_MS,
+  );
 
   constructor(private readonly config: ConfigService<EnvConfig, true>) {
     const apiKey = this.config.get("RESEND_API_KEY", { infer: true });
@@ -38,6 +52,17 @@ export class EmailService {
 
   private async send(to: string, subject: string, html: string): Promise<void> {
     if (!this.enabled) return;
+
+    if (this.breaker.isOpen()) {
+      // Skip and log here rather than throw: callers already treat a thrown
+      // send() failure as "log and drop" via runInBackground, so throwing
+      // here would just reproduce that same outcome through a longer path.
+      this.logger.warn(
+        `Skipping email to ${to}: Resend appears to be down (circuit open)`,
+      );
+      return;
+    }
+
     // The Resend SDK has no built-in request timeout, so a slow/hung upstream
     // call would otherwise block the caller (e.g. the alerts cron loop) indefinitely.
     let timer: ReturnType<typeof setTimeout>;
@@ -51,6 +76,10 @@ export class EmailService {
           );
         }),
       ]);
+      this.breaker.onSuccess();
+    } catch (error) {
+      this.breaker.onFailure();
+      throw error;
     } finally {
       clearTimeout(timer!);
     }

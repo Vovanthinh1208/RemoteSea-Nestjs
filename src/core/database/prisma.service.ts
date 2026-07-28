@@ -24,7 +24,7 @@ export class PrismaService
 {
   private readonly logger = new Logger(PrismaService.name);
 
-  constructor(config: ConfigService<EnvConfig, true>) {
+  constructor(private readonly config: ConfigService<EnvConfig, true>) {
     super({
       datasources: {
         db: {
@@ -54,7 +54,9 @@ export class PrismaService
     this.$on("query", (event) => {
       if (event.duration >= SLOW_QUERY_THRESHOLD_MS) {
         this.logger.warn(`Slow query (${event.duration}ms): ${event.query}`);
-      } else if (process.env.NODE_ENV === "development") {
+      } else if (
+        this.config.get("NODE_ENV", { infer: true }) === "development"
+      ) {
         this.logger.debug(`${event.query} (${event.duration}ms)`);
       }
     });

@@ -4,11 +4,12 @@ import {
   experienceLevelSchema,
   planTypeSchema,
 } from "@/common/dto/enums.schema";
+import { trimmedString } from "@/common/validation/trimmed-string.schema";
 
 export const createJobSchema = z.object({
-  title: z.string().min(5).max(120),
-  description: z.string().min(100).max(20_000),
-  requirements: z.string().max(10_000).optional(),
+  title: trimmedString({ min: 5, max: 120 }),
+  description: trimmedString({ min: 100, max: 20_000 }),
+  requirements: trimmedString({ max: 10_000 }).optional(),
   jobType: jobTypeSchema,
   level: experienceLevelSchema,
   salaryMin: z.number().int().positive().max(10_000_000),

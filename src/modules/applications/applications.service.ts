@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { Prisma } from "@prisma/client";
 import {
   ForbiddenApiException,
   ConflictApiException,
@@ -15,6 +16,7 @@ import type { EnvConfig } from "@/core/config/env.validation";
 import { ApplicationsRepository } from "./applications.repository";
 import type { ApplyDto } from "./dto/apply.dto";
 import type { ApplicationWithJob, OwnApplication } from "./interfaces";
+import type { JobWithEmployerEmail } from "@/common/types/job-with-employer-email.type";
 import {
   buildApplicationStatusCounts,
   type ApplicationStatusCounts,
@@ -106,13 +108,33 @@ export class ApplicationsService {
       );
     }
 
-    const { application, job } =
-      await this.applicationsRepository.createAndIncrementApplyCount({
+    let result: { application: OwnApplication; job: JobWithEmployerEmail };
+    try {
+      result = await this.applicationsRepository.createAndIncrementApplyCount({
         jobId: dto.jobId,
         talentId: talent.id,
         coverLetter: dto.coverLetter,
         resumeUrl: dto.resumeUrl,
       });
+    } catch (error) {
+      // The findByJobAndTalent check above is only a fast path — a concurrent
+      // duplicate apply (double-click, retried request) can still race past
+      // it and hit the applications_jobId_talentId_key unique constraint.
+      // Without this, that race surfaces as GlobalExceptionFilter's generic
+      // P2002 -> ErrorCode.CONFLICT instead of the same ALREADY_APPLIED the
+      // fast path above already promises callers for this exact condition.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        throw new ConflictApiException(
+          "Already applied",
+          ErrorCode.ALREADY_APPLIED,
+        );
+      }
+      throw error;
+    }
+    const { application, job } = result;
 
     // The application is already committed above — a notification-email failure
     // must not turn a successful apply into a 500 (a retry would then wrongly

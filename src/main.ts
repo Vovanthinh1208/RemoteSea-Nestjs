@@ -2,7 +2,7 @@ import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { RawBodyRequest } from "@nestjs/common";
-import { Logger } from "@nestjs/common";
+import { Logger, VERSION_NEUTRAL, VersioningType } from "@nestjs/common";
 import type { Request } from "express";
 import { ConfigService } from "@nestjs/config";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
@@ -14,6 +14,7 @@ import { GlobalExceptionFilter } from "@/core/filters/global-exception.filter";
 import { LoggingInterceptor } from "@/core/interceptors/logging.interceptor";
 import { RateLimitHeadersInterceptor } from "@/core/interceptors/rate-limit-headers.interceptor";
 import { requestIdMiddleware } from "@/core/middleware/request-id.middleware";
+import { AppLogger } from "@/core/logging/app-logger";
 import type { EnvConfig } from "@/core/config/env.validation";
 
 // Node 15+ already terminates the process on an unhandled rejection by
@@ -38,7 +39,25 @@ process.on("uncaughtException", (error) => {
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Shared by every `new Logger(X.name)` call site app-wide (Nest's Logger
+  // class delegates to whatever instance is registered here) — see
+  // app-logger.ts for why this is the one place that needs to change to
+  // give every log line request-id correlation.
+  app.useLogger(new AppLogger());
   app.enableShutdownHooks();
+
+  // Infrastructure only — changes nothing about any route today. Every
+  // existing controller has no @Version() decorator, so each one resolves to
+  // VERSION_NEUTRAL and keeps its exact current path (confirmed by reading
+  // @nestjs/core's route-path-factory.js: VERSION_NEUTRAL is explicitly
+  // excluded from the URL). This just makes `@Version("2")` on some future
+  // route (served at /v2/...) possible without a project-wide migration —
+  // there was no way to introduce a breaking change to one endpoint without
+  // breaking every existing caller of it before this.
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: VERSION_NEUTRAL,
+  });
 
   // Must run before every other middleware below: LoggingInterceptor and any
   // handler/service that wants to tag its own log lines all read req.id.
@@ -83,24 +102,33 @@ async function bootstrap(): Promise<void> {
   // overrides below (the later path-scoped helmet re-sets the headers for
   // /docs requests, so last write wins there).
   app.use(helmet());
-  app.use(
-    "/docs",
-    helmet({
-      // Swagger UI ships an inline bootstrap script and inline styles, and
-      // pings validator.swagger.io for its "valid spec" badge — the default
-      // CSP blocks all three. Relaxing just these directives (rather than
-      // disabling CSP outright) keeps helmet's other protections intact
-      // (frameguard, HSTS, nosniff, etc.) even on /docs.
-      contentSecurityPolicy: {
-        directives: {
-          ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-          "script-src": ["'self'", "'unsafe-inline'"],
-          "style-src": ["'self'", "'unsafe-inline'"],
-          "img-src": ["'self'", "data:", "https://validator.swagger.io"],
+
+  // Swagger's full schema (every endpoint, DTO, response shape) is a
+  // deliberate information-disclosure surface — fine for local/CI use, not
+  // for a deployed instance a stranger can browse to map the whole API.
+  // Skipped entirely in production, not just left unlinked: an unlisted
+  // route is still a reachable route.
+  const isProduction = config.get("NODE_ENV", { infer: true }) === "production";
+  if (!isProduction) {
+    app.use(
+      "/docs",
+      helmet({
+        // Swagger UI ships an inline bootstrap script and inline styles, and
+        // pings validator.swagger.io for its "valid spec" badge — the default
+        // CSP blocks all three. Relaxing just these directives (rather than
+        // disabling CSP outright) keeps helmet's other protections intact
+        // (frameguard, HSTS, nosniff, etc.) even on /docs.
+        contentSecurityPolicy: {
+          directives: {
+            ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+            "script-src": ["'self'", "'unsafe-inline'"],
+            "style-src": ["'self'", "'unsafe-inline'"],
+            "img-src": ["'self'", "data:", "https://validator.swagger.io"],
+          },
         },
-      },
-    }),
-  );
+      }),
+    );
+  }
   // gzips response bodies over ~1KB (compression's default threshold) — the admin
   // job list and job-detail responses carry full description/requirements text on
   // every row and were previously going out uncompressed. Applied before the
@@ -114,22 +142,50 @@ async function bootstrap(): Promise<void> {
     new RateLimitHeadersInterceptor(),
   );
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle("RemoteSEA API")
-    .setDescription(
-      "REST API for RemoteSEA, a remote job platform for Southeast Asia. See docs/API.md in the repo for the full hand-written reference.",
-    )
-    .setVersion("1.0")
-    .addBearerAuth(
-      { type: "http", scheme: "bearer", bearerFormat: "JWT" },
-      "bearer",
-    )
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup("docs", app, document);
+  if (!isProduction) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle("RemoteSEA API")
+      .setDescription(
+        "REST API for RemoteSEA, a remote job platform for Southeast Asia. See docs/API.md in the repo for the full hand-written reference.",
+      )
+      .setVersion("1.0")
+      .addBearerAuth(
+        { type: "http", scheme: "bearer", bearerFormat: "JWT" },
+        "bearer",
+      )
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup("docs", app, document);
+  }
 
   const port = config.get("PORT", { infer: true });
-  await app.listen(port);
+  const server = await app.listen(port);
+
+  // Node's http.Server defaults (keepAliveTimeout: 5s, headersTimeout: 60s)
+  // assume nothing sits in front of it. This app always runs behind a reverse
+  // proxy/load balancer (see TRUST_PROXY_HOPS above) — virtually every one of
+  // those (nginx, Railway, Render, Fly, ALB) keeps its own client connections
+  // alive well past 5s. If the proxy reuses a keep-alive connection to send a
+  // new request at the exact moment Node's 5s timer has just closed that
+  // socket, the request hits a connection that's already gone — surfacing to
+  // end users as an intermittent 502, not a clean error from this app. Raising
+  // both past any realistic upstream idle timeout closes that race; headers
+  // must stay greater than keepAlive (Node enforces this at the socket level).
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 66_000;
+
+  // Raising keepAliveTimeout above has a side effect on shutdown: Nest's
+  // enableShutdownHooks (above) closes this same server via a bare
+  // httpServer.close(resolve) on SIGTERM, which waits for every socket to
+  // end on its own — including idle keep-alive ones, which now only time
+  // out after up to 65s instead of 5s. That risks missing the orchestrator's
+  // SIGTERM->SIGKILL grace window (commonly 10-30s) before onModuleDestroy
+  // (Prisma disconnect, ViewCountBuffer's final flush) ever runs. Force-
+  // closing idle sockets — not all sockets — the moment shutdown starts
+  // keeps genuinely in-flight requests draining normally while removing the
+  // part of the wait this app just made 13x longer.
+  process.on("SIGTERM", () => server.closeIdleConnections());
+  process.on("SIGINT", () => server.closeIdleConnections());
 }
 
 void bootstrap();

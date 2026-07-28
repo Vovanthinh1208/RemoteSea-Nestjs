@@ -22,6 +22,8 @@ import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
 import { Roles } from "@/core/decorators/roles.decorator";
+import { CurrentUser } from "@/core/decorators/current-user.decorator";
+import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import {
   ApiAdminTag,
   ApiGetRevenue,
@@ -51,8 +53,9 @@ export class AdminController {
   async updateEmployer(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(updateEmployerSchema)) body: UpdateEmployerDto,
+    @CurrentUser() admin: AuthenticatedUser,
   ) {
-    return this.adminService.updateEmployer(id, body);
+    return this.adminService.updateEmployer(id, body, admin.id);
   }
 
   @ApiListJobs()
@@ -68,8 +71,9 @@ export class AdminController {
   async reviewJob(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(reviewJobSchema)) body: ReviewJobDto,
+    @CurrentUser() admin: AuthenticatedUser,
   ) {
-    return this.adminService.reviewJob(id, body);
+    return this.adminService.reviewJob(id, body, admin.id);
   }
 
   @ApiGetRevenue()
