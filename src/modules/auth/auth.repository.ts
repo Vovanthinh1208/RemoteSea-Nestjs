@@ -14,6 +14,66 @@ export class AuthRepository {
     return this.prisma.user.findUnique({ where: { id } });
   }
 
+  findTwoFactorState(
+    userId: string,
+  ): Promise<Pick<
+    User,
+    "twoFactorEnabled" | "twoFactorSecret" | "twoFactorBackupCodes"
+  > | null> {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        twoFactorEnabled: true,
+        twoFactorSecret: true,
+        twoFactorBackupCodes: true,
+      },
+    });
+  }
+
+  // Written on /auth/2fa/setup, before twoFactorEnabled is ever set — a
+  // second setup call before verifying just overwrites the pending secret.
+  async setTwoFactorSecret(userId: string, secret: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorSecret: secret },
+    });
+  }
+
+  async enableTwoFactor(
+    userId: string,
+    hashedBackupCodes: string[],
+  ): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorEnabled: true, twoFactorBackupCodes: hashedBackupCodes },
+    });
+  }
+
+  async disableTwoFactor(userId: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        twoFactorEnabled: false,
+        twoFactorSecret: null,
+        twoFactorBackupCodes: [],
+      },
+    });
+  }
+
+  // Rewrites the whole array with the matched code removed — same
+  // single-use guarantee as VerificationToken (see consumePasswordReset),
+  // just array-shaped instead of a separate table since there are only ever
+  // a handful of these per user.
+  async consumeBackupCode(
+    userId: string,
+    remainingHashedCodes: string[],
+  ): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorBackupCodes: remainingHashedCodes },
+    });
+  }
+
   createUser(data: {
     name: string;
     email: string;

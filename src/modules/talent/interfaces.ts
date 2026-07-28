@@ -41,6 +41,11 @@ export const publicProfileArgs = {
     githubUrl: true,
     linkedinUrl: true,
     isOpenToWork: true,
+    // Not part of the public response shape (stripped in
+    // TalentMapper.toPublicProfile) — selected here only so
+    // TalentService.getPublicProfile can enforce it before the profile is
+    // ever returned.
+    visibility: true,
     desiredSalaryMin: true,
     desiredSalaryMax: true,
     currency: true,

@@ -2,6 +2,13 @@ import { z } from "zod";
 import { httpUrlSchema } from "@/common/validation/http-url.schema";
 import { experienceLevelSchema } from "@/common/dto/enums.schema";
 
+// Settings > Privacy & data "Profile visibility". PUBLIC = anyone can view
+// GET /talent/:slug (today's behavior for every existing profile — see the
+// schema.prisma comment on TalentProfile.visibility for why that's the
+// default). VERIFIED_EMPLOYERS restricts it to a caller authenticated as an
+// EmployerProfile with isVerified: true — enforced in TalentService.getPublicProfile.
+export const talentVisibilitySchema = z.enum(["PUBLIC", "VERIFIED_EMPLOYERS"]);
+
 export const talentProfileSchema = z.object({
   headline: z.string().max(120).optional(),
   bio: z.string().max(2000).optional(),
@@ -15,6 +22,7 @@ export const talentProfileSchema = z.object({
   githubUrl: httpUrlSchema.optional(),
   linkedinUrl: httpUrlSchema.optional(),
   isOpenToWork: z.boolean().optional(),
+  visibility: talentVisibilitySchema.optional(),
   desiredSalaryMin: z.number().int().positive().max(10_000_000).optional(),
   desiredSalaryMax: z.number().int().positive().max(10_000_000).optional(),
   skills: z

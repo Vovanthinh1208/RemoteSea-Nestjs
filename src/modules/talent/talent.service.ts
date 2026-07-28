@@ -9,9 +9,13 @@ import { assertFound } from "@/common/utils/assert-found";
 import { isOwnedUploadUrl } from "@/modules/uploads/upload-url.util";
 import { UploadsService } from "@/modules/uploads/uploads.service";
 import type { EnvConfig } from "@/core/config/env.validation";
-import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import {
+  BadRequestApiException,
+  NotFoundApiException,
+} from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { SalaryRange } from "@/modules/jobs/salary-range";
+import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 
 @Injectable()
 export class TalentService {
@@ -31,13 +35,31 @@ export class TalentService {
     return profile;
   }
 
-  async getPublicProfile(slug: string): Promise<Record<string, unknown>> {
+  async getPublicProfile(
+    slug: string,
+    viewer: AuthenticatedUser | null,
+  ): Promise<Record<string, unknown>> {
     const profile = await this.talentRepository.findBySlug(slug);
     assertFound(
       profile,
       "Profile not found",
       ErrorCode.TALENT_PROFILE_NOT_FOUND,
     );
+
+    if (profile.visibility === "VERIFIED_EMPLOYERS") {
+      const allowed =
+        viewer?.role === "EMPLOYER" &&
+        (await this.talentRepository.isVerifiedEmployer(viewer.id));
+      // Same response as a nonexistent slug — doesn't reveal that a profile
+      // exists but is gated, just that this caller can't see it here.
+      if (!allowed) {
+        throw new NotFoundApiException(
+          "Profile not found",
+          ErrorCode.TALENT_PROFILE_NOT_FOUND,
+        );
+      }
+    }
+
     return TalentMapper.toPublicProfile(profile);
   }
 

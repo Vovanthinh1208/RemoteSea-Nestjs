@@ -1,6 +1,6 @@
 # RemoteSEA API Reference
 
-Full endpoint reference for the RemoteSEA backend (NestJS). 44 routes across 13 modules — see [README.md](../README.md) for architecture and setup.
+Full endpoint reference for the RemoteSEA backend (NestJS). 59 routes across 13 modules — see [README.md](../README.md) for architecture and setup.
 
 Base URL (local): `http://localhost:4000` (configurable via `PORT` / `APP_URL`).
 
@@ -132,14 +132,46 @@ Creates a new user account (`TALENT` or `EMPLOYER`) with a bcrypt-hashed passwor
 
 ### POST /auth/login
 
-Validates email/password credentials and issues a signed JWT.
+Validates email/password credentials. Issues a signed JWT directly — unless the account has two-factor authentication enabled, in which case it issues a short-lived challenge token instead (see `POST /auth/2fa/challenge` below).
 
-- **Auth**: None · **Rate limit**: None
+- **Auth**: None
+- **Rate limit**: 10 req/60s per IP (`login-ip:<ip>`) **and** 10 req/60s per email (`login-email:<email>`) — either can trip first
 - **Body** (`loginSchema`): `email` (string, valid email, required), `password` (string, min 8, required)
 
 ```json
 { "email": "jane.doe@example.com", "password": "SuperSecret123" }
 ```
+
+**Success response — `200 OK`** — one of two shapes:
+
+```json
+{ "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
+```
+
+```json
+{
+  "twoFactorRequired": true,
+  "challengeToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Errors**
+
+| Status | Body                                       | Trigger                                                           |
+| ------ | ------------------------------------------ | ----------------------------------------------------------------- |
+| 400    | flattened Zod error                        | validation failure                                                |
+| 401    | `{ "error": "Invalid email or password" }` | no such user, OAuth-only account (no password), or wrong password |
+| 429    | rate-limit body                            | too many requests                                                 |
+
+---
+
+### POST /auth/2fa/challenge
+
+Exchanges a `challengeToken` from `POST /auth/login` plus a 6-digit authenticator code (or an unused backup code) for a real access token. This is the only route that ever accepts a challenge token — `JwtStrategy` explicitly rejects one everywhere else.
+
+- **Auth**: None (the challenge token itself is the credential)
+- **Rate limit**: 10 req / 5min per IP — `2fa-challenge:<ip>`
+- **Body** (`twoFactorChallengeSchema`): `challengeToken` (string, required), `code` (string, 6–32 chars — a TOTP code or a backup code, required)
 
 **Success response — `200 OK`**
 
@@ -149,10 +181,78 @@ Validates email/password credentials and issues a signed JWT.
 
 **Errors**
 
-| Status | Body                                       | Trigger                                                           |
-| ------ | ------------------------------------------ | ----------------------------------------------------------------- |
-| 400    | flattened Zod error                        | validation failure                                                |
-| 401    | `{ "error": "Invalid email or password" }` | no such user, OAuth-only account (no password), or wrong password |
+| Status | Body                                                          | Trigger                                                         |
+| ------ | ------------------------------------------------------------- | --------------------------------------------------------------- |
+| 400    | flattened Zod error                                           | validation failure                                              |
+| 400    | `{ "error": "Invalid code" }`                                 | code doesn't match the current TOTP window or any backup code   |
+| 401    | `{ "error": "This code has expired — please sign in again" }` | challenge token missing/expired/invalid, or not a 2FA challenge |
+| 429    | rate-limit body                                               | too many requests                                               |
+
+---
+
+### GET /auth/2fa/status
+
+Whether the authenticated account currently has 2FA enabled.
+
+- **Auth**: Bearer JWT required
+
+**Success response — `200 OK`**
+
+```json
+{ "enabled": false }
+```
+
+---
+
+### POST /auth/2fa/setup
+
+Generates a new TOTP secret and stores it (unconfirmed — `twoFactorEnabled` stays `false` until `POST /auth/2fa/verify` succeeds). Calling this again before verifying just overwrites the pending secret.
+
+- **Auth**: Bearer JWT required
+
+**Success response — `200 OK`**
+
+```json
+{
+  "secret": "JBSWY3DPEHPK3PXP",
+  "otpauthUrl": "otpauth://totp/RemoteSEA:jane.doe%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=RemoteSEA",
+  "qrCodeDataUrl": "data:image/png;base64,..."
+}
+```
+
+---
+
+### POST /auth/2fa/verify
+
+Confirms the code from the authenticator app matches the secret from `POST /auth/2fa/setup`, then enables 2FA and generates 8 single-use backup codes.
+
+- **Auth**: Bearer JWT required
+- **Body** (`verifyTwoFactorSetupSchema`): `token` (string, exactly 6 digits, required)
+
+**Success response — `200 OK`** — the only time these codes are ever returned in plaintext (only bcrypt hashes are persisted):
+
+```json
+{ "backupCodes": ["A1B2C-D3E4F", "..."] }
+```
+
+**Errors**: `400 { "error": "Start two-factor setup first" }` (no pending secret); `400 { "error": "Invalid code" }`.
+
+---
+
+### POST /auth/2fa/disable
+
+Disables 2FA after verifying the account password, clearing the secret and all backup codes.
+
+- **Auth**: Bearer JWT required
+- **Body** (`disableTwoFactorSchema`): `password` (string, required)
+
+**Success response — `200 OK`**
+
+```json
+{ "message": "Two-factor authentication disabled" }
+```
+
+**Errors**: `400 { "error": "Password change is not available for social sign-in accounts." }` (OAuth-only account); `401 { "error": "Incorrect password" }`.
 
 ---
 
@@ -297,6 +397,189 @@ Changes the authenticated user's password after verifying the current one.
 
 ---
 
+### GET /users/me/account
+
+Reads the current Settings > Account field values.
+
+**Success response — `200 OK`**
+
+```json
+{
+  "id": "cme8f1a2b0000ug0h9x1n1a2",
+  "phone": null,
+  "language": "English",
+  "region": "Vietnam",
+  "currencyDisplay": "USD ($)"
+}
+```
+
+---
+
+### PATCH /users/me/account
+
+Updates Settings > Account fields. Partial — at least one field required. These are persisted display preferences with no other reader yet (no i18n/locale switching or currency-formatting logic in the app currently consumes them).
+
+- **Body** (`updateAccountSchema`, all optional but ≥1 required):
+
+| Field             | Type   | Constraints                                   |
+| ----------------- | ------ | --------------------------------------------- |
+| `phone`           | string | max 30; `""` clears it (stored as `null`)     |
+| `language`        | enum   | `"English"` \| `"Tiếng Việt"`                 |
+| `region`          | enum   | `"Vietnam"` \| `"Singapore"` \| `"Australia"` |
+| `currencyDisplay` | enum   | `"USD ($)"` \| `"VND (₫)"` \| `"SGD (S$)"`    |
+
+**Success response — `200 OK`**
+
+```json
+{
+  "id": "cme8f1a2b0000ug0h9x1n1a2",
+  "phone": "+84 90 123 4567",
+  "language": "English",
+  "region": "Vietnam",
+  "currencyDisplay": "USD ($)"
+}
+```
+
+**Errors**: `400` validation failure (including submitting an empty body).
+
+---
+
+### GET /users/me/notification-preferences
+
+Returns Settings > Notifications toggles, creating a default row on first read if none exists yet. Nothing in the app currently sends a notification gated by these — this is a persisted preference with no reader yet.
+
+**Success response — `200 OK`**
+
+```json
+{
+  "id": "clx4notifpref0001",
+  "userId": "cme8f1a2b0000ug0h9x1n1a2",
+  "applicationUpdates": true,
+  "employerMessages": true,
+  "weeklyDigest": true,
+  "instantMatchAlerts": true,
+  "productNews": false,
+  "tipsAndResources": true,
+  "browserPush": true,
+  "updatedAt": "2026-07-28T10:00:00.000Z"
+}
+```
+
+---
+
+### PATCH /users/me/notification-preferences
+
+Updates one or more toggles above (upserts the row if it doesn't exist yet).
+
+- **Body** (`updateNotificationPreferencesSchema`): any of `applicationUpdates`, `employerMessages`, `weeklyDigest`, `instantMatchAlerts`, `productNews`, `tipsAndResources`, `browserPush` (all `boolean`, ≥1 required)
+
+**Success response — `200 OK`** — same shape as the `GET` above.
+
+**Errors**: `400` validation failure (including submitting an empty body).
+
+---
+
+### GET /users/me/pause
+
+Reads the current pause state (so the Settings UI shows "Pause" vs. "Reactivate" correctly on load, not just right after an action).
+
+**Success response — `200 OK`**
+
+```json
+{ "isPaused": false }
+```
+
+---
+
+### POST /users/me/pause
+
+Settings > Danger zone "Pause my account" — reversible, unlike `DELETE /users/me`. Sets `isPaused: true` and stamps `pausedAt`. Does **not** block sign-in (the user needs to be able to log back in to reactivate) and nothing else in the app currently checks this flag — a paused user's public profile, jobs, etc. all behave exactly as before.
+
+**Success response — `200 OK`**
+
+```json
+{
+  "id": "cme8f1a2b0000ug0h9x1n1a2",
+  "isPaused": true,
+  "pausedAt": "2026-07-28T10:00:00.000Z"
+}
+```
+
+---
+
+### POST /users/me/reactivate
+
+Reverses `POST /users/me/pause` — sets `isPaused: false`, clears `pausedAt`.
+
+**Success response — `200 OK`**
+
+```json
+{ "id": "cme8f1a2b0000ug0h9x1n1a2", "isPaused": false, "pausedAt": null }
+```
+
+---
+
+### GET /users/me/export
+
+Settings > Privacy & data "Download your data". Assembles the account's own data — profile, applications (talent side) or company profile + job postings (employer side), and job alerts — as a single JSON payload. Excludes internal-only fields (`passwordHash`, `stripeSessionId`, `reviewNote`, etc.).
+
+**Success response — `200 OK`**
+
+```json
+{
+  "exportedAt": "2026-07-28T10:00:00.000Z",
+  "account": {
+    "id": "cme8f1a2b0000ug0h9x1n1a2",
+    "email": "jane.doe@example.com",
+    "name": "Jane Doe",
+    "phone": null,
+    "role": "TALENT",
+    "createdAt": "2026-01-15T09:12:00.000Z",
+    "talent": { "...": "profile + skills + applications, or null" },
+    "employer": { "...": "company profile + jobs, or null" },
+    "jobAlerts": []
+  }
+}
+```
+
+---
+
+### GET /users/me/connections
+
+Settings > Connected accounts. Lists linked OAuth providers (Google/GitHub sign-in only — there's no LinkedIn strategy registered).
+
+**Success response — `200 OK`**
+
+```json
+[
+  { "provider": "google", "providerAccountId": "104852..." },
+  { "provider": "github", "providerAccountId": "8213455" }
+]
+```
+
+---
+
+### DELETE /users/me/connections/:provider
+
+Unlinks an OAuth provider. Blocked if this would leave the account with no way to sign in (no password set **and** this is the only connected provider).
+
+- **Path params**: `provider` (string, e.g. `google`, `github`)
+
+**Success response — `200 OK`**
+
+```json
+{ "success": true }
+```
+
+**Errors**
+
+| Status | Body                                                                                                        | Trigger                              |
+| ------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| 400    | `{ "error": "That provider isn't connected to this account" }`                                              | no `Account` row for that provider   |
+| 409    | `{ "error": "Set a password or keep at least one other connected account before disconnecting this one." }` | would remove the only sign-in method |
+
+---
+
 ## Talent
 
 Base path: `/talent`. No class-level guard — auth applied per-route.
@@ -367,6 +650,7 @@ Creates or updates the authenticated user's talent profile (upsert); if `skills`
 | `level`                                                 | enum    | `ENTRY`\|`MID`\|`SENIOR`\|`LEAD`\|`EXECUTIVE`                                                                                            |
 | `resumeUrl`, `portfolioUrl`, `githubUrl`, `linkedinUrl` | string  | valid URL                                                                                                                                |
 | `isOpenToWork`                                          | boolean | —                                                                                                                                        |
+| `visibility`                                            | enum    | `PUBLIC` \| `VERIFIED_EMPLOYERS` — see `GET /talent/:slug` below; defaults to `PUBLIC`                                                   |
 | `desiredSalaryMin`, `desiredSalaryMax`                  | number  | integer, positive                                                                                                                        |
 | `skills`                                                | array   | `{ skillId: string (CUID), yearsExp?: number (int, min 0) }[]`; provided → replaces entire skill set; omitted → untouched; `[]` → clears |
 
@@ -392,14 +676,14 @@ Creates or updates the authenticated user's talent profile (upsert); if `skills`
 
 ### GET /talent/:slug
 
-Public talent profile lookup by slug. Hides compensation fields unless `isOpenToWork` is `true`.
+Public talent profile lookup by slug. Hides compensation fields unless `isOpenToWork` is `true`. Gated by the profile's `visibility` setting (Settings > Privacy & data): a `PUBLIC` profile (the default) is visible to anyone; a `VERIFIED_EMPLOYERS` profile only to a caller sending a Bearer JWT for a user with `role: EMPLOYER` whose `EmployerProfile.isVerified` is `true`.
 
-- **Auth**: None (public)
+- **Auth**: None required, but an `Authorization: Bearer <jwt>` header is read if present — the only route in the app that's unauthenticated yet optionally auth-aware
 - **Path params**: `slug` (string)
 
-**Success response — `200 OK`** — same shape as the profile above, but `user` is `{ name, image }` and `desiredSalaryMin`/`Max` keys are **omitted entirely** (not `null`) when `isOpenToWork` is `false`.
+**Success response — `200 OK`** — same shape as the profile above, but `user` is `{ name, image }`, `visibility` itself is never included, and `desiredSalaryMin`/`Max` keys are **omitted entirely** (not `null`) when `isOpenToWork` is `false`.
 
-**Errors**: `404 { "error": "Profile not found" }`.
+**Errors**: `404 { "error": "Profile not found" }` — both for a nonexistent slug and for a `VERIFIED_EMPLOYERS` profile the caller isn't allowed to see (same response either way, so a gated profile's existence isn't revealed to a caller who can't view it).
 
 ---
 

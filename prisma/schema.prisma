@@ -63,26 +63,77 @@ enum PlanType {
   HANDS_ON
 }
 
+enum TalentVisibility {
+  PUBLIC
+  VERIFIED_EMPLOYERS
+}
+
 // ─── User (Auth base) ─────────────────────────────────────────────────────────
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String?
-  name         String?
-  image        String?
-  role         UserRole @default(TALENT)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                   String    @id @default(cuid())
+  email                String    @unique
+  passwordHash         String?
+  name                 String?
+  image                String?
+  role                 UserRole  @default(TALENT)
+  // Settings > Account: decorative in the reference design, but these are
+  // real, persisted per-user display preferences (not enforced anywhere yet
+  // — no i18n/locale switching or currency-formatting logic reads them).
+  phone                String?
+  language             String    @default("English")
+  region               String    @default("Vietnam")
+  currencyDisplay      String    @default("USD ($)")
+  // Settings > Danger zone "Pause my account": reversible, unlike delete.
+  // Deliberately does NOT block sign-in (AuthService.validateCredentials) —
+  // the reference design's "reactivate anytime" copy requires being able to
+  // log back in to flip it off. Not enforced anywhere else yet (e.g. a
+  // paused talent's public profile is still reachable by direct link) —
+  // narrower than the reference design's "hidden from search" copy implies.
+  isPaused             Boolean   @default(false)
+  pausedAt             DateTime?
+  // Settings > Security "Two-factor authentication". twoFactorSecret is the
+  // base32 TOTP secret (set on /auth/2fa/setup, before twoFactorEnabled
+  // flips true on /auth/2fa/verify) — stored in plaintext like the rest of
+  // this table; there's no column-level encryption anywhere in this schema,
+  // so this is the same trust boundary as, say, resumeUrl. Backup codes are
+  // bcrypt-hashed and single-use (removed from the array once consumed).
+  twoFactorEnabled     Boolean   @default(false)
+  twoFactorSecret      String?
+  twoFactorBackupCodes String[]  @default([])
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  accounts  Account[]
-  sessions  Session[]
-  talent    TalentProfile?
-  employer  EmployerProfile?
-  jobAlerts JobAlert[]
-  savedJobs SavedJob[]
+  accounts               Account[]
+  sessions               Session[]
+  talent                 TalentProfile?
+  employer               EmployerProfile?
+  jobAlerts              JobAlert[]
+  savedJobs              SavedJob[]
+  notificationPreference NotificationPreference?
 
   @@map("users")
+}
+
+// Settings > Notifications toggles. One row per user, created on first read
+// (see NotificationsRepository.upsertRow) rather than at signup — nothing
+// currently sends notifications gated by these, so they're a persisted
+// preference with no reader yet, same caveat as the Account fields above.
+model NotificationPreference {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  applicationUpdates Boolean  @default(true)
+  employerMessages   Boolean  @default(true)
+  weeklyDigest       Boolean  @default(true)
+  instantMatchAlerts Boolean  @default(true)
+  productNews        Boolean  @default(false)
+  tipsAndResources   Boolean  @default(true)
+  browserPush        Boolean  @default(true)
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
 }
 
 model Account {
@@ -130,26 +181,34 @@ model VerificationToken {
 // ─── Talent ───────────────────────────────────────────────────────────────────
 
 model TalentProfile {
-  id               String          @id @default(cuid())
-  userId           String          @unique
-  slug             String          @unique
+  id               String           @id @default(cuid())
+  userId           String           @unique
+  slug             String           @unique
   headline         String?
-  bio              String?         @db.Text
+  bio              String?          @db.Text
   location         String?
   country          String?
   timezone         String?
   yearsExperience  Int?
-  level            ExperienceLevel @default(MID)
+  level            ExperienceLevel  @default(MID)
   resumeUrl        String?
   portfolioUrl     String?
   githubUrl        String?
   linkedinUrl      String?
-  isOpenToWork     Boolean         @default(true)
+  isOpenToWork     Boolean          @default(true)
+  // Settings > Privacy & data "Profile visibility". Distinct from
+  // isOpenToWork (whether you're currently looking) — this is who can see
+  // the profile at all. Defaults to PUBLIC (today's de facto behavior, so
+  // adding this column changes nothing for existing profiles); switching to
+  // VERIFIED_EMPLOYERS is enforced in TalentService.getPublicProfile, which
+  // 404s the (unauthenticated, or non-employer, or unverified-employer)
+  // caller exactly as if the slug didn't exist.
+  visibility       TalentVisibility @default(PUBLIC)
   desiredSalaryMin Int?
   desiredSalaryMax Int?
-  currency         String          @default("USD")
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  currency         String           @default("USD")
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   skills       TalentSkill[]

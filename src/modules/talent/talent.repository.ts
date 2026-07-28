@@ -38,6 +38,15 @@ export class TalentRepository {
     });
   }
 
+  // Backs the VERIFIED_EMPLOYERS visibility gate in TalentService.getPublicProfile.
+  async isVerifiedEmployer(userId: string): Promise<boolean> {
+    const employer = await this.prisma.employerProfile.findUnique({
+      where: { userId },
+      select: { isVerified: true },
+    });
+    return employer?.isVerified ?? false;
+  }
+
   // upsertProfile only needs these 3 scalars (to validate the *effective*
   // post-patch salary range and resume-URL ownership) — not the full
   // skills+skill+user join ownProfileArgs pulls in for the "get my profile"

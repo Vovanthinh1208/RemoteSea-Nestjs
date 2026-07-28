@@ -38,5 +38,9 @@ const oauthProviders: Provider[] = [
   ],
   controllers: [AuthController],
   providers: [AuthService, AuthRepository, JwtStrategy, ...oauthProviders],
+  // TalentService needs verifySession to optionally identify the caller of
+  // the unauthenticated GET /talent/:slug route (for VERIFIED_EMPLOYERS
+  // visibility) — the only other module that reaches into AuthService.
+  exports: [AuthService],
 })
 export class AuthModule {}

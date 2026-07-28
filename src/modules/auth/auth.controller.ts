@@ -26,8 +26,18 @@ import {
   resetPasswordSchema,
   type ResetPasswordDto,
 } from "./dto/reset-password.dto";
+import {
+  disableTwoFactorSchema,
+  type DisableTwoFactorDto,
+  twoFactorChallengeSchema,
+  type TwoFactorChallengeDto,
+  verifyTwoFactorSetupSchema,
+  type VerifyTwoFactorSetupDto,
+} from "./dto/two-factor.dto";
 import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
+import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
+import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import {
   RateLimitService,
   clientIp,
@@ -99,11 +109,62 @@ export class AuthController {
       req,
     );
 
-    const user = await this.authService.validateCredentials(
-      body.email,
-      body.password,
+    // Returns either { accessToken } directly, or — if this account has 2FA
+    // enabled — { twoFactorRequired: true, challengeToken } instead, which
+    // the frontend must exchange via POST /auth/2fa/challenge.
+    return this.authService.loginOrChallenge(body.email, body.password);
+  }
+
+  @Post("2fa/challenge")
+  @HttpCode(HttpStatus.OK)
+  async twoFactorChallenge(
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(twoFactorChallengeSchema))
+    body: TwoFactorChallengeDto,
+  ) {
+    this.rateLimitService.enforce(
+      `2fa-challenge:${clientIp(req)}`,
+      RATE_LIMITS.TWO_FACTOR_CHALLENGE.limit,
+      RATE_LIMITS.TWO_FACTOR_CHALLENGE.windowMs,
+      req,
     );
-    return this.authService.issueToken(user);
+    return this.authService.completeTwoFactorChallenge(
+      body.challengeToken,
+      body.code,
+    );
+  }
+
+  @Get("2fa/status")
+  @UseGuards(JwtAuthGuard)
+  async twoFactorStatus(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.getTwoFactorStatus(user.id);
+  }
+
+  @Post("2fa/setup")
+  @UseGuards(JwtAuthGuard)
+  async setupTwoFactor(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.setupTwoFactor(user.id, user.email);
+  }
+
+  @Post("2fa/verify")
+  @UseGuards(JwtAuthGuard)
+  async verifyTwoFactorSetup(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(verifyTwoFactorSetupSchema))
+    body: VerifyTwoFactorSetupDto,
+  ) {
+    return this.authService.verifyTwoFactorSetup(user.id, body.token);
+  }
+
+  @Post("2fa/disable")
+  @UseGuards(JwtAuthGuard)
+  async disableTwoFactor(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(disableTwoFactorSchema))
+    body: DisableTwoFactorDto,
+  ) {
+    await this.authService.disableTwoFactor(user.id, body.password);
+    return { message: "Two-factor authentication disabled" };
   }
 
   @ApiSession()

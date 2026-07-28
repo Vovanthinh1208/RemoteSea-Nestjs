@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
+  Param,
   Patch,
   Post,
   UseGuards,
@@ -12,6 +14,14 @@ import {
   changePasswordSchema,
   type ChangePasswordDto,
 } from "./dto/change-password.dto";
+import {
+  updateAccountSchema,
+  type UpdateAccountDto,
+} from "./dto/update-account.dto";
+import {
+  updateNotificationPreferencesSchema,
+  type UpdateNotificationPreferencesDto,
+} from "./dto/update-notification-preferences.dto";
 import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
@@ -62,5 +72,72 @@ export class UsersController {
       RATE_LIMITS.CHANGE_PASSWORD.windowMs,
     );
     return this.usersService.changePassword(user.id, body);
+  }
+
+  // Settings > Account (phone/language/region/currency display).
+  @Get("account")
+  async getAccount(@CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.getAccount(user.id);
+  }
+
+  @Patch("account")
+  async updateAccount(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(updateAccountSchema)) body: UpdateAccountDto,
+  ) {
+    return this.usersService.updateAccount(user.id, body);
+  }
+
+  // Settings > Notifications.
+  @Get("notification-preferences")
+  async getNotificationPreferences(@CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.getNotificationPreferences(user.id);
+  }
+
+  @Patch("notification-preferences")
+  async updateNotificationPreferences(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(updateNotificationPreferencesSchema))
+    body: UpdateNotificationPreferencesDto,
+  ) {
+    return this.usersService.updateNotificationPreferences(user.id, body);
+  }
+
+  // Settings > Danger zone "Pause my account" (reversible — see DeleteAccount
+  // above for the permanent version).
+  @Get("pause")
+  async getPauseState(@CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.getPauseState(user.id);
+  }
+
+  @Post("pause")
+  async pauseAccount(@CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.pauseAccount(user.id);
+  }
+
+  @Post("reactivate")
+  async reactivateAccount(@CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.reactivateAccount(user.id);
+  }
+
+  // Settings > Privacy & data "Download your data".
+  @Get("export")
+  async exportData(@CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.exportData(user.id);
+  }
+
+  // Settings > Connected accounts.
+  @Get("connections")
+  async listConnections(@CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.listConnections(user.id);
+  }
+
+  @Delete("connections/:provider")
+  async disconnectConnection(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("provider") provider: string,
+  ) {
+    await this.usersService.disconnectConnection(user.id, provider);
+    return { success: true };
   }
 }

@@ -19,7 +19,13 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
     });
   }
 
-  validate(payload: JwtPayload): AuthenticatedUser {
+  validate(payload: JwtPayload & { purpose?: string }): AuthenticatedUser {
+    // A 2FA challenge token (see AuthService.loginOrChallenge) is signed with
+    // this same secret but must never authenticate a real request — only
+    // POST /auth/2fa/challenge accepts it, verified there explicitly.
+    if (payload.purpose) {
+      throw new Error("Invalid token");
+    }
     return AuthMapper.fromPayload(payload);
   }
 }
