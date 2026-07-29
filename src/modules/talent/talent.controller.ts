@@ -64,7 +64,9 @@ export class TalentController {
     // Unauthenticated by design (no JwtAuthGuard) — a Bearer token is
     // optional here, only consulted to decide whether a VERIFIED_EMPLOYERS
     // profile is visible to this specific caller.
-    const viewer = this.authService.verifySession(req.headers.authorization);
+    const viewer = await this.authService.verifySession(
+      req.headers.authorization,
+    );
     return this.talentService.getPublicProfile(slug, viewer);
   }
 }

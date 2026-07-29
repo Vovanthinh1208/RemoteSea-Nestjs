@@ -8,17 +8,22 @@ import { AuthRepository } from "./auth.repository";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { GoogleStrategy } from "./strategies/google.strategy";
 import { GithubStrategy } from "./strategies/github.strategy";
+import { LinkedinStrategy } from "./strategies/linkedin.strategy";
 import type { EnvConfig } from "@/core/config/env.validation";
 
-// Google/GitHub sign-in degrades gracefully when unconfigured, mirroring
-// env.ts treating these as optional integrations — only register the
-// strategy (and therefore the route) when credentials are present.
+// Google/GitHub/LinkedIn sign-in (and Settings > Connected accounts linking)
+// degrades gracefully when unconfigured, mirroring env.ts treating these as
+// optional integrations — only register the strategy (and therefore the
+// route) when credentials are present.
 const oauthProviders: Provider[] = [
   ...(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET
     ? [GoogleStrategy]
     : []),
   ...(process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET
     ? [GithubStrategy]
+    : []),
+  ...(process.env.AUTH_LINKEDIN_ID && process.env.AUTH_LINKEDIN_SECRET
+    ? [LinkedinStrategy]
     : []),
 ];
 

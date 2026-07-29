@@ -157,11 +157,22 @@ model Account {
   @@map("accounts")
 }
 
+// Settings > Security "Active sessions". Repurposed from an unused NextAuth-
+// pattern leftover (sessionToken/expires, never read or written anywhere) —
+// now the real backing store for revocable sessions: every access token
+// carries this row's id as its `sid` claim (see JwtPayload), and
+// JwtStrategy.validate rejects any token whose session is missing or
+// revokedAt is set. userAgent/ip are the raw request values, parsed into a
+// friendly "Chrome on macOS"-style label only at read time (see
+// common/utils/user-agent.util.ts) so improving that parser needs no backfill.
 model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
+  id         String    @id @default(cuid())
+  userId     String
+  userAgent  String?
+  ip         String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

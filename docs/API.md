@@ -1,6 +1,6 @@
 # RemoteSEA API Reference
 
-Full endpoint reference for the RemoteSEA backend (NestJS). 59 routes across 13 modules — see [README.md](../README.md) for architecture and setup.
+Full endpoint reference for the RemoteSEA backend (NestJS). 67 routes across 13 modules — see [README.md](../README.md) for architecture and setup.
 
 Base URL (local): `http://localhost:4000` (configurable via `PORT` / `APP_URL`).
 
@@ -83,7 +83,7 @@ Liveness check: pings the database with `SELECT 1` and reports connectivity.
 
 Base path: `/auth`. Controller: `auth.controller.ts`.
 
-> **OAuth-conditional routes**: `GET /auth/google(/callback)` and `GET /auth/github(/callback)` are only registered when their credentials are configured (`AUTH_GOOGLE_ID`/`SECRET`, `AUTH_GITHUB_ID`/`SECRET`). If unset, the strategy is never registered and hitting the route throws at the Passport layer (`500`) rather than a clean `404`.
+> **OAuth-conditional routes**: `GET /auth/google(/callback)`, `GET /auth/github(/callback)`, and `GET /auth/linkedin(/callback)` are only registered when their respective credentials are configured (`AUTH_GOOGLE_ID`/`SECRET`, `AUTH_GITHUB_ID`/`SECRET`, `AUTH_LINKEDIN_ID`/`SECRET`). If unset, the strategy is never registered and hitting the route throws at the Passport layer (`500`) rather than a clean `404`. `GET /auth/:provider/link` is always registered (it just builds a URL from config, no Passport strategy involved) — the resulting URL simply won't work if that provider's credentials are unset.
 
 ### POST /auth/register
 
@@ -132,7 +132,7 @@ Creates a new user account (`TALENT` or `EMPLOYER`) with a bcrypt-hashed passwor
 
 ### POST /auth/login
 
-Validates email/password credentials. Issues a signed JWT directly — unless the account has two-factor authentication enabled, in which case it issues a short-lived challenge token instead (see `POST /auth/2fa/challenge` below).
+Validates email/password credentials. Issues a signed JWT directly — unless the account has two-factor authentication enabled, in which case it issues a short-lived challenge token instead (see `POST /auth/2fa/challenge` below). Every real access token is backed by a new `Session` row (device/IP captured from the request) — see `GET /users/me/sessions`.
 
 - **Auth**: None
 - **Rate limit**: 10 req/60s per IP (`login-ip:<ip>`) **and** 10 req/60s per email (`login-email:<email>`) — either can trip first
@@ -292,6 +292,41 @@ Redirects to Google's consent screen, then on callback looks up/creates the user
 ### GET /auth/github · GET /auth/github/callback
 
 Same flow as Google, via `GithubAuthGuard`. Only registered if `AUTH_GITHUB_ID`/`AUTH_GITHUB_SECRET` are set. Same error handling (including the missing-verified-email case).
+
+---
+
+### GET /auth/linkedin · GET /auth/linkedin/callback
+
+Same shape as Google/GitHub above, via `LinkedinAuthGuard`. Uses "Sign In with LinkedIn using OpenID Connect" (`scope: openid profile email`, profile fetched from `https://api.linkedin.com/v2/userinfo`) rather than LinkedIn's older v1/v2 REST profile API. Only registered if `AUTH_LINKEDIN_ID`/`AUTH_LINKEDIN_SECRET` are set.
+
+---
+
+### GET /auth/:provider/link
+
+Settings > Connected accounts "Connect" — `:provider` is `google`, `github`, or `linkedin`. Returns a plain JSON URL rather than redirecting: a browser's top-level navigation to the provider's consent screen can't carry an `Authorization` header, so this must be called as an authenticated XHR first, with the frontend doing `window.location.href = url` itself afterward. The URL embeds a short-lived (10m) link-intent token as the OAuth `state` param so the shared callback below links the resulting profile to _this_ caller's account instead of running the usual find-or-create-by-email login.
+
+- **Auth**: Bearer JWT required (`JwtAuthGuard`)
+- **Path params**: `provider` — `google` \| `github` \| `linkedin`
+
+**Success response — `200 OK`**
+
+```json
+{
+  "url": "https://accounts.google.com/o/oauth2/v2/auth?client_id=...&state=..."
+}
+```
+
+**Errors**: `400` validation failure (unrecognized `provider`); `401` no/invalid token.
+
+**Callback behavior when a link-intent `state` is present** (`GET /auth/:provider/callback`, same routes as the plain sign-in flow above): instead of issuing a token, links the `Account` row to the intent's `sub` and redirects to:
+
+| Outcome                                                                      | Redirect                                                                   |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Linked (or already linked to this same account — a no-op)                    | `<FRONTEND_URL>/settings?connected=<provider>`                             |
+| That external account is already linked to a **different** RemoteSEA account | `<FRONTEND_URL>/settings?connectionError=<provider>&reason=already_linked` |
+| Any other failure                                                            | `<FRONTEND_URL>/settings?connectionError=<provider>&reason=unknown`        |
+
+A link-intent token is rejected by `JwtStrategy` the same way a 2FA challenge token is (both carry a `purpose` claim) — it can never be used as a real Bearer token on any other route.
 
 ---
 
@@ -546,7 +581,7 @@ Settings > Privacy & data "Download your data". Assembles the account's own data
 
 ### GET /users/me/connections
 
-Settings > Connected accounts. Lists linked OAuth providers (Google/GitHub sign-in only — there's no LinkedIn strategy registered).
+Settings > Connected accounts. Lists linked OAuth providers (Google, GitHub, LinkedIn — see `GET /auth/:provider/link` to connect a new one).
 
 **Success response — `200 OK`**
 
@@ -577,6 +612,72 @@ Unlinks an OAuth provider. Blocked if this would leave the account with no way t
 | ------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------ |
 | 400    | `{ "error": "That provider isn't connected to this account" }`                                              | no `Account` row for that provider   |
 | 409    | `{ "error": "Set a password or keep at least one other connected account before disconnecting this one." }` | would remove the only sign-in method |
+
+---
+
+### GET /users/me/sessions
+
+Settings > Security > Active sessions. Every `POST /auth/login` (or the 2FA/OAuth equivalents) creates a `Session` row whose id becomes the issued JWT's `sid` claim — `JwtStrategy` rejects any token whose session is missing or revoked, on every authenticated request. This lists the caller's own non-revoked sessions, newest-activity first, with `device` parsed from the request's `User-Agent` and `location` resolved from the stored IP — both computed at read time (not stored pre-formatted), and `current: true` on whichever session this very request's own token belongs to.
+
+`location` is an offline MaxMind GeoLite2 lookup (`geoip-lite` — no network call, no API key, no rate limit) formatted as `"City, Region, Country"` and trimmed down to whatever precision is actually available (frequently just the country, or `null`). It's `null` for loopback/private ranges (`::1`, `127.0.0.1`, `10.x`, `192.168.x`) — the normal case in local development — and for any IP the offline database doesn't recognize.
+
+**Success response — `200 OK`**
+
+```json
+[
+  {
+    "id": "cms4iborq0003exhoppxthw5w",
+    "device": "Chrome on macOS",
+    "ip": "203.0.113.4",
+    "location": "Ho Chi Minh City, Vietnam",
+    "createdAt": "2026-07-28T10:22:38.631Z",
+    "lastSeenAt": "2026-07-28T10:22:38.631Z",
+    "current": true
+  },
+  {
+    "id": "cms4ibppt0005exhovc4ptk20",
+    "device": "Safari on iOS",
+    "ip": "203.0.113.9",
+    "location": null,
+    "createdAt": "2026-07-28T10:22:39.857Z",
+    "lastSeenAt": "2026-07-28T10:25:12.001Z",
+    "current": false
+  }
+]
+```
+
+---
+
+### DELETE /users/me/sessions/:id
+
+Revokes one other session immediately — its access token stops working on the very next request (checked in `JwtStrategy.validate`, not just at next-login). Blocked for the caller's own current session; use normal sign-out for that instead.
+
+- **Path params**: `id` (string, a `Session` id)
+
+**Success response — `200 OK`**
+
+```json
+{ "success": true }
+```
+
+**Errors**
+
+| Status | Body                                                                               | Trigger                                            |
+| ------ | ---------------------------------------------------------------------------------- | -------------------------------------------------- |
+| 400    | `{ "error": "Sign out to end your current session instead of revoking it here." }` | `id` is the caller's own current session           |
+| 404    | `{ "error": "Session not found" }`                                                 | no matching non-revoked session owned by this user |
+
+---
+
+### DELETE /users/me/sessions
+
+"Sign out of all other sessions." Revokes every one of the caller's sessions except the current one.
+
+**Success response — `200 OK`**
+
+```json
+{ "revokedCount": 2 }
+```
 
 ---
 

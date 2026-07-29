@@ -26,7 +26,9 @@ import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
+import { CurrentSessionId } from "@/core/decorators/current-session-id.decorator";
 import { RateLimitService } from "@/common/services/rate-limit.service";
+import { AuthService } from "@/modules/auth/auth.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import {
   ApiChangePassword,
@@ -42,6 +44,7 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly rateLimitService: RateLimitService,
+    private readonly authService: AuthService,
   ) {}
 
   @ApiUpdateUserName()
@@ -139,5 +142,34 @@ export class UsersController {
   ) {
     await this.usersService.disconnectConnection(user.id, provider);
     return { success: true };
+  }
+
+  // Settings > Security > Active sessions.
+  @Get("sessions")
+  async listSessions(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentSessionId() sessionId: string,
+  ) {
+    return this.authService.listSessions(user.id, sessionId);
+  }
+
+  @Delete("sessions/:id")
+  async revokeSession(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentSessionId() sessionId: string,
+    @Param("id") id: string,
+  ) {
+    await this.authService.revokeSession(user.id, id, sessionId);
+    return { success: true };
+  }
+
+  // "Sign out of all other sessions" — no :id, revokes every session except
+  // the caller's own.
+  @Delete("sessions")
+  async revokeOtherSessions(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentSessionId() sessionId: string,
+  ) {
+    return this.authService.revokeOtherSessions(user.id, sessionId);
   }
 }

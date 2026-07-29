@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import type { User, UserRole } from "@prisma/client";
+import type { Account, Session, User, UserRole } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
+
+export type SessionMeta = { userAgent?: string; ip?: string };
 
 @Injectable()
 export class AuthRepository {
@@ -198,5 +200,92 @@ export class AuthRepository {
 
       return user;
     });
+  }
+
+  // Backs AuthService.linkOAuthAccount's ownership check — does this
+  // provider+providerAccountId already belong to someone (possibly this same
+  // user, possibly someone else)?
+  findAccountByProvider(
+    provider: string,
+    providerAccountId: string,
+  ): Promise<Account | null> {
+    return this.prisma.account.findUnique({
+      where: { provider_providerAccountId: { provider, providerAccountId } },
+    });
+  }
+
+  // Settings > Connected accounts "Connect" — links a provider to an
+  // already-authenticated user, as opposed to findOrCreateOAuthUser above
+  // (which creates/finds a user by email during sign-in). Never touches the
+  // User row itself.
+  async createOAuthConnection(
+    userId: string,
+    profile: { provider: string; providerAccountId: string },
+  ): Promise<void> {
+    await this.prisma.account.create({
+      data: {
+        userId,
+        type: "oauth",
+        provider: profile.provider,
+        providerAccountId: profile.providerAccountId,
+      },
+    });
+  }
+
+  // Created on every login/register/OAuth callback/2FA challenge completion —
+  // this row's id becomes the JWT's `sid` claim (see AuthService.issueToken).
+  createSession(userId: string, meta: SessionMeta): Promise<Session> {
+    return this.prisma.session.create({
+      data: { userId, userAgent: meta.userAgent, ip: meta.ip },
+    });
+  }
+
+  // Read by JwtStrategy.validate on every authenticated request — narrow
+  // select since that's a hot path.
+  findSessionState(
+    id: string,
+  ): Promise<Pick<
+    Session,
+    "id" | "userId" | "revokedAt" | "lastSeenAt"
+  > | null> {
+    return this.prisma.session.findUnique({
+      where: { id },
+      select: { id: true, userId: true, revokedAt: true, lastSeenAt: true },
+    });
+  }
+
+  async touchSession(id: string): Promise<void> {
+    await this.prisma.session.update({
+      where: { id },
+      data: { lastSeenAt: new Date() },
+    });
+  }
+
+  listActiveSessions(userId: string): Promise<Session[]> {
+    return this.prisma.session.findMany({
+      where: { userId, revokedAt: null },
+      orderBy: { lastSeenAt: "desc" },
+    });
+  }
+
+  // Scoped to userId, not just the session's own id — without that, a caller
+  // could revoke another user's session by guessing/enumerating ids.
+  async revokeSession(userId: string, sessionId: string): Promise<boolean> {
+    const { count } = await this.prisma.session.updateMany({
+      where: { id: sessionId, userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    return count > 0;
+  }
+
+  async revokeOtherSessions(
+    userId: string,
+    currentSessionId: string,
+  ): Promise<number> {
+    const { count } = await this.prisma.session.updateMany({
+      where: { userId, revokedAt: null, NOT: { id: currentSessionId } },
+      data: { revokedAt: new Date() },
+    });
+    return count;
   }
 }
