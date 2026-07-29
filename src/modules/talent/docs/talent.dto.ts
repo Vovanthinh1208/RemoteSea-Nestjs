@@ -67,6 +67,14 @@ export class TalentProfileRequestDto {
   @ApiPropertyOptional({ example: true })
   isOpenToWork?: boolean;
 
+  @ApiPropertyOptional({
+    enum: ["PUBLIC", "VERIFIED_EMPLOYERS"],
+    description:
+      "Who can view GET /talent/:slug. Defaults to PUBLIC. VERIFIED_EMPLOYERS restricts it to a caller authenticated as a verified EmployerProfile — enforced in TalentService.getPublicProfile, which 404s anyone else exactly as if the slug didn't exist.",
+    example: "PUBLIC",
+  })
+  visibility?: "PUBLIC" | "VERIFIED_EMPLOYERS";
+
   @ApiPropertyOptional({ type: Number, minimum: 1, example: 90000 })
   desiredSalaryMin?: number;
 
@@ -179,6 +187,14 @@ export class TalentProfileResponseDto {
 
   @ApiProperty({ example: true })
   isOpenToWork!: boolean;
+
+  @ApiProperty({
+    enum: ["PUBLIC", "VERIFIED_EMPLOYERS"],
+    description:
+      "Not present in the public GET /talent/:slug response — own-profile only.",
+    example: "PUBLIC",
+  })
+  visibility!: "PUBLIC" | "VERIFIED_EMPLOYERS";
 
   @ApiPropertyOptional({
     example: 90000,

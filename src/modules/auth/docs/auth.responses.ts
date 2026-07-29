@@ -3,7 +3,13 @@ import {
   ApiConflictResponse,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
-import { ValidationErrorExample } from "./auth.examples";
+import {
+  IncorrectPasswordExample,
+  InvalidChallengeTokenExample,
+  InvalidTwoFactorCodeExample,
+  TwoFactorSetupRequiredExample,
+  ValidationErrorExample,
+} from "./auth.examples";
 
 /** Reusable, module-specific Swagger response decorators for the Auth module. */
 
@@ -26,4 +32,25 @@ export const EmailAlreadyRegisteredResponse = ApiConflictResponse({
 export const InvalidOrExpiredTokenResponse = ApiBadRequestResponse({
   description: "Reset token doesn't exist or has expired",
   schema: { example: { error: "Invalid or expired token" } },
+});
+
+export const TwoFactorSetupRequiredResponse = ApiBadRequestResponse({
+  description: "POST /auth/2fa/setup was never called (no pending secret)",
+  schema: { example: TwoFactorSetupRequiredExample },
+});
+
+export const InvalidTwoFactorCodeResponse = ApiBadRequestResponse({
+  description: "Code doesn't match the current TOTP window or any backup code",
+  schema: { example: InvalidTwoFactorCodeExample },
+});
+
+export const InvalidChallengeTokenResponse = ApiUnauthorizedResponse({
+  description:
+    "Challenge token missing/expired/invalid, or not a 2FA challenge",
+  schema: { example: InvalidChallengeTokenExample },
+});
+
+export const IncorrectPasswordResponse = ApiUnauthorizedResponse({
+  description: "Wrong password",
+  schema: { example: IncorrectPasswordExample },
 });

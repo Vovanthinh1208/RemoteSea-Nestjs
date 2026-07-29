@@ -54,7 +54,7 @@ export const ApiUpsertProfile = () =>
     ApiOperation({
       summary: "Create or update own talent profile",
       description:
-        "Upserts the authenticated user's talent profile; if `skills` is provided, fully replaces the skill list (transactional delete-then-insert). `slug` is only set on first creation — later PUTs never change it. `level` defaults to `MID` and `currency` always defaults to `USD` on first creation; `currency` cannot be set via this endpoint.",
+        "Upserts the authenticated user's talent profile; if `skills` is provided, fully replaces the skill list (transactional delete-then-insert). `slug` is only set on first creation — later PUTs never change it. `level` defaults to `MID` and `currency` always defaults to `USD` on first creation; `currency` cannot be set via this endpoint. `visibility` (Settings > Privacy & data) defaults to `PUBLIC` and is enforced on `GET /talent/:slug`.",
     }),
     ApiBody({
       type: TalentProfileRequestDto,
@@ -76,7 +76,7 @@ export const ApiGetPublicProfile = () =>
     ApiOperation({
       summary: "Get public talent profile by slug",
       description:
-        "Public lookup of a talent profile by slug. `desiredSalaryMin`/`desiredSalaryMax` are omitted entirely from the response (key absent, not null) unless `isOpenToWork` is true.",
+        "Public lookup of a talent profile by slug — no auth required, but an `Authorization: Bearer <jwt>` header is read if present (the only route in the app that's unauthenticated yet optionally auth-aware). Gated by the profile's `visibility`: a `PUBLIC` profile (the default) is visible to anyone; a `VERIFIED_EMPLOYERS` profile only to a caller authenticated as a verified EmployerProfile — anyone else gets the same 404 as a nonexistent slug, so a gated profile's existence isn't revealed. `desiredSalaryMin`/`desiredSalaryMax` are also omitted entirely from the response (key absent, not null) unless `isOpenToWork` is true.",
     }),
     ApiParam({ name: "slug", type: String, example: "jane-doe-a1b2c3" }),
     ApiOkResponse({

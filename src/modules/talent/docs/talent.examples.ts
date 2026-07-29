@@ -23,6 +23,7 @@ const baseTalentProfile = {
   githubUrl: "https://github.com/janedoe",
   linkedinUrl: "https://linkedin.com/in/janedoe",
   isOpenToWork: true,
+  visibility: "PUBLIC",
   desiredSalaryMin: 90000,
   desiredSalaryMax: 130000,
   currency: "USD",
@@ -45,10 +46,14 @@ export const OwnTalentProfileExample = {
 
 export const UpsertTalentProfileExample = { ...baseTalentProfile };
 
-export const PublicTalentProfileOpenExample = {
-  ...baseTalentProfile,
-  user: { name: "Jane Doe", image: "https://example.com/avatar.jpg" },
-};
+export const PublicTalentProfileOpenExample = (() => {
+  const open: Record<string, unknown> = {
+    ...baseTalentProfile,
+    user: { name: "Jane Doe", image: "https://example.com/avatar.jpg" },
+  };
+  delete open.visibility; // Never part of the public response shape.
+  return open;
+})();
 
 export const PublicTalentProfileClosedExample = (() => {
   const closed: Record<string, unknown> = {
@@ -56,6 +61,7 @@ export const PublicTalentProfileClosedExample = (() => {
     isOpenToWork: false,
     user: { name: "Jane Doe", image: "https://example.com/avatar.jpg" },
   };
+  delete closed.visibility;
   delete closed.desiredSalaryMin;
   delete closed.desiredSalaryMax;
   return closed;

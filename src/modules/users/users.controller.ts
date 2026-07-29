@@ -33,6 +33,19 @@ import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.i
 import {
   ApiChangePassword,
   ApiDeleteAccount,
+  ApiDisconnectConnection,
+  ApiExportData,
+  ApiGetAccount,
+  ApiGetNotificationPreferences,
+  ApiGetPauseState,
+  ApiListConnections,
+  ApiListSessions,
+  ApiPauseAccount,
+  ApiReactivateAccount,
+  ApiRevokeOtherSessions,
+  ApiRevokeSession,
+  ApiUpdateAccount,
+  ApiUpdateNotificationPreferences,
   ApiUpdateUserName,
   ApiUsersTag,
 } from "./docs/users.swagger";
@@ -78,11 +91,13 @@ export class UsersController {
   }
 
   // Settings > Account (phone/language/region/currency display).
+  @ApiGetAccount()
   @Get("account")
   async getAccount(@CurrentUser() user: AuthenticatedUser) {
     return this.usersService.getAccount(user.id);
   }
 
+  @ApiUpdateAccount()
   @Patch("account")
   async updateAccount(
     @CurrentUser() user: AuthenticatedUser,
@@ -92,11 +107,13 @@ export class UsersController {
   }
 
   // Settings > Notifications.
+  @ApiGetNotificationPreferences()
   @Get("notification-preferences")
   async getNotificationPreferences(@CurrentUser() user: AuthenticatedUser) {
     return this.usersService.getNotificationPreferences(user.id);
   }
 
+  @ApiUpdateNotificationPreferences()
   @Patch("notification-preferences")
   async updateNotificationPreferences(
     @CurrentUser() user: AuthenticatedUser,
@@ -108,33 +125,39 @@ export class UsersController {
 
   // Settings > Danger zone "Pause my account" (reversible — see DeleteAccount
   // above for the permanent version).
+  @ApiGetPauseState()
   @Get("pause")
   async getPauseState(@CurrentUser() user: AuthenticatedUser) {
     return this.usersService.getPauseState(user.id);
   }
 
+  @ApiPauseAccount()
   @Post("pause")
   async pauseAccount(@CurrentUser() user: AuthenticatedUser) {
     return this.usersService.pauseAccount(user.id);
   }
 
+  @ApiReactivateAccount()
   @Post("reactivate")
   async reactivateAccount(@CurrentUser() user: AuthenticatedUser) {
     return this.usersService.reactivateAccount(user.id);
   }
 
   // Settings > Privacy & data "Download your data".
+  @ApiExportData()
   @Get("export")
   async exportData(@CurrentUser() user: AuthenticatedUser) {
     return this.usersService.exportData(user.id);
   }
 
   // Settings > Connected accounts.
+  @ApiListConnections()
   @Get("connections")
   async listConnections(@CurrentUser() user: AuthenticatedUser) {
     return this.usersService.listConnections(user.id);
   }
 
+  @ApiDisconnectConnection()
   @Delete("connections/:provider")
   async disconnectConnection(
     @CurrentUser() user: AuthenticatedUser,
@@ -145,6 +168,7 @@ export class UsersController {
   }
 
   // Settings > Security > Active sessions.
+  @ApiListSessions()
   @Get("sessions")
   async listSessions(
     @CurrentUser() user: AuthenticatedUser,
@@ -153,6 +177,7 @@ export class UsersController {
     return this.authService.listSessions(user.id, sessionId);
   }
 
+  @ApiRevokeSession()
   @Delete("sessions/:id")
   async revokeSession(
     @CurrentUser() user: AuthenticatedUser,
@@ -165,6 +190,7 @@ export class UsersController {
 
   // "Sign out of all other sessions" — no :id, revokes every session except
   // the caller's own.
+  @ApiRevokeOtherSessions()
   @Delete("sessions")
   async revokeOtherSessions(
     @CurrentUser() user: AuthenticatedUser,

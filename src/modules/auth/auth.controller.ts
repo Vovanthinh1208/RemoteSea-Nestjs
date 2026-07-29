@@ -52,15 +52,23 @@ import { ConflictApiException } from "@/common/exceptions/api.exception";
 import type { OAuthProfile, OAuthProviderName } from "./interfaces";
 import {
   ApiAuthTag,
+  ApiDisableTwoFactor,
   ApiForgotPassword,
   ApiGithubCallback,
   ApiGithubLogin,
   ApiGoogleCallback,
   ApiGoogleLogin,
+  ApiLinkProvider,
+  ApiLinkedinCallback,
+  ApiLinkedinLogin,
   ApiLogin,
   ApiRegister,
   ApiResetPassword,
   ApiSession,
+  ApiSetupTwoFactor,
+  ApiTwoFactorChallenge,
+  ApiTwoFactorStatus,
+  ApiVerifyTwoFactorSetup,
 } from "./docs/auth.swagger";
 
 // Captured at issueToken time so Settings > Security > Active sessions can
@@ -127,6 +135,7 @@ export class AuthController {
     );
   }
 
+  @ApiTwoFactorChallenge()
   @Post("2fa/challenge")
   @HttpCode(HttpStatus.OK)
   async twoFactorChallenge(
@@ -147,18 +156,21 @@ export class AuthController {
     );
   }
 
+  @ApiTwoFactorStatus()
   @Get("2fa/status")
   @UseGuards(JwtAuthGuard)
   async twoFactorStatus(@CurrentUser() user: AuthenticatedUser) {
     return this.authService.getTwoFactorStatus(user.id);
   }
 
+  @ApiSetupTwoFactor()
   @Post("2fa/setup")
   @UseGuards(JwtAuthGuard)
   async setupTwoFactor(@CurrentUser() user: AuthenticatedUser) {
     return this.authService.setupTwoFactor(user.id, user.email);
   }
 
+  @ApiVerifyTwoFactorSetup()
   @Post("2fa/verify")
   @UseGuards(JwtAuthGuard)
   async verifyTwoFactorSetup(
@@ -169,6 +181,7 @@ export class AuthController {
     return this.authService.verifyTwoFactorSetup(user.id, body.token);
   }
 
+  @ApiDisableTwoFactor()
   @Post("2fa/disable")
   @UseGuards(JwtAuthGuard)
   async disableTwoFactor(
@@ -199,6 +212,7 @@ export class AuthController {
   // a fully-formed authorization URL with a link-intent token embedded as
   // the OAuth `state` param — the shared callback below picks it back up
   // once the provider redirects to it.
+  @ApiLinkProvider()
   @Get(":provider/link")
   @UseGuards(JwtAuthGuard)
   linkProvider(
@@ -284,12 +298,14 @@ export class AuthController {
   // Only registered when AUTH_LINKEDIN_ID/SECRET are configured (see
   // AuthModule) — hitting these routes with no LinkedIn app configured throws
   // at the Passport layer, same as the Google/GitHub routes do.
+  @ApiLinkedinLogin()
   @Get("linkedin")
   @UseGuards(LinkedinAuthGuard)
   linkedinLogin(): void {
     // Passport redirects to LinkedIn's consent screen; handled by LinkedinAuthGuard.
   }
 
+  @ApiLinkedinCallback()
   @Get("linkedin/callback")
   @UseGuards(LinkedinAuthGuard)
   async linkedinCallback(

@@ -51,3 +51,51 @@ export const ResetPasswordResponseExample = { message: "Password updated" };
 export const ValidationErrorExample = {
   error: { formErrors: [], fieldErrors: { email: ["Invalid email"] } },
 };
+
+// ─── 2FA ────────────────────────────────────────────────────────────────────
+
+export const TwoFactorRequiredExample = {
+  twoFactorRequired: true,
+  challengeToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+};
+
+export const TwoFactorChallengeRequestExample = {
+  challengeToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  code: "123456",
+};
+
+export const TwoFactorStatusDisabledExample = { enabled: false };
+export const TwoFactorStatusEnabledExample = { enabled: true };
+
+export const TwoFactorSetupExample = {
+  secret: "JBSWY3DPEHPK3PXP",
+  otpauthUrl:
+    "otpauth://totp/RemoteSEA:jane.doe%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=RemoteSEA",
+  qrCodeDataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+};
+
+export const VerifyTwoFactorSetupRequestExample = { token: "123456" };
+
+export const VerifyTwoFactorSetupResponseExample = {
+  backupCodes: ["A1B2C-D3E4F", "E9E55-7B3A1", "2F85F-E2047", "56A87-6F82F"],
+};
+
+export const TwoFactorSetupRequiredExample = {
+  error: "Start two-factor setup first",
+};
+export const InvalidTwoFactorCodeExample = { error: "Invalid code" };
+export const InvalidChallengeTokenExample = {
+  error: "This code has expired — please sign in again",
+};
+
+export const DisableTwoFactorRequestExample = { password: "SuperSecret123" };
+export const DisableTwoFactorResponseExample = {
+  message: "Two-factor authentication disabled",
+};
+export const IncorrectPasswordExample = { error: "Incorrect password" };
+
+// ─── Settings > Connected accounts "Connect" ───────────────────────────────
+
+export const OAuthLinkUrlExample = {
+  url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=...&redirect_uri=...&response_type=code&scope=email+profile&state=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+};
