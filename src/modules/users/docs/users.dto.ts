@@ -62,6 +62,14 @@ export class AccountFieldsResponseDto {
 
   @ApiProperty({ enum: ["USD ($)", "VND (₫)", "SGD (S$)"], example: "USD ($)" })
   currencyDisplay!: string;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    format: "uri",
+    example: "https://cdn.remotesea.io/uploads/avatar/cme8f1.../photo.jpg",
+    description: "Profile setup avatar. null if never uploaded.",
+  })
+  image!: string | null;
 }
 
 export class UpdateAccountRequestDto {
@@ -76,6 +84,15 @@ export class UpdateAccountRequestDto {
 
   @ApiPropertyOptional({ enum: ["USD ($)", "VND (₫)", "SGD (S$)"] })
   currencyDisplay?: string;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    format: "uri",
+    example: "https://cdn.remotesea.io/uploads/avatar/cme8f1.../photo.jpg",
+    description:
+      "Must be a URL from this account's own POST /uploads/presign (type: avatar) response — any other URL is rejected. Pass null to remove the photo.",
+  })
+  image?: string | null;
 }
 
 // ─── Settings > Notifications ──────────────────────────────────────────────

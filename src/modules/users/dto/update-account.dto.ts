@@ -18,6 +18,11 @@ export const updateAccountSchema = z
     language: z.enum(["English", "Tiếng Việt"]).optional(),
     region: z.enum(["Vietnam", "Singapore", "Australia"]).optional(),
     currencyDisplay: z.enum(["USD ($)", "VND (₫)", "SGD (S$)"]).optional(),
+    // Profile setup "The basics" avatar. null clears it back to initials-only.
+    // Must be an uploaded file from this account — enforced in
+    // UsersService.updateAccount, same as TalentService.upsertProfile's
+    // resumeUrl check (this schema only validates shape, not ownership).
+    image: z.string().url().nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided",

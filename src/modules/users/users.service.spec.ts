@@ -1,8 +1,10 @@
+import type { ConfigService } from "@nestjs/config";
 import { UsersService } from "./users.service";
 import type { UsersRepository } from "./users.repository";
 import type { UploadsService } from "@/modules/uploads/uploads.service";
 import { ConflictApiException } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
+import type { EnvConfig } from "@/core/config/env.validation";
 
 const makeService = (
   repoOverrides: Partial<UsersRepository> = {},
@@ -18,8 +20,11 @@ const makeService = (
     deleteObjectByUrl: jest.fn().mockResolvedValue(undefined),
     ...uploadsOverrides,
   } as unknown as UploadsService;
+  const config = {
+    get: jest.fn().mockReturnValue("https://cdn.example.com"),
+  } as unknown as ConfigService<EnvConfig, true>;
   return {
-    service: new UsersService(usersRepository, uploadsService),
+    service: new UsersService(usersRepository, uploadsService, config),
     usersRepository,
     uploadsService,
   };

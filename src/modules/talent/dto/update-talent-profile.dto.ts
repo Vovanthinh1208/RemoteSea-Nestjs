@@ -10,6 +10,37 @@ import { trimmedString } from "@/common/validation/trimmed-string.schema";
 // EmployerProfile with isVerified: true — enforced in TalentService.getPublicProfile.
 export const talentVisibilitySchema = z.enum(["PUBLIC", "VERIFIED_EMPLOYERS"]);
 
+// Profile setup "About you" / "Job preferences" — closed enums matching the
+// <select>/toggle options in the remotesea design reference, same convention
+// as talentVisibilitySchema and User.language/region/currencyDisplay.
+export const primaryRoleSchema = z.enum([
+  "Software Engineer · Frontend",
+  "Software Engineer · Backend",
+  "Software Engineer · Full-stack",
+  "Product Designer",
+  "Product Manager",
+  "Data Analyst",
+]);
+
+export const rightToWorkSchema = z.enum([
+  "Vietnam only",
+  "Vietnam + Singapore",
+  "Vietnam + Australia",
+  "Open to relocation / sponsorship",
+]);
+
+export const employmentTypeSchema = z.enum([
+  "FULL_TIME",
+  "CONTRACT",
+  "PART_TIME",
+]);
+
+export const timezoneOverlapSchema = z.enum([
+  "SG_HOURS",
+  "AU_HOURS",
+  "ASYNC_ONLY",
+]);
+
 export const talentProfileSchema = z.object({
   headline: trimmedString({ max: 120 }).optional(),
   bio: trimmedString({ max: 2000 }).optional(),
@@ -24,6 +55,10 @@ export const talentProfileSchema = z.object({
   linkedinUrl: httpUrlSchema.optional(),
   isOpenToWork: z.boolean().optional(),
   visibility: talentVisibilitySchema.optional(),
+  primaryRole: primaryRoleSchema.optional(),
+  rightToWork: rightToWorkSchema.optional(),
+  employmentTypes: z.array(employmentTypeSchema).optional(),
+  timezoneOverlap: z.array(timezoneOverlapSchema).optional(),
   desiredSalaryMin: z.number().int().positive().max(10_000_000).optional(),
   desiredSalaryMax: z.number().int().positive().max(10_000_000).optional(),
   skills: z

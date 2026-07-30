@@ -40,6 +40,8 @@ export const AccountFieldsExample = {
   language: "English",
   region: "Vietnam",
   currencyDisplay: "USD ($)",
+  image:
+    "https://cdn.remotesea.io/uploads/avatar/cme8f1a2b0000ug0h9x1n1a2/photo.jpg",
 };
 
 export const UpdateAccountRequestExample = {

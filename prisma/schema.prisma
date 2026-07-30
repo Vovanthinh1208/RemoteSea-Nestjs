@@ -218,14 +218,45 @@ model TalentProfile {
   desiredSalaryMin Int?
   desiredSalaryMax Int?
   currency         String           @default("USD")
+  // Profile setup "About you" / "Job preferences" — decorative in the reference
+  // design, but real, persisted fields here. Stored as plain strings/arrays
+  // (not Prisma enums) validated against a closed set in talentProfileSchema,
+  // matching the User.language/region/currencyDisplay convention.
+  primaryRole      String?
+  rightToWork      String?
+  employmentTypes  String[]         @default([])
+  timezoneOverlap  String[]         @default([])
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  skills       TalentSkill[]
-  applications Application[]
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills          TalentSkill[]
+  applications    Application[]
+  workExperiences WorkExperience[]
 
   @@map("talent_profiles")
+}
+
+// Profile setup "Experience" — up to MAX_WORK_EXPERIENCES_PER_PROFILE entries
+// per profile (enforced in WorkExperienceService.create), same "list up to N
+// roles" cap the reference design's copy implies.
+model WorkExperience {
+  id          String    @id @default(cuid())
+  talentId    String
+  company     String
+  title       String
+  location    String?
+  // null endDate = current role ("Present" in the UI).
+  startDate   DateTime
+  endDate     DateTime?
+  description String?   @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  talent TalentProfile @relation(fields: [talentId], references: [id], onDelete: Cascade)
+
+  @@index([talentId])
+  @@map("work_experiences")
 }
 
 model Skill {

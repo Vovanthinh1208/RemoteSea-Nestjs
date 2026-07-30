@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 // Native bcrypt (threadpool) — see auth.service.ts for the bcryptjs rationale.
 import * as bcrypt from "bcrypt";
 import type { NotificationPreference, User } from "@prisma/client";
@@ -14,12 +15,15 @@ import {
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { BCRYPT_SALT_ROUNDS } from "@/common/constants/bcrypt.constants";
 import { UploadsService } from "@/modules/uploads/uploads.service";
+import { isOwnedUploadUrl } from "@/modules/uploads/upload-url.util";
+import type { EnvConfig } from "@/core/config/env.validation";
 
 @Injectable()
 export class UsersService {
   constructor(
     private readonly usersRepository: UsersRepository,
     private readonly uploadsService: UploadsService,
+    private readonly config: ConfigService<EnvConfig, true>,
   ) {}
 
   updateName(
@@ -94,8 +98,48 @@ export class UsersService {
     return account;
   }
 
-  updateAccount(userId: string, dto: UpdateAccountDto): Promise<AccountFields> {
-    return this.usersRepository.updateAccount(userId, dto);
+  async updateAccount(
+    userId: string,
+    dto: UpdateAccountDto,
+  ): Promise<AccountFields> {
+    const previous =
+      dto.image !== undefined
+        ? await this.usersRepository.findAccount(userId)
+        : null;
+
+    // dto.image was only checked with z.string().url() — any URL would pass
+    // the DTO, bypassing the presign flow's content-type allowlist, size cap,
+    // and rate limit entirely. Only accept a URL this user could actually have
+    // obtained from their own POST /uploads/presign call. Skipped when it's
+    // unchanged from what's already stored (same reasoning as
+    // TalentService.upsertProfile's resumeUrl check) and when it's `null`
+    // (removing the photo) — there's nothing to own in either case.
+    if (
+      dto.image &&
+      dto.image !== previous?.image &&
+      !isOwnedUploadUrl(
+        dto.image,
+        this.config.get("CDN_URL", { infer: true }),
+        userId,
+        "avatar",
+      )
+    ) {
+      throw new BadRequestApiException(
+        "image must be an uploaded file from this account",
+        ErrorCode.UPLOAD_URL_NOT_OWNED,
+      );
+    }
+
+    const updated = await this.usersRepository.updateAccount(userId, dto);
+
+    // Best-effort — same "nothing else ever cleans this up" gap that
+    // TalentService.upsertProfile's resumeUrl replacement closes. Bare void is
+    // safe only because deleteObjectByUrl catches and logs its own failures.
+    if (previous?.image && previous.image !== dto.image) {
+      void this.uploadsService.deleteObjectByUrl(previous.image);
+    }
+
+    return updated;
   }
 
   getNotificationPreferences(userId: string): Promise<NotificationPreference> {

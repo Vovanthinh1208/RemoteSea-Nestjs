@@ -54,7 +54,7 @@ export const ApiUpsertProfile = () =>
     ApiOperation({
       summary: "Create or update own talent profile",
       description:
-        "Upserts the authenticated user's talent profile; if `skills` is provided, fully replaces the skill list (transactional delete-then-insert). `slug` is only set on first creation — later PUTs never change it. `level` defaults to `MID` and `currency` always defaults to `USD` on first creation; `currency` cannot be set via this endpoint. `visibility` (Settings > Privacy & data) defaults to `PUBLIC` and is enforced on `GET /talent/:slug`.",
+        "Upserts the authenticated user's talent profile; if `skills` is provided, fully replaces the skill list (transactional delete-then-insert). `slug` is only set on first creation — later PUTs never change it. `level` defaults to `MID` and `currency` always defaults to `USD` on first creation; `currency` cannot be set via this endpoint. `visibility` (Settings > Privacy & data) defaults to `PUBLIC` and is enforced on `GET /talent/:slug`. `employmentTypes`/`timezoneOverlap` each replace their entire set on every call — send the full desired list, not just the changed entry.",
     }),
     ApiBody({
       type: TalentProfileRequestDto,

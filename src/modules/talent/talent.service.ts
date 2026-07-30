@@ -97,9 +97,15 @@ export class TalentService {
     // resumeUrl was only checked with z.string().url() — any URL passed the DTO,
     // completely bypassing the presign flow's content-type allowlist, size cap,
     // and rate limit. Only accept a URL this user could actually have obtained
-    // from their own POST /uploads/presign call.
+    // from their own POST /uploads/presign call. Skipped when it's unchanged
+    // from what's already stored — that value cleared this same check when it
+    // was first set, and every other field on this form (headline, bio, ...)
+    // resubmits its current value on every save, so re-validating an untouched
+    // resumeUrl here would turn "edit your bio" into "re-prove you own your
+    // resume" on every single save.
     if (
       dto.resumeUrl &&
+      dto.resumeUrl !== existing?.resumeUrl &&
       !isOwnedUploadUrl(
         dto.resumeUrl,
         this.config.get("CDN_URL", { infer: true }),

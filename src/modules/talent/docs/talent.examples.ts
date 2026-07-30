@@ -24,6 +24,10 @@ const baseTalentProfile = {
   linkedinUrl: "https://linkedin.com/in/janedoe",
   isOpenToWork: true,
   visibility: "PUBLIC",
+  primaryRole: "Software Engineer · Frontend",
+  rightToWork: "Vietnam only",
+  employmentTypes: ["FULL_TIME", "CONTRACT"],
+  timezoneOverlap: ["SG_HOURS", "AU_HOURS"],
   desiredSalaryMin: 90000,
   desiredSalaryMax: 130000,
   currency: "USD",
@@ -51,7 +55,13 @@ export const PublicTalentProfileOpenExample = (() => {
     ...baseTalentProfile,
     user: { name: "Jane Doe", image: "https://example.com/avatar.jpg" },
   };
-  delete open.visibility; // Never part of the public response shape.
+  // Never part of the public response shape (see interfaces.ts's
+  // publicProfileArgs, which doesn't select any of these).
+  delete open.visibility;
+  delete open.primaryRole;
+  delete open.rightToWork;
+  delete open.employmentTypes;
+  delete open.timezoneOverlap;
   return open;
 })();
 
@@ -62,6 +72,10 @@ export const PublicTalentProfileClosedExample = (() => {
     user: { name: "Jane Doe", image: "https://example.com/avatar.jpg" },
   };
   delete closed.visibility;
+  delete closed.primaryRole;
+  delete closed.rightToWork;
+  delete closed.employmentTypes;
+  delete closed.timezoneOverlap;
   delete closed.desiredSalaryMin;
   delete closed.desiredSalaryMax;
   return closed;

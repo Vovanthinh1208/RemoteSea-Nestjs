@@ -128,7 +128,7 @@ export const ApiGetAccount = () =>
     ApiOperation({
       summary: "Get account fields",
       description:
-        "Reads the current Settings > Account field values (phone/language/region/currency).",
+        "Reads the current Settings > Account field values (phone/language/region/currency/avatar).",
     }),
     ApiOkResponse({
       type: AccountFieldsResponseDto,
@@ -143,7 +143,7 @@ export const ApiUpdateAccount = () =>
     ApiOperation({
       summary: "Update account fields",
       description:
-        "Updates one or more of phone/language/region/currencyDisplay — a persisted display preference with no other reader yet (no i18n/locale switching or currency-formatting logic consumes it). At least one field is required.",
+        "Updates one or more of phone/language/region/currencyDisplay/image — the display preferences have no other reader yet (no i18n/locale switching or currency-formatting logic consumes them). `image` must be a URL from this account's own POST /uploads/presign (type: avatar) response, or null to remove the photo — any other URL is rejected. At least one field is required.",
     }),
     ApiBody({
       type: UpdateAccountRequestDto,

@@ -1,6 +1,6 @@
 # RemoteSEA API Reference
 
-Full endpoint reference for the RemoteSEA backend (NestJS). 67 routes across 13 modules — see [README.md](../README.md) for architecture and setup.
+Full endpoint reference for the RemoteSEA backend (NestJS). 71 routes across 14 modules — see [README.md](../README.md) for architecture and setup.
 
 Base URL (local): `http://localhost:4000` (configurable via `PORT` / `APP_URL`).
 
@@ -444,7 +444,8 @@ Reads the current Settings > Account field values.
   "phone": null,
   "language": "English",
   "region": "Vietnam",
-  "currencyDisplay": "USD ($)"
+  "currencyDisplay": "USD ($)",
+  "image": null
 }
 ```
 
@@ -452,16 +453,17 @@ Reads the current Settings > Account field values.
 
 ### PATCH /users/me/account
 
-Updates Settings > Account fields. Partial — at least one field required. These are persisted display preferences with no other reader yet (no i18n/locale switching or currency-formatting logic in the app currently consumes them).
+Updates Settings > Account fields. Partial — at least one field required. `phone`/`language`/`region`/`currencyDisplay` are persisted display preferences with no other reader yet (no i18n/locale switching or currency-formatting logic in the app currently consumes them). `image` backs the Profile setup avatar.
 
 - **Body** (`updateAccountSchema`, all optional but ≥1 required):
 
-| Field             | Type   | Constraints                                   |
-| ----------------- | ------ | --------------------------------------------- |
-| `phone`           | string | max 30; `""` clears it (stored as `null`)     |
-| `language`        | enum   | `"English"` \| `"Tiếng Việt"`                 |
-| `region`          | enum   | `"Vietnam"` \| `"Singapore"` \| `"Australia"` |
-| `currencyDisplay` | enum   | `"USD ($)"` \| `"VND (₫)"` \| `"SGD (S$)"`    |
+| Field             | Type           | Constraints                                                                                                         |
+| ----------------- | -------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `phone`           | string         | max 30; `""` clears it (stored as `null`)                                                                           |
+| `language`        | enum           | `"English"` \| `"Tiếng Việt"`                                                                                       |
+| `region`          | enum           | `"Vietnam"` \| `"Singapore"` \| `"Australia"`                                                                       |
+| `currencyDisplay` | enum           | `"USD ($)"` \| `"VND (₫)"` \| `"SGD (S$)"`                                                                          |
+| `image`           | string \| null | Must be a URL from this account's own `POST /uploads/presign` (`type: "avatar"`) response; `null` removes the photo |
 
 **Success response — `200 OK`**
 
@@ -471,11 +473,12 @@ Updates Settings > Account fields. Partial — at least one field required. Thes
   "phone": "+84 90 123 4567",
   "language": "English",
   "region": "Vietnam",
-  "currencyDisplay": "USD ($)"
+  "currencyDisplay": "USD ($)",
+  "image": "https://cdn.remotesea.io/uploads/avatar/cme8f1a2b0000ug0h9x1n1a2/photo.jpg"
 }
 ```
 
-**Errors**: `400` validation failure (including submitting an empty body).
+**Errors**: `400` validation failure (including submitting an empty body, or `image` that isn't a URL this account obtained from its own presign call — `UPLOAD_URL_NOT_OWNED`).
 
 ---
 
@@ -710,6 +713,11 @@ Returns the authenticated user's own talent profile with skills and their name.
   "githubUrl": "https://github.com/janedoe",
   "linkedinUrl": "https://linkedin.com/in/janedoe",
   "isOpenToWork": true,
+  "visibility": "PUBLIC",
+  "primaryRole": "Software Engineer · Frontend",
+  "rightToWork": "Vietnam only",
+  "employmentTypes": ["FULL_TIME", "CONTRACT"],
+  "timezoneOverlap": ["SG_HOURS", "AU_HOURS"],
   "desiredSalaryMin": 90000,
   "desiredSalaryMax": 130000,
   "currency": "USD",
@@ -742,18 +750,22 @@ Creates or updates the authenticated user's talent profile (upsert); if `skills`
 - **Auth**: Bearer JWT required
 - **Body** (`talentProfileSchema`, every field optional — partial upsert):
 
-| Field                                                   | Type    | Constraints                                                                                                                              |
-| ------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `headline`                                              | string  | max 120                                                                                                                                  |
-| `bio`                                                   | string  | max 2000                                                                                                                                 |
-| `location`, `country`, `timezone`                       | string  | —                                                                                                                                        |
-| `yearsExperience`                                       | number  | integer, min 0                                                                                                                           |
-| `level`                                                 | enum    | `ENTRY`\|`MID`\|`SENIOR`\|`LEAD`\|`EXECUTIVE`                                                                                            |
-| `resumeUrl`, `portfolioUrl`, `githubUrl`, `linkedinUrl` | string  | valid URL                                                                                                                                |
-| `isOpenToWork`                                          | boolean | —                                                                                                                                        |
-| `visibility`                                            | enum    | `PUBLIC` \| `VERIFIED_EMPLOYERS` — see `GET /talent/:slug` below; defaults to `PUBLIC`                                                   |
-| `desiredSalaryMin`, `desiredSalaryMax`                  | number  | integer, positive                                                                                                                        |
-| `skills`                                                | array   | `{ skillId: string (CUID), yearsExp?: number (int, min 0) }[]`; provided → replaces entire skill set; omitted → untouched; `[]` → clears |
+| Field                                                   | Type    | Constraints                                                                                                                                                                  |
+| ------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `headline`                                              | string  | max 120                                                                                                                                                                      |
+| `bio`                                                   | string  | max 2000                                                                                                                                                                     |
+| `location`, `country`, `timezone`                       | string  | —                                                                                                                                                                            |
+| `yearsExperience`                                       | number  | integer, min 0                                                                                                                                                               |
+| `level`                                                 | enum    | `ENTRY`\|`MID`\|`SENIOR`\|`LEAD`\|`EXECUTIVE`                                                                                                                                |
+| `resumeUrl`, `portfolioUrl`, `githubUrl`, `linkedinUrl` | string  | valid URL                                                                                                                                                                    |
+| `isOpenToWork`                                          | boolean | —                                                                                                                                                                            |
+| `visibility`                                            | enum    | `PUBLIC` \| `VERIFIED_EMPLOYERS` — see `GET /talent/:slug` below; defaults to `PUBLIC`                                                                                       |
+| `primaryRole`                                           | enum    | `"Software Engineer · Frontend"` \| `"Software Engineer · Backend"` \| `"Software Engineer · Full-stack"` \| `"Product Designer"` \| `"Product Manager"` \| `"Data Analyst"` |
+| `rightToWork`                                           | enum    | `"Vietnam only"` \| `"Vietnam + Singapore"` \| `"Vietnam + Australia"` \| `"Open to relocation / sponsorship"`                                                               |
+| `employmentTypes`                                       | array   | any of `"FULL_TIME"`, `"CONTRACT"`, `"PART_TIME"`; replaces the entire set, not a per-item toggle                                                                            |
+| `timezoneOverlap`                                       | array   | any of `"SG_HOURS"`, `"AU_HOURS"`, `"ASYNC_ONLY"`; replaces the entire set, not a per-item toggle                                                                            |
+| `desiredSalaryMin`, `desiredSalaryMax`                  | number  | integer, positive                                                                                                                                                            |
+| `skills`                                                | array   | `{ skillId: string (CUID), yearsExp?: number (int, min 0) }[]`; provided → replaces entire skill set; omitted → untouched; `[]` → clears                                     |
 
 ```json
 {
@@ -782,9 +794,107 @@ Public talent profile lookup by slug. Hides compensation fields unless `isOpenTo
 - **Auth**: None required, but an `Authorization: Bearer <jwt>` header is read if present — the only route in the app that's unauthenticated yet optionally auth-aware
 - **Path params**: `slug` (string)
 
-**Success response — `200 OK`** — same shape as the profile above, but `user` is `{ name, image }`, `visibility` itself is never included, and `desiredSalaryMin`/`Max` keys are **omitted entirely** (not `null`) when `isOpenToWork` is `false`.
+**Success response — `200 OK`** — same shape as the profile above, but `user` is `{ name, image }`; `visibility`, `primaryRole`, `rightToWork`, `employmentTypes`, and `timezoneOverlap` are never included (own-profile only); and `desiredSalaryMin`/`Max` keys are **omitted entirely** (not `null`) when `isOpenToWork` is `false`.
 
 **Errors**: `404 { "error": "Profile not found" }` — both for a nonexistent slug and for a `VERIFIED_EMPLOYERS` profile the caller isn't allowed to see (same response either way, so a gated profile's existence isn't revealed to a caller who can't view it).
+
+---
+
+## Work Experience
+
+Base path: `/talent/me/experience`. Profile setup "Experience" section — up to 5 entries per talent profile, own-profile only (not included in `GET /talent/:slug`).
+
+### GET /talent/me/experience
+
+Lists the current user's work-experience entries — current roles (`endDate: null`) first, then most-recently-started first.
+
+- **Auth**: Bearer JWT required
+
+**Success response — `200 OK`**
+
+```json
+[
+  {
+    "id": "cme8f1a2b0000ug0h9x1n1a2",
+    "talentId": "cme8f1a2b0000ug0h9x1n1a3",
+    "company": "Finch Labs",
+    "title": "Frontend Engineer",
+    "location": "Singapore",
+    "startDate": "2023-05-01T00:00:00.000Z",
+    "endDate": null,
+    "description": "Built the merchant onboarding flow for Finch's payment APIs.",
+    "createdAt": "2026-06-01T10:00:00.000Z",
+    "updatedAt": "2026-06-01T10:00:00.000Z"
+  }
+]
+```
+
+Returns `[]` (not an error) if the caller has no `TalentProfile` yet.
+
+**Errors**: `401` no/invalid token.
+
+---
+
+### POST /talent/me/experience
+
+Creates a new work-experience entry on the caller's talent profile.
+
+- **Auth**: Bearer JWT required
+- **Body** (`createWorkExperienceSchema`):
+
+| Field         | Type   | Constraints                                                |
+| ------------- | ------ | ---------------------------------------------------------- |
+| `company`     | string | required, 1–120 chars, trimmed                             |
+| `title`       | string | required, 1–120 chars, trimmed                             |
+| `location`    | string | optional, max 120 chars                                    |
+| `startDate`   | date   | required (ISO 8601 or anything `Date` can parse)           |
+| `endDate`     | date   | optional — omit for a current role (rendered as "Present") |
+| `description` | string | optional, max 1000 chars                                   |
+
+```json
+{
+  "company": "Finch Labs",
+  "title": "Frontend Engineer",
+  "location": "Singapore",
+  "startDate": "2023-05-01T00:00:00.000Z",
+  "description": "Built the merchant onboarding flow for Finch's payment APIs."
+}
+```
+
+**Success response — `201 Created`** — same shape as `GET` above.
+
+**Errors**: `400` validation failure (including `endDate` before `startDate`); `401`; `403 { "error": "Talent profile required" }` if the caller has no `TalentProfile` yet (create one via `PUT /talent/me` first); `409 { "error": "You can list up to 5 roles — remove one before adding another." }` at the cap.
+
+---
+
+### PATCH /talent/me/experience/:id
+
+Partial update of one entry.
+
+- **Auth**: Bearer JWT required
+- **Path params**: `id` (CUID)
+- **Body** (`updateWorkExperienceSchema`, all optional but ≥1 required): same fields as create, plus `endDate`/`location`/`description` accept `null` explicitly — `null` on `endDate` clears it back to a current role; omitting a field leaves it unchanged.
+
+**Success response — `200 OK`** — same shape as `GET` above.
+
+**Errors**: `400` validation failure (including submitting an empty body, or `endDate` before `startDate`); `401`; `404 { "error": "Work experience not found" }` — both for a nonexistent id and for another user's entry (ownership enforced by `WorkExperienceOwnershipGuard`, not revealed to a non-owner).
+
+---
+
+### DELETE /talent/me/experience/:id
+
+Deletes one entry.
+
+- **Auth**: Bearer JWT required
+- **Path params**: `id` (CUID)
+
+**Success response — `200 OK`**
+
+```json
+{ "success": true }
+```
+
+**Errors**: `401`; `404 { "error": "Work experience not found" }` (same ownership semantics as `PATCH` above).
 
 ---
 

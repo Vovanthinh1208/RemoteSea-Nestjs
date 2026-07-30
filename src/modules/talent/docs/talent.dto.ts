@@ -10,6 +10,30 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 const LEVELS = ["ENTRY", "MID", "SENIOR", "LEAD", "EXECUTIVE"] as const;
 
+const PRIMARY_ROLES = [
+  "Software Engineer · Frontend",
+  "Software Engineer · Backend",
+  "Software Engineer · Full-stack",
+  "Product Designer",
+  "Product Manager",
+  "Data Analyst",
+] as const;
+
+const RIGHT_TO_WORK_OPTIONS = [
+  "Vietnam only",
+  "Vietnam + Singapore",
+  "Vietnam + Australia",
+  "Open to relocation / sponsorship",
+] as const;
+
+const EMPLOYMENT_TYPES = ["FULL_TIME", "CONTRACT", "PART_TIME"] as const;
+
+const TIMEZONE_OVERLAP_OPTIONS = [
+  "SG_HOURS",
+  "AU_HOURS",
+  "ASYNC_ONLY",
+] as const;
+
 export class TalentSkillRequestDto {
   @ApiProperty({
     description: "CUID of an existing Skill",
@@ -74,6 +98,31 @@ export class TalentProfileRequestDto {
     example: "PUBLIC",
   })
   visibility?: "PUBLIC" | "VERIFIED_EMPLOYERS";
+
+  @ApiPropertyOptional({
+    enum: PRIMARY_ROLES,
+    example: "Software Engineer · Frontend",
+  })
+  primaryRole?: (typeof PRIMARY_ROLES)[number];
+
+  @ApiPropertyOptional({ enum: RIGHT_TO_WORK_OPTIONS, example: "Vietnam only" })
+  rightToWork?: (typeof RIGHT_TO_WORK_OPTIONS)[number];
+
+  @ApiPropertyOptional({
+    enum: EMPLOYMENT_TYPES,
+    isArray: true,
+    example: ["FULL_TIME", "CONTRACT"],
+    description: "Replaces the entire set — not a per-item toggle.",
+  })
+  employmentTypes?: (typeof EMPLOYMENT_TYPES)[number][];
+
+  @ApiPropertyOptional({
+    enum: TIMEZONE_OVERLAP_OPTIONS,
+    isArray: true,
+    example: ["SG_HOURS", "AU_HOURS"],
+    description: "Replaces the entire set — not a per-item toggle.",
+  })
+  timezoneOverlap?: (typeof TIMEZONE_OVERLAP_OPTIONS)[number][];
 
   @ApiPropertyOptional({ type: Number, minimum: 1, example: 90000 })
   desiredSalaryMin?: number;
@@ -195,6 +244,42 @@ export class TalentProfileResponseDto {
     example: "PUBLIC",
   })
   visibility!: "PUBLIC" | "VERIFIED_EMPLOYERS";
+
+  @ApiPropertyOptional({
+    enum: PRIMARY_ROLES,
+    nullable: true,
+    example: "Software Engineer · Frontend",
+    description:
+      "Not present in the public GET /talent/:slug response — own-profile only.",
+  })
+  primaryRole?: (typeof PRIMARY_ROLES)[number] | null;
+
+  @ApiPropertyOptional({
+    enum: RIGHT_TO_WORK_OPTIONS,
+    nullable: true,
+    example: "Vietnam only",
+    description:
+      "Not present in the public GET /talent/:slug response — own-profile only.",
+  })
+  rightToWork?: (typeof RIGHT_TO_WORK_OPTIONS)[number] | null;
+
+  @ApiProperty({
+    enum: EMPLOYMENT_TYPES,
+    isArray: true,
+    example: ["FULL_TIME", "CONTRACT"],
+    description:
+      "Not present in the public GET /talent/:slug response — own-profile only.",
+  })
+  employmentTypes!: (typeof EMPLOYMENT_TYPES)[number][];
+
+  @ApiProperty({
+    enum: TIMEZONE_OVERLAP_OPTIONS,
+    isArray: true,
+    example: ["SG_HOURS", "AU_HOURS"],
+    description:
+      "Not present in the public GET /talent/:slug response — own-profile only.",
+  })
+  timezoneOverlap!: (typeof TIMEZONE_OVERLAP_OPTIONS)[number][];
 
   @ApiPropertyOptional({
     example: 90000,

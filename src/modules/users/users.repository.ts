@@ -10,11 +10,12 @@ const ACCOUNT_FIELDS_SELECT = {
   language: true,
   region: true,
   currencyDisplay: true,
+  image: true,
 } as const;
 
 export type AccountFields = Pick<
   User,
-  "id" | "phone" | "language" | "region" | "currencyDisplay"
+  "id" | "phone" | "language" | "region" | "currencyDisplay" | "image"
 >;
 
 @Injectable()
