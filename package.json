@@ -109,7 +109,10 @@
     "testEnvironment": "node",
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/$1"
-    }
+    },
+    "transformIgnorePatterns": [
+      "/node_modules/(?!(@otplib|otplib|@scure|@noble)/)"
+    ]
   },
   "prisma": {
     "seed": "ts-node --transpile-only prisma/seed.ts"

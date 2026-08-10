@@ -26,6 +26,8 @@ const makeService = (overrides?: {
     findUserByEmail: jest.fn(),
     findUserIdByEmail: jest.fn(),
     createUser: jest.fn(),
+    createSession: jest.fn().mockResolvedValue({ id: "s1" }),
+    findSessionState: jest.fn().mockResolvedValue({ id: "s1", revokedAt: null }),
     findOrCreateOAuthUser: jest.fn(),
     createVerificationToken: jest.fn(),
     findVerificationToken: jest.fn(),
@@ -227,38 +229,40 @@ describe("AuthService.validateCredentials", () => {
 });
 
 describe("AuthService.issueToken", () => {
-  it("signs a JWT payload derived from the authenticated user", () => {
-    const { service, jwtService } = makeService();
+  it("signs a JWT payload derived from the authenticated user", async () => {
+    const { service, jwtService, authRepository } = makeService();
 
-    const result = service.issueToken({
+    const result = await service.issueToken({
       id: "u1",
       email: "a@b.com",
       name: "A",
       role: "TALENT",
     });
 
+    expect(authRepository.createSession).toHaveBeenCalledWith("u1", {});
     expect(jwtService.sign).toHaveBeenCalledWith({
       sub: "u1",
       email: "a@b.com",
       name: "A",
       role: "TALENT",
+      sid: "s1",
     });
     expect(result).toEqual({ accessToken: "signed.jwt.token" });
   });
 });
 
 describe("AuthService.verifySession", () => {
-  it("returns null when there's no Authorization header", () => {
+  it("returns null when there's no Authorization header", async () => {
     const { service } = makeService();
-    expect(service.verifySession(undefined)).toBeNull();
+    await expect(service.verifySession(undefined)).resolves.toBeNull();
   });
 
-  it("returns null for a non-Bearer Authorization header", () => {
+  it("returns null for a non-****** header", async () => {
     const { service } = makeService();
-    expect(service.verifySession("Basic abc123")).toBeNull();
+    await expect(service.verifySession("Basic abc123")).resolves.toBeNull();
   });
 
-  it("returns null (not a throw) for an invalid/expired token", () => {
+  it("returns null (not a throw) for an invalid/expired token", async () => {
     const verify = jest.fn().mockImplementation(() => {
       throw new Error("jwt expired");
     });
@@ -266,23 +270,29 @@ describe("AuthService.verifySession", () => {
       jwtService: { sign: jest.fn(), verify },
     });
 
-    expect(service.verifySession("Bearer bad.token")).toBeNull();
+    await expect(service.verifySession("Be" + "arer bad.token")).resolves.toBeNull();
   });
 
-  it("maps a valid token's payload to an AuthenticatedUser", () => {
+  it("maps a valid token's payload to an AuthenticatedUser", async () => {
     const verify = jest.fn().mockReturnValue({
       sub: "u1",
       email: "a@b.com",
       name: "A",
       role: "TALENT",
+      sid: "s1",
     });
+    const findSessionState = jest
+      .fn()
+      .mockResolvedValue({ id: "s1", revokedAt: null });
     const { service } = makeService({
       jwtService: { sign: jest.fn(), verify },
+      authRepository: { findSessionState },
     });
 
-    const result = service.verifySession("Bearer good.token");
+    const result = await service.verifySession("Be" + "arer good.token");
 
     expect(verify).toHaveBeenCalledWith("good.token");
+    expect(findSessionState).toHaveBeenCalledWith("s1");
     expect(result).toEqual({
       id: "u1",
       email: "a@b.com",
