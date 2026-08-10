@@ -1,30 +1,44 @@
 import { applyDecorators } from "@nestjs/common";
 import {
+  ApiBearerAuth,
   ApiBody,
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
 import {
   InternalServerErrorApiResponse,
+  UnauthorizedApiResponse,
   rateLimitResponse,
 } from "@/core/swagger/common.responses";
 import {
+  DisableTwoFactorRequestDto,
   ForgotPasswordRequestDto,
   LoginRequestDto,
   MessageResponseDto,
+  OAuthLinkUrlResponseDto,
   RegisterRequestDto,
   RegisterResponseDto,
   ResetPasswordRequestDto,
   SessionResponseDto,
   TokenResponseDto,
+  TwoFactorChallengeRequestDto,
+  TwoFactorMessageResponseDto,
+  TwoFactorSetupResponseDto,
+  TwoFactorStatusResponseDto,
+  VerifyTwoFactorSetupRequestDto,
+  VerifyTwoFactorSetupResponseDto,
 } from "./auth.dto";
 import {
+  DisableTwoFactorRequestExample,
+  DisableTwoFactorResponseExample,
   ForgotPasswordRequestExample,
   ForgotPasswordResponseExample,
   LoginRequestExample,
+  OAuthLinkUrlExample,
   RegisterRequestExample,
   RegisterResponseExample,
   ResetPasswordRequestExample,
@@ -32,11 +46,22 @@ import {
   SessionAnonymousExample,
   SessionAuthenticatedExample,
   TokenResponseExample,
+  TwoFactorChallengeRequestExample,
+  TwoFactorRequiredExample,
+  TwoFactorSetupExample,
+  TwoFactorStatusDisabledExample,
+  TwoFactorStatusEnabledExample,
+  VerifyTwoFactorSetupRequestExample,
+  VerifyTwoFactorSetupResponseExample,
 } from "./auth.examples";
 import {
   EmailAlreadyRegisteredResponse,
+  IncorrectPasswordResponse,
+  InvalidChallengeTokenResponse,
   InvalidCredentialsResponse,
   InvalidOrExpiredTokenResponse,
+  InvalidTwoFactorCodeResponse,
+  TwoFactorSetupRequiredResponse,
   ValidationErrorResponse,
 } from "./auth.responses";
 
@@ -69,20 +94,149 @@ export const ApiLogin = () =>
     ApiOperation({
       summary: "Log in",
       description:
-        "Validates email/password credentials and issues a signed JWT access token.",
+        "Validates email/password credentials. Issues a signed JWT directly — unless the account has two-factor authentication enabled, in which case it issues a short-lived challenge token instead (see POST /auth/2fa/challenge). Every real access token is backed by a new Session row (device/IP captured from the request).",
     }),
     ApiBody({
       type: LoginRequestDto,
       examples: { default: { value: LoginRequestExample } },
     }),
     ApiOkResponse({
-      description: "Login succeeded",
-      type: TokenResponseDto,
-      schema: { example: TokenResponseExample },
+      description:
+        "Login succeeded (TokenResponseDto), or 2FA is required to complete it (TwoFactorRequiredResponseDto) — see the two examples below",
+      schema: {
+        examples: {
+          success: { value: TokenResponseExample },
+          twoFactorRequired: { value: TwoFactorRequiredExample },
+        },
+      },
     }),
     ValidationErrorResponse,
     InvalidCredentialsResponse,
     rateLimitResponse("10 req/60s per IP, 10 req/60s per email"),
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiTwoFactorChallenge = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "Complete a 2FA login challenge",
+      description:
+        "Exchanges a challengeToken from POST /auth/login plus a 6-digit authenticator code (or an unused backup code) for a real access token. This is the only route that ever accepts a challenge token — JwtStrategy explicitly rejects one everywhere else.",
+    }),
+    ApiBody({
+      type: TwoFactorChallengeRequestDto,
+      examples: { default: { value: TwoFactorChallengeRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "2FA verified — real access token issued",
+      type: TokenResponseDto,
+      schema: { example: TokenResponseExample },
+    }),
+    ValidationErrorResponse,
+    InvalidTwoFactorCodeResponse,
+    InvalidChallengeTokenResponse,
+    rateLimitResponse("10 req/5min per IP"),
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiTwoFactorStatus = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Get 2FA status",
+      description:
+        "Whether the authenticated account currently has 2FA enabled.",
+    }),
+    ApiOkResponse({
+      type: TwoFactorStatusResponseDto,
+      schema: {
+        examples: {
+          disabled: { value: TwoFactorStatusDisabledExample },
+          enabled: { value: TwoFactorStatusEnabledExample },
+        },
+      },
+    }),
+    UnauthorizedApiResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiSetupTwoFactor = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Start 2FA setup",
+      description:
+        "Generates a new TOTP secret and stores it (unconfirmed — twoFactorEnabled stays false until POST /auth/2fa/verify succeeds). Calling this again before verifying just overwrites the pending secret.",
+    }),
+    ApiOkResponse({
+      type: TwoFactorSetupResponseDto,
+      schema: { example: TwoFactorSetupExample },
+    }),
+    UnauthorizedApiResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiVerifyTwoFactorSetup = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Confirm 2FA setup",
+      description:
+        "Confirms the code from the authenticator app matches the secret from POST /auth/2fa/setup, then enables 2FA and generates 8 single-use backup codes.",
+    }),
+    ApiBody({
+      type: VerifyTwoFactorSetupRequestDto,
+      examples: { default: { value: VerifyTwoFactorSetupRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "2FA enabled — backup codes returned once, in plaintext",
+      type: VerifyTwoFactorSetupResponseDto,
+      schema: { example: VerifyTwoFactorSetupResponseExample },
+    }),
+    ValidationErrorResponse,
+    TwoFactorSetupRequiredResponse,
+    InvalidTwoFactorCodeResponse,
+    UnauthorizedApiResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiDisableTwoFactor = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Disable 2FA",
+      description:
+        "Disables 2FA after verifying the account password, clearing the secret and all backup codes.",
+    }),
+    ApiBody({
+      type: DisableTwoFactorRequestDto,
+      examples: { default: { value: DisableTwoFactorRequestExample } },
+    }),
+    ApiOkResponse({
+      type: TwoFactorMessageResponseDto,
+      schema: { example: DisableTwoFactorResponseExample },
+    }),
+    ValidationErrorResponse,
+    IncorrectPasswordResponse,
+    UnauthorizedApiResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiLinkProvider = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Get a Connect URL for an OAuth provider",
+      description:
+        "Settings > Connected accounts \"Connect\". Returns a plain JSON URL rather than redirecting: a browser's top-level navigation can't carry an Authorization header, so this must be called as an authenticated XHR first, with the frontend doing window.location.href = url itself afterward. The URL embeds a short-lived (10m) link-intent token as the OAuth state param so the shared callback links the resulting profile to this caller's account instead of running the usual find-or-create-by-email login.",
+    }),
+    ApiParam({ name: "provider", enum: ["google", "github", "linkedin"] }),
+    ApiOkResponse({
+      type: OAuthLinkUrlResponseDto,
+      schema: { example: OAuthLinkUrlExample },
+    }),
+    ValidationErrorResponse,
+    UnauthorizedApiResponse,
     InternalServerErrorApiResponse,
   );
 
@@ -152,6 +306,34 @@ export const ApiGithubCallback = () =>
       summary: "GitHub OAuth callback",
       description:
         "GitHub's OAuth redirect target; same flow as the Google callback. A profile with no public email surfaces as a 500 rather than a 401.",
+    }),
+    ApiResponse({
+      status: 302,
+      description:
+        "Redirects to `<FRONTEND_URL>/auth/callback?token=<accessToken>`",
+    }),
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiLinkedinLogin = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "Start LinkedIn OAuth sign-in",
+      description:
+        "Redirects the browser to LinkedIn's consent screen. Uses \"Sign In with LinkedIn using OpenID Connect\" (scope: openid profile email), not LinkedIn's older v1/v2 REST profile API. Only registered when AUTH_LINKEDIN_ID and AUTH_LINKEDIN_SECRET are configured.",
+    }),
+    ApiResponse({
+      status: 302,
+      description: "Redirects to LinkedIn's OAuth consent screen",
+    }),
+  );
+
+export const ApiLinkedinCallback = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "LinkedIn OAuth callback",
+      description:
+        "LinkedIn's OAuth redirect target; same flow as the Google/GitHub callbacks (profile fetched from https://api.linkedin.com/v2/userinfo). A profile with no verified email surfaces as a 500 rather than a 401.",
     }),
     ApiResponse({
       status: 302,

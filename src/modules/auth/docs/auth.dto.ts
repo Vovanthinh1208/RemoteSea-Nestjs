@@ -85,3 +85,80 @@ export class MessageResponseDto {
   @ApiProperty({ example: "If that email exists, a reset link was sent." })
   message!: string;
 }
+
+// ─── 2FA challenge issued instead of a token when 2FA is enabled ───────────
+
+export class TwoFactorRequiredResponseDto {
+  @ApiProperty({ example: true })
+  twoFactorRequired!: true;
+
+  @ApiProperty({ example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." })
+  challengeToken!: string;
+}
+
+export class TwoFactorChallengeRequestDto {
+  @ApiProperty({ example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." })
+  challengeToken!: string;
+
+  @ApiProperty({
+    minLength: 6,
+    maxLength: 32,
+    description: "A 6-digit TOTP code, or a backup code (format XXXXX-XXXXX)",
+    example: "123456",
+  })
+  code!: string;
+}
+
+export class TwoFactorStatusResponseDto {
+  @ApiProperty({ example: false })
+  enabled!: boolean;
+}
+
+export class TwoFactorSetupResponseDto {
+  @ApiProperty({ example: "JBSWY3DPEHPK3PXP" })
+  secret!: string;
+
+  @ApiProperty({
+    example:
+      "otpauth://totp/RemoteSEA:jane.doe%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=RemoteSEA",
+  })
+  otpauthUrl!: string;
+
+  @ApiProperty({ example: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..." })
+  qrCodeDataUrl!: string;
+}
+
+export class VerifyTwoFactorSetupRequestDto {
+  @ApiProperty({ minLength: 6, maxLength: 6, example: "123456" })
+  token!: string;
+}
+
+export class VerifyTwoFactorSetupResponseDto {
+  @ApiProperty({
+    type: [String],
+    description:
+      "Returned exactly once in plaintext — only bcrypt hashes are persisted.",
+    example: ["A1B2C-D3E4F", "E9E55-7B3A1", "2F85F-E2047"],
+  })
+  backupCodes!: string[];
+}
+
+export class DisableTwoFactorRequestDto {
+  @ApiProperty({ minLength: 1, example: "SuperSecret123" })
+  password!: string;
+}
+
+export class TwoFactorMessageResponseDto {
+  @ApiProperty({ example: "Two-factor authentication disabled" })
+  message!: string;
+}
+
+// ─── Settings > Connected accounts "Connect" ───────────────────────────────
+
+export class OAuthLinkUrlResponseDto {
+  @ApiProperty({
+    example:
+      "https://accounts.google.com/o/oauth2/v2/auth?client_id=...&state=...",
+  })
+  url!: string;
+}

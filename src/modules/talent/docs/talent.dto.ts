@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ProfileHighlightResponseDto } from "@/modules/profile-highlights/docs/profile-highlights.dto";
 
 /**
  * Swagger-only request/response shapes for the Talent module.
@@ -9,6 +10,37 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
  */
 
 const LEVELS = ["ENTRY", "MID", "SENIOR", "LEAD", "EXECUTIVE"] as const;
+
+const PRIMARY_ROLES = [
+  "Software Engineer · Frontend",
+  "Software Engineer · Backend",
+  "Software Engineer · Full-stack",
+  "Product Designer",
+  "Product Manager",
+  "Data Analyst",
+] as const;
+
+const RIGHT_TO_WORK_OPTIONS = [
+  "Vietnam only",
+  "Vietnam + Singapore",
+  "Vietnam + Australia",
+  "Open to relocation / sponsorship",
+] as const;
+
+const EMPLOYMENT_TYPES = ["FULL_TIME", "CONTRACT", "PART_TIME"] as const;
+
+const TIMEZONE_OVERLAP_OPTIONS = [
+  "SG_HOURS",
+  "AU_HOURS",
+  "ASYNC_ONLY",
+] as const;
+
+const NOTICE_PERIODS = [
+  "Immediate",
+  "2 weeks",
+  "1 month",
+  "2+ months",
+] as const;
 
 export class TalentSkillRequestDto {
   @ApiProperty({
@@ -67,6 +99,42 @@ export class TalentProfileRequestDto {
   @ApiPropertyOptional({ example: true })
   isOpenToWork?: boolean;
 
+  @ApiPropertyOptional({
+    enum: ["PUBLIC", "VERIFIED_EMPLOYERS"],
+    description:
+      "Who can view GET /talent/:slug. Defaults to PUBLIC. VERIFIED_EMPLOYERS restricts it to a caller authenticated as a verified EmployerProfile — enforced in TalentService.getPublicProfile, which 404s anyone else exactly as if the slug didn't exist.",
+    example: "PUBLIC",
+  })
+  visibility?: "PUBLIC" | "VERIFIED_EMPLOYERS";
+
+  @ApiPropertyOptional({
+    enum: PRIMARY_ROLES,
+    example: "Software Engineer · Frontend",
+  })
+  primaryRole?: (typeof PRIMARY_ROLES)[number];
+
+  @ApiPropertyOptional({ enum: RIGHT_TO_WORK_OPTIONS, example: "Vietnam only" })
+  rightToWork?: (typeof RIGHT_TO_WORK_OPTIONS)[number];
+
+  @ApiPropertyOptional({
+    enum: EMPLOYMENT_TYPES,
+    isArray: true,
+    example: ["FULL_TIME", "CONTRACT"],
+    description: "Replaces the entire set — not a per-item toggle.",
+  })
+  employmentTypes?: (typeof EMPLOYMENT_TYPES)[number][];
+
+  @ApiPropertyOptional({
+    enum: TIMEZONE_OVERLAP_OPTIONS,
+    isArray: true,
+    example: ["SG_HOURS", "AU_HOURS"],
+    description: "Replaces the entire set — not a per-item toggle.",
+  })
+  timezoneOverlap?: (typeof TIMEZONE_OVERLAP_OPTIONS)[number][];
+
+  @ApiPropertyOptional({ enum: NOTICE_PERIODS, example: "2 weeks" })
+  noticePeriod?: (typeof NOTICE_PERIODS)[number];
+
   @ApiPropertyOptional({ type: Number, minimum: 1, example: 90000 })
   desiredSalaryMin?: number;
 
@@ -120,6 +188,46 @@ export class PublicTalentOwnerDto {
     nullable: true,
   })
   image!: string | null;
+}
+
+export class PublicWorkExperienceDto {
+  @ApiProperty({ example: "cme8f1a2b0000ug0h9x1n1a2" })
+  id!: string;
+
+  @ApiProperty({ example: "cme8f1a2b0000ug0h9x1n1a3" })
+  talentId!: string;
+
+  @ApiProperty({ example: "Finch Labs" })
+  company!: string;
+
+  @ApiProperty({ example: "Frontend Engineer" })
+  title!: string;
+
+  @ApiPropertyOptional({ nullable: true, example: "Singapore" })
+  location!: string | null;
+
+  @ApiProperty({ format: "date-time", example: "2023-05-01T00:00:00.000Z" })
+  startDate!: string;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    format: "date-time",
+    example: null,
+    description: "null means this is a current role.",
+  })
+  endDate!: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: "Built the merchant onboarding flow for Finch's payment APIs.",
+  })
+  description!: string | null;
+
+  @ApiProperty({ format: "date-time", example: "2026-01-15T09:12:00.000Z" })
+  createdAt!: string;
+
+  @ApiProperty({ format: "date-time", example: "2026-01-15T09:12:00.000Z" })
+  updatedAt!: string;
 }
 
 export class TalentProfileResponseDto {
@@ -180,6 +288,59 @@ export class TalentProfileResponseDto {
   @ApiProperty({ example: true })
   isOpenToWork!: boolean;
 
+  @ApiProperty({
+    enum: ["PUBLIC", "VERIFIED_EMPLOYERS"],
+    description:
+      "Not present in the public GET /talent/:slug response — own-profile only.",
+    example: "PUBLIC",
+  })
+  visibility!: "PUBLIC" | "VERIFIED_EMPLOYERS";
+
+  @ApiPropertyOptional({
+    enum: PRIMARY_ROLES,
+    nullable: true,
+    example: "Software Engineer · Frontend",
+    description:
+      "Not sensitive — also present in the public GET /talent/:slug response.",
+  })
+  primaryRole?: (typeof PRIMARY_ROLES)[number] | null;
+
+  @ApiPropertyOptional({
+    enum: RIGHT_TO_WORK_OPTIONS,
+    nullable: true,
+    example: "Vietnam only",
+    description:
+      "Not sensitive — also present in the public GET /talent/:slug response.",
+  })
+  rightToWork?: (typeof RIGHT_TO_WORK_OPTIONS)[number] | null;
+
+  @ApiProperty({
+    enum: EMPLOYMENT_TYPES,
+    isArray: true,
+    example: ["FULL_TIME", "CONTRACT"],
+    description:
+      "Not sensitive — also present in the public GET /talent/:slug response.",
+  })
+  employmentTypes!: (typeof EMPLOYMENT_TYPES)[number][];
+
+  @ApiProperty({
+    enum: TIMEZONE_OVERLAP_OPTIONS,
+    isArray: true,
+    example: ["SG_HOURS", "AU_HOURS"],
+    description:
+      "Not sensitive — also present in the public GET /talent/:slug response.",
+  })
+  timezoneOverlap!: (typeof TIMEZONE_OVERLAP_OPTIONS)[number][];
+
+  @ApiPropertyOptional({
+    enum: NOTICE_PERIODS,
+    nullable: true,
+    example: "2 weeks",
+    description:
+      "Not sensitive — also present in the public GET /talent/:slug response.",
+  })
+  noticePeriod?: (typeof NOTICE_PERIODS)[number] | null;
+
   @ApiPropertyOptional({
     example: 90000,
     nullable: true,
@@ -207,6 +368,20 @@ export class TalentProfileResponseDto {
 
   @ApiProperty({ type: [TalentSkillDto] })
   skills!: TalentSkillDto[];
+
+  @ApiProperty({
+    type: [PublicWorkExperienceDto],
+    description:
+      "Current roles (endDate null) first, then most-recently-started first.",
+  })
+  workExperiences!: PublicWorkExperienceDto[];
+
+  @ApiProperty({
+    type: [ProfileHighlightResponseDto],
+    description:
+      "Selected work / Education / Language entries (all types together, oldest first).",
+  })
+  profileHighlights!: ProfileHighlightResponseDto[];
 
   @ApiPropertyOptional({
     type: TalentOwnerDto,
@@ -274,6 +449,41 @@ export class PublicTalentProfileResponseDto {
   isOpenToWork!: boolean;
 
   @ApiPropertyOptional({
+    enum: PRIMARY_ROLES,
+    nullable: true,
+    example: "Software Engineer · Frontend",
+  })
+  primaryRole!: (typeof PRIMARY_ROLES)[number] | null;
+
+  @ApiPropertyOptional({
+    enum: RIGHT_TO_WORK_OPTIONS,
+    nullable: true,
+    example: "Vietnam only",
+  })
+  rightToWork!: (typeof RIGHT_TO_WORK_OPTIONS)[number] | null;
+
+  @ApiProperty({
+    enum: EMPLOYMENT_TYPES,
+    isArray: true,
+    example: ["FULL_TIME", "CONTRACT"],
+  })
+  employmentTypes!: (typeof EMPLOYMENT_TYPES)[number][];
+
+  @ApiProperty({
+    enum: TIMEZONE_OVERLAP_OPTIONS,
+    isArray: true,
+    example: ["SG_HOURS", "AU_HOURS"],
+  })
+  timezoneOverlap!: (typeof TIMEZONE_OVERLAP_OPTIONS)[number][];
+
+  @ApiPropertyOptional({
+    enum: NOTICE_PERIODS,
+    nullable: true,
+    example: "2 weeks",
+  })
+  noticePeriod!: (typeof NOTICE_PERIODS)[number] | null;
+
+  @ApiPropertyOptional({
     example: 90000,
     description:
       "Present only when `isOpenToWork` is true; omitted entirely (key absent, not null) otherwise",
@@ -298,6 +508,20 @@ export class PublicTalentProfileResponseDto {
 
   @ApiProperty({ type: [TalentSkillDto] })
   skills!: TalentSkillDto[];
+
+  @ApiProperty({
+    type: [PublicWorkExperienceDto],
+    description:
+      "Current roles (endDate null) first, then most-recently-started first.",
+  })
+  workExperiences!: PublicWorkExperienceDto[];
+
+  @ApiProperty({
+    type: [ProfileHighlightResponseDto],
+    description:
+      "Selected work / Education / Language entries (all types together, oldest first).",
+  })
+  profileHighlights!: ProfileHighlightResponseDto[];
 
   @ApiProperty({ type: PublicTalentOwnerDto })
   user!: PublicTalentOwnerDto;

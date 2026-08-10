@@ -1,6 +1,22 @@
 import { Injectable } from "@nestjs/common";
-import type { User } from "@prisma/client";
+import type { Account, NotificationPreference, User } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
+import type { UpdateAccountDto } from "./dto/update-account.dto";
+import type { UpdateNotificationPreferencesDto } from "./dto/update-notification-preferences.dto";
+
+const ACCOUNT_FIELDS_SELECT = {
+  id: true,
+  phone: true,
+  language: true,
+  region: true,
+  currencyDisplay: true,
+  image: true,
+} as const;
+
+export type AccountFields = Pick<
+  User,
+  "id" | "phone" | "language" | "region" | "currencyDisplay" | "image"
+>;
 
 @Injectable()
 export class UsersRepository {
@@ -15,6 +31,139 @@ export class UsersRepository {
       data: { name },
       select: { id: true, name: true, email: true },
     });
+  }
+
+  findAccount(id: string): Promise<AccountFields | null> {
+    return this.prisma.user.findUnique({
+      where: { id },
+      select: ACCOUNT_FIELDS_SELECT,
+    });
+  }
+
+  updateAccount(id: string, data: UpdateAccountDto): Promise<AccountFields> {
+    return this.prisma.user.update({
+      where: { id },
+      data,
+      select: ACCOUNT_FIELDS_SELECT,
+    });
+  }
+
+  // Row is created lazily on first read/write rather than at signup — most
+  // users will never touch these, and every field already has a schema
+  // default, so an absent row and a freshly-created default row are
+  // equivalent from the caller's point of view.
+  async getNotificationPreferences(
+    userId: string,
+  ): Promise<NotificationPreference> {
+    const existing = await this.prisma.notificationPreference.findUnique({
+      where: { userId },
+    });
+    if (existing) return existing;
+    return this.prisma.notificationPreference.create({ data: { userId } });
+  }
+
+  updateNotificationPreferences(
+    userId: string,
+    data: UpdateNotificationPreferencesDto,
+  ): Promise<NotificationPreference> {
+    return this.prisma.notificationPreference.upsert({
+      where: { userId },
+      create: { userId, ...data },
+      update: data,
+    });
+  }
+
+  setPaused(
+    id: string,
+    isPaused: boolean,
+  ): Promise<Pick<User, "id" | "isPaused" | "pausedAt">> {
+    return this.prisma.user.update({
+      where: { id },
+      data: { isPaused, pausedAt: isPaused ? new Date() : null },
+      select: { id: true, isPaused: true, pausedAt: true },
+    });
+  }
+
+  findPauseState(id: string): Promise<Pick<User, "isPaused"> | null> {
+    return this.prisma.user.findUnique({
+      where: { id },
+      select: { isPaused: true },
+    });
+  }
+
+  // Everything a user is entitled to take with them — profile + applications
+  // (talent side) or company profile + postings (employer side). Excludes
+  // internal-only fields (passwordHash, stripeSessionId, reviewNote) that
+  // aren't "the user's data" in the export sense.
+  findExportData(userId: string) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        role: true,
+        createdAt: true,
+        talent: {
+          include: {
+            skills: { include: { skill: { select: { name: true } } } },
+            applications: {
+              include: { job: { select: { title: true, slug: true } } },
+            },
+          },
+        },
+        employer: {
+          include: {
+            jobs: {
+              select: {
+                title: true,
+                slug: true,
+                status: true,
+                createdAt: true,
+                publishedAt: true,
+              },
+            },
+          },
+        },
+        jobAlerts: true,
+      },
+    });
+  }
+
+  listConnections(
+    userId: string,
+  ): Promise<Pick<Account, "provider" | "providerAccountId">[]> {
+    return this.prisma.account.findMany({
+      where: { userId },
+      select: { provider: true, providerAccountId: true },
+    });
+  }
+
+  countConnections(userId: string): Promise<number> {
+    return this.prisma.account.count({ where: { userId } });
+  }
+
+  findPasswordHashAndConnectionCount(
+    userId: string,
+  ): Promise<{ passwordHash: string | null; connectionCount: number } | null> {
+    return this.prisma.user
+      .findUnique({
+        where: { id: userId },
+        select: { passwordHash: true, _count: { select: { accounts: true } } },
+      })
+      .then((u) =>
+        u
+          ? { passwordHash: u.passwordHash, connectionCount: u._count.accounts }
+          : null,
+      );
+  }
+
+  async deleteConnection(userId: string, provider: string): Promise<boolean> {
+    const { count } = await this.prisma.account.deleteMany({
+      where: { userId, provider },
+    });
+    return count > 0;
   }
 
   deleteUser(id: string): Promise<User> {

@@ -6,12 +6,20 @@ import { JwtService } from "@nestjs/jwt";
 // interchangeable between the two ($2a/$2b both verify).
 import * as bcrypt from "bcrypt";
 import * as crypto from "crypto";
+import { generateSecret, generateURI, verify as verifyOtp } from "otplib";
+import * as QRCode from "qrcode";
 import { Prisma } from "@prisma/client";
-import { AuthRepository } from "./auth.repository";
+import { AuthRepository, type SessionMeta } from "./auth.repository";
 import { AuthMapper } from "./auth.mapper";
-import { RESET_TOKEN_TTL_MS } from "./constants";
+import { RESET_TOKEN_TTL_MS, TWO_FACTOR_ISSUER } from "./constants";
 import type { RegisterDto } from "./dto/register.dto";
-import type { RegisteredUser, OAuthProfile } from "./interfaces";
+import type {
+  RegisteredUser,
+  OAuthLinkIntentPayload,
+  OAuthProfile,
+  OAuthProviderName,
+  TwoFactorChallengePayload,
+} from "./interfaces";
 import { EmailService } from "@/common/services/email.service";
 import { runInBackground } from "@/common/utils/background-task.util";
 import { uniqueSlug } from "@/common/utils/slugify";
@@ -19,6 +27,7 @@ import { BCRYPT_SALT_ROUNDS } from "@/common/constants/bcrypt.constants";
 import {
   BadRequestApiException,
   ConflictApiException,
+  NotFoundApiException,
   UnauthorizedApiException,
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
@@ -26,6 +35,20 @@ import type {
   AuthenticatedUser,
   JwtPayload,
 } from "@/common/interfaces/authenticated-user.interface";
+import { parseUserAgent } from "@/common/utils/user-agent.util";
+import { lookupIpLocation } from "@/common/utils/geo-ip.util";
+
+const BACKUP_CODE_COUNT = 8;
+const TWO_FACTOR_CHALLENGE_TTL = "5m";
+const OAUTH_LINK_INTENT_TTL = "10m";
+
+// Formatted like "A1B2C-D3E4F" — easy to read back when copying from a
+// "save these somewhere safe" screen, unambiguous (uppercase hex only).
+const generateBackupCodes = (count = BACKUP_CODE_COUNT): string[] =>
+  Array.from({ length: count }, () => {
+    const raw = crypto.randomBytes(5).toString("hex").toUpperCase();
+    return `${raw.slice(0, 5)}-${raw.slice(5, 10)}`;
+  });
 
 @Injectable()
 export class AuthService {
@@ -106,15 +129,31 @@ export class AuthService {
         ErrorCode.INVALID_CREDENTIALS,
       );
     }
+    // Deliberately does NOT block sign-in: the reference design's copy for
+    // this state ("reactivate anytime") requires the user to be able to log
+    // back in to flip it off from Settings. isPaused is a persisted flag with
+    // no other reader yet — nothing currently hides a paused user's profile
+    // from search or suppresses emails to them.
     return AuthMapper.toAuthenticatedUser(user);
   }
 
-  issueToken(user: AuthenticatedUser): { accessToken: string } {
+  // Creates the Session row this token's `sid` claim points to — every real
+  // access token traces back to exactly one row here, which is what makes it
+  // individually revocable (see JwtStrategy.validate and revokeSession below).
+  async issueToken(
+    user: AuthenticatedUser,
+    sessionMeta: { userAgent?: string; ip?: string } = {},
+  ): Promise<{ accessToken: string }> {
+    const session = await this.authRepository.createSession(
+      user.id,
+      sessionMeta,
+    );
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
       name: user.name,
       role: user.role,
+      sid: session.id,
     };
     return { accessToken: this.jwtService.sign(payload) };
   }
@@ -125,15 +164,24 @@ export class AuthService {
   // it used to. Returns null (never throws) for any invalid/expired/missing
   // token: GET /session's contract is "who is the caller, if anyone" — an
   // absent-or-bad token means anonymous, not a request error.
-  verifySession(
+  async verifySession(
     authorizationHeader: string | undefined,
-  ): AuthenticatedUser | null {
+  ): Promise<AuthenticatedUser | null> {
     if (!authorizationHeader?.startsWith("Bearer ")) return null;
 
     try {
-      const payload = this.jwtService.verify<JwtPayload>(
+      const payload = this.jwtService.verify<JwtPayload & { purpose?: string }>(
         authorizationHeader.slice("Bearer ".length),
       );
+      // A 2FA challenge token is signed with the same secret but carries no
+      // real session — never treat it as "this caller is signed in".
+      if (payload.purpose) return null;
+      // Same revocation check as JwtStrategy.validate — a signed-out (or
+      // legacy pre-sid) token must read as anonymous here too, not just on
+      // JwtAuthGuard-protected routes.
+      if (!payload.sid) return null;
+      const session = await this.authRepository.findSessionState(payload.sid);
+      if (!session || session.revokedAt) return null;
       return AuthMapper.fromPayload(payload);
     } catch {
       return null;
@@ -143,6 +191,231 @@ export class AuthService {
   async validateOAuthLogin(profile: OAuthProfile): Promise<AuthenticatedUser> {
     const user = await this.authRepository.findOrCreateOAuthUser(profile);
     return AuthMapper.toAuthenticatedUser(user);
+  }
+
+  // Settings > Connected accounts "Connect". Minted by GET /auth/:provider/link
+  // (JwtAuthGuard-protected) and carried through the provider's consent screen
+  // as the OAuth `state` param — the shared callback route in AuthController
+  // decodes it to tell "someone is linking a new provider to their existing,
+  // already-authenticated account" apart from an ordinary sign-in attempt.
+  createOAuthLinkIntent(userId: string, provider: OAuthProviderName): string {
+    const linkPayload: OAuthLinkIntentPayload = {
+      sub: userId,
+      provider,
+      purpose: "oauth_link",
+    };
+    return this.jwtService.sign(linkPayload, {
+      expiresIn: OAUTH_LINK_INTENT_TTL,
+    });
+  }
+
+  // Returns null (never throws) for anything that isn't a currently-valid
+  // link intent for this exact provider — the callback route treats that the
+  // same as "no state was ever sent," i.e. falls back to a normal login.
+  verifyOAuthLinkIntent(
+    state: string | undefined,
+    expectedProvider: OAuthProviderName,
+  ): OAuthLinkIntentPayload | null {
+    if (!state) return null;
+    try {
+      const payload = this.jwtService.verify<
+        OAuthLinkIntentPayload & { purpose?: string }
+      >(state);
+      if (
+        payload.purpose !== "oauth_link" ||
+        payload.provider !== expectedProvider
+      ) {
+        return null;
+      }
+      return payload;
+    } catch {
+      return null;
+    }
+  }
+
+  async linkOAuthAccount(userId: string, profile: OAuthProfile): Promise<void> {
+    const existing = await this.authRepository.findAccountByProvider(
+      profile.provider,
+      profile.providerAccountId,
+    );
+    if (existing && existing.userId !== userId) {
+      throw new ConflictApiException(
+        `This ${profile.provider} account is already connected to a different RemoteSEA account.`,
+        ErrorCode.CONNECTION_ALREADY_LINKED,
+      );
+    }
+    if (existing) return; // Already linked to this same account — no-op.
+    await this.authRepository.createOAuthConnection(userId, profile);
+  }
+
+  // Login's actual entry point (AuthController.login calls this, not
+  // validateCredentials+issueToken directly): a 2FA-enabled account gets a
+  // short-lived challenge token instead of a real one, and must complete
+  // completeTwoFactorChallenge below to get an accessToken.
+  async loginOrChallenge(
+    email: string,
+    password: string,
+    sessionMeta: SessionMeta = {},
+  ): Promise<
+    | { accessToken: string }
+    | { twoFactorRequired: true; challengeToken: string }
+  > {
+    const user = await this.validateCredentials(email, password);
+    const state = await this.authRepository.findTwoFactorState(user.id);
+    if (state?.twoFactorEnabled) {
+      const challengePayload: TwoFactorChallengePayload = {
+        sub: user.id,
+        purpose: "2fa_challenge",
+      };
+      const challengeToken = this.jwtService.sign(challengePayload, {
+        expiresIn: TWO_FACTOR_CHALLENGE_TTL,
+      });
+      return { twoFactorRequired: true, challengeToken };
+    }
+    return this.issueToken(user, sessionMeta);
+  }
+
+  async getTwoFactorStatus(userId: string): Promise<{ enabled: boolean }> {
+    const state = await this.authRepository.findTwoFactorState(userId);
+    return { enabled: state?.twoFactorEnabled ?? false };
+  }
+
+  async setupTwoFactor(
+    userId: string,
+    email: string,
+  ): Promise<{ secret: string; otpauthUrl: string; qrCodeDataUrl: string }> {
+    const secret = generateSecret();
+    await this.authRepository.setTwoFactorSecret(userId, secret);
+    const otpauthUrl = generateURI({
+      issuer: TWO_FACTOR_ISSUER,
+      label: email,
+      secret,
+    });
+    const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl);
+    return { secret, otpauthUrl, qrCodeDataUrl };
+  }
+
+  // Confirms the authenticator app was set up correctly before flipping
+  // twoFactorEnabled — otherwise a typo'd/mis-scanned secret would lock the
+  // user out of their own account on the very next login.
+  async verifyTwoFactorSetup(
+    userId: string,
+    token: string,
+  ): Promise<{ backupCodes: string[] }> {
+    const state = await this.authRepository.findTwoFactorState(userId);
+    if (!state?.twoFactorSecret) {
+      throw new BadRequestApiException(
+        "Start two-factor setup first",
+        ErrorCode.TWO_FACTOR_SETUP_REQUIRED,
+      );
+    }
+    const { valid } = await verifyOtp({ token, secret: state.twoFactorSecret });
+    if (!valid) {
+      throw new BadRequestApiException(
+        "Invalid code",
+        ErrorCode.INVALID_TWO_FACTOR_CODE,
+      );
+    }
+
+    const backupCodes = generateBackupCodes();
+    const hashedBackupCodes = await Promise.all(
+      backupCodes.map((code) => bcrypt.hash(code, BCRYPT_SALT_ROUNDS)),
+    );
+    await this.authRepository.enableTwoFactor(userId, hashedBackupCodes);
+    // Plaintext codes are returned exactly once — only the bcrypt hashes are
+    // ever persisted, same as a password.
+    return { backupCodes };
+  }
+
+  async disableTwoFactor(userId: string, password: string): Promise<void> {
+    const user = await this.authRepository.findUserById(userId);
+    if (!user?.passwordHash) {
+      throw new BadRequestApiException(
+        "Password change is not available for social sign-in accounts.",
+        ErrorCode.SOCIAL_ACCOUNT_NO_PASSWORD,
+      );
+    }
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      throw new UnauthorizedApiException(
+        "Incorrect password",
+        ErrorCode.INVALID_CREDENTIALS,
+      );
+    }
+    await this.authRepository.disableTwoFactor(userId);
+  }
+
+  async completeTwoFactorChallenge(
+    challengeToken: string,
+    code: string,
+    sessionMeta: SessionMeta = {},
+  ): Promise<{ accessToken: string }> {
+    let payload: TwoFactorChallengePayload;
+    try {
+      payload =
+        this.jwtService.verify<TwoFactorChallengePayload>(challengeToken);
+    } catch {
+      throw new UnauthorizedApiException(
+        "This code has expired — please sign in again",
+        ErrorCode.INVALID_CHALLENGE_TOKEN,
+      );
+    }
+    if (payload.purpose !== "2fa_challenge") {
+      throw new UnauthorizedApiException(
+        "This code has expired — please sign in again",
+        ErrorCode.INVALID_CHALLENGE_TOKEN,
+      );
+    }
+
+    const user = await this.authRepository.findUserById(payload.sub);
+    if (!user?.twoFactorEnabled || !user.twoFactorSecret) {
+      throw new UnauthorizedApiException(
+        "This code has expired — please sign in again",
+        ErrorCode.INVALID_CHALLENGE_TOKEN,
+      );
+    }
+
+    // otplib's verify() throws TokenLengthError for anything that isn't a
+    // 6-digit string rather than returning { valid: false } — a backup code
+    // (format XXXXX-XXXXX) would otherwise crash this into a 500. Only ever
+    // attempt TOTP verification against a 6-digit code; anything else goes
+    // straight to the backup-code check below.
+    const isSixDigitCode = /^\d{6}$/.test(code);
+    const isValidTotp =
+      isSixDigitCode &&
+      (await verifyOtp({ token: code, secret: user.twoFactorSecret })).valid;
+
+    if (!isValidTotp) {
+      // Not a TOTP code — try it as a single-use backup code instead.
+      const normalizedCode = code.trim().toUpperCase();
+      let matchedIndex = -1;
+      for (let i = 0; i < user.twoFactorBackupCodes.length; i += 1) {
+        // Sequential, not Promise.all — bcrypt.compare is CPU-bound (libuv
+        // threadpool), and backup codes are consumed one at a time anyway;
+        // no correctness issue either way, just avoids bursting the pool for
+        // what's usually a 1-2 item array.
+        // eslint-disable-next-line no-await-in-loop
+        const matches = await bcrypt.compare(
+          normalizedCode,
+          user.twoFactorBackupCodes[i] as string,
+        );
+        if (matches) {
+          matchedIndex = i;
+          break;
+        }
+      }
+      if (matchedIndex === -1) {
+        throw new BadRequestApiException(
+          "Invalid code",
+          ErrorCode.INVALID_TWO_FACTOR_CODE,
+        );
+      }
+      const remaining = [...user.twoFactorBackupCodes];
+      remaining.splice(matchedIndex, 1);
+      await this.authRepository.consumeBackupCode(user.id, remaining);
+    }
+
+    return this.issueToken(AuthMapper.toAuthenticatedUser(user), sessionMeta);
   }
 
   async forgotPassword(email: string): Promise<void> {
@@ -192,5 +465,69 @@ export class AuthService {
         ErrorCode.INVALID_OR_EXPIRED_TOKEN,
       );
     }
+  }
+
+  // Settings > Security "Active sessions".
+  async listSessions(
+    userId: string,
+    currentSessionId: string,
+  ): Promise<
+    {
+      id: string;
+      device: string;
+      ip: string | null;
+      location: string | null;
+      createdAt: Date;
+      lastSeenAt: Date;
+      current: boolean;
+    }[]
+  > {
+    const sessions = await this.authRepository.listActiveSessions(userId);
+    return sessions.map((s) => ({
+      id: s.id,
+      device: parseUserAgent(s.userAgent),
+      ip: s.ip,
+      // Resolved at read time from the raw IP (same reasoning as `device`
+      // above) — null for anything geoip-lite can't resolve, which is the
+      // normal case for loopback/private ranges in local development.
+      location: lookupIpLocation(s.ip),
+      createdAt: s.createdAt,
+      lastSeenAt: s.lastSeenAt,
+      current: s.id === currentSessionId,
+    }));
+  }
+
+  async revokeSession(
+    userId: string,
+    sessionId: string,
+    currentSessionId: string,
+  ): Promise<void> {
+    // The UI never offers a "Revoke" action for the current device (see the
+    // remotesea design reference) — this is the server-side backstop for
+    // that, not a substitute for the regular sign-out flow.
+    if (sessionId === currentSessionId) {
+      throw new BadRequestApiException(
+        "Sign out to end your current session instead of revoking it here.",
+        ErrorCode.CANNOT_REVOKE_CURRENT_SESSION,
+      );
+    }
+    const revoked = await this.authRepository.revokeSession(userId, sessionId);
+    if (!revoked) {
+      throw new NotFoundApiException(
+        "Session not found",
+        ErrorCode.SESSION_NOT_FOUND,
+      );
+    }
+  }
+
+  async revokeOtherSessions(
+    userId: string,
+    currentSessionId: string,
+  ): Promise<{ revokedCount: number }> {
+    const revokedCount = await this.authRepository.revokeOtherSessions(
+      userId,
+      currentSessionId,
+    );
+    return { revokedCount };
   }
 }

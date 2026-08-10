@@ -8,6 +8,8 @@ import { SharedServicesModule } from "@/common/services/shared-services.module";
 import { AuthModule } from "@/modules/auth/auth.module";
 import { UsersModule } from "@/modules/users/users.module";
 import { TalentModule } from "@/modules/talent/talent.module";
+import { WorkExperienceModule } from "@/modules/work-experience/work-experience.module";
+import { ProfileHighlightsModule } from "@/modules/profile-highlights/profile-highlights.module";
 import { EmployerModule } from "@/modules/employer/employer.module";
 import { JobsModule } from "@/modules/jobs/jobs.module";
 import { TaxonomyModule } from "@/modules/taxonomy/taxonomy.module";
@@ -35,6 +37,8 @@ import { HealthModule } from "@/modules/health/health.module";
     AuthModule,
     UsersModule,
     TalentModule,
+    WorkExperienceModule,
+    ProfileHighlightsModule,
     EmployerModule,
     JobsModule,
     TaxonomyModule,

@@ -9,9 +9,13 @@ import { assertFound } from "@/common/utils/assert-found";
 import { isOwnedUploadUrl } from "@/modules/uploads/upload-url.util";
 import { UploadsService } from "@/modules/uploads/uploads.service";
 import type { EnvConfig } from "@/core/config/env.validation";
-import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import {
+  BadRequestApiException,
+  NotFoundApiException,
+} from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { SalaryRange } from "@/modules/jobs/salary-range";
+import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 
 @Injectable()
 export class TalentService {
@@ -31,13 +35,31 @@ export class TalentService {
     return profile;
   }
 
-  async getPublicProfile(slug: string): Promise<Record<string, unknown>> {
+  async getPublicProfile(
+    slug: string,
+    viewer: AuthenticatedUser | null,
+  ): Promise<Record<string, unknown>> {
     const profile = await this.talentRepository.findBySlug(slug);
     assertFound(
       profile,
       "Profile not found",
       ErrorCode.TALENT_PROFILE_NOT_FOUND,
     );
+
+    if (profile.visibility === "VERIFIED_EMPLOYERS") {
+      const allowed =
+        viewer?.role === "EMPLOYER" &&
+        (await this.talentRepository.isVerifiedEmployer(viewer.id));
+      // Same response as a nonexistent slug — doesn't reveal that a profile
+      // exists but is gated, just that this caller can't see it here.
+      if (!allowed) {
+        throw new NotFoundApiException(
+          "Profile not found",
+          ErrorCode.TALENT_PROFILE_NOT_FOUND,
+        );
+      }
+    }
+
     return TalentMapper.toPublicProfile(profile);
   }
 
@@ -75,9 +97,15 @@ export class TalentService {
     // resumeUrl was only checked with z.string().url() — any URL passed the DTO,
     // completely bypassing the presign flow's content-type allowlist, size cap,
     // and rate limit. Only accept a URL this user could actually have obtained
-    // from their own POST /uploads/presign call.
+    // from their own POST /uploads/presign call. Skipped when it's unchanged
+    // from what's already stored — that value cleared this same check when it
+    // was first set, and every other field on this form (headline, bio, ...)
+    // resubmits its current value on every save, so re-validating an untouched
+    // resumeUrl here would turn "edit your bio" into "re-prove you own your
+    // resume" on every single save.
     if (
       dto.resumeUrl &&
+      dto.resumeUrl !== existing?.resumeUrl &&
       !isOwnedUploadUrl(
         dto.resumeUrl,
         this.config.get("CDN_URL", { infer: true }),
