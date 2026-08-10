@@ -2,10 +2,6 @@
   "name": "remotesea-api",
   "version": "1.0.0",
   "description": "RemoteSEA backend — NestJS migration from Next.js API routes",
-  "private": true,
-  "_moduleAliases": {
-    "@": "dist"
-  },
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
@@ -50,7 +46,6 @@
     "express": "^4.22.1",
     "geoip-lite": "^2.0.3",
     "helmet": "^8.3.0",
-    "module-alias": "^2.3.4",
     "nanoid": "^3.3.7",
     "otplib": "^13.4.1",
     "passport": "^0.7.0",
@@ -74,7 +69,6 @@
     "@types/express": "^5.0.0",
     "@types/geoip-lite": "^1.4.4",
     "@types/jest": "^29.5.14",
-    "@types/module-alias": "^2.0.4",
     "@types/node": "^22.10.2",
     "@types/passport-github2": "^1.2.9",
     "@types/passport-google-oauth20": "^2.0.16",

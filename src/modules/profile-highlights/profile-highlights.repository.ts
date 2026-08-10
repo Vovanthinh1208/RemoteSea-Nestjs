@@ -36,9 +36,7 @@ export class ProfileHighlightsRepository {
     return this.prisma.profileHighlight.create({ data: { ...data, talentId } });
   }
 
-  findOwnerById(
-    id: string,
-  ): Promise<{
+  findOwnerById(id: string): Promise<{
     id: string;
     talentId: string;
     talent: { userId: string };
