@@ -1,6 +1,6 @@
 # RemoteSEA API Reference
 
-Full endpoint reference for the RemoteSEA backend (NestJS). 71 routes across 14 modules — see [README.md](../README.md) for architecture and setup.
+Full endpoint reference for the RemoteSEA backend (NestJS). 75 routes across 15 modules — see [README.md](../README.md) for architecture and setup.
 
 Base URL (local): `http://localhost:4000` (configurable via `PORT` / `APP_URL`).
 
@@ -41,6 +41,8 @@ A few routes bypass this convention — noted explicitly where it happens (e.g. 
 - [Auth](#auth)
 - [Users](#users)
 - [Talent](#talent)
+- [Work Experience](#work-experience)
+- [Profile Highlights](#profile-highlights)
 - [Employer](#employer)
 - [Jobs](#jobs)
 - [Taxonomy](#taxonomy)
@@ -690,7 +692,7 @@ Base path: `/talent`. No class-level guard — auth applied per-route.
 
 ### GET /talent/me
 
-Returns the authenticated user's own talent profile with skills and their name.
+Returns the authenticated user's own talent profile with skills, work experience, profile highlights, and their name.
 
 - **Auth**: Bearer JWT required
 
@@ -718,6 +720,7 @@ Returns the authenticated user's own talent profile with skills and their name.
   "rightToWork": "Vietnam only",
   "employmentTypes": ["FULL_TIME", "CONTRACT"],
   "timezoneOverlap": ["SG_HOURS", "AU_HOURS"],
+  "noticePeriod": "2 weeks",
   "desiredSalaryMin": 90000,
   "desiredSalaryMax": 130000,
   "currency": "USD",
@@ -733,6 +736,36 @@ Returns the authenticated user's own talent profile with skills and their name.
         "name": "Node.js",
         "slug": "node-js"
       }
+    }
+  ],
+  "workExperiences": [
+    {
+      "id": "cme8f1a2b0000ug0h9x1n1a5",
+      "talentId": "clx4talent0001abcd",
+      "company": "Finch Labs",
+      "title": "Frontend Engineer",
+      "location": "Singapore",
+      "startDate": "2023-05-01T00:00:00.000Z",
+      "endDate": null,
+      "description": "Built the merchant onboarding flow for Finch's payment APIs.",
+      "createdAt": "2026-01-15T09:12:00.000Z",
+      "updatedAt": "2026-01-15T09:12:00.000Z"
+    }
+  ],
+  "profileHighlights": [
+    {
+      "id": "cme8f1a2b0000ug0h9x1n1a6",
+      "talentId": "clx4talent0001abcd",
+      "type": "PORTFOLIO",
+      "title": "Merchant onboarding flow",
+      "subtitle": "Lead engineer · 4 months",
+      "description": "Reworked a multi-step KYC flow into a single-page progressive form.",
+      "tag": "Product · Production",
+      "url": "https://github.com/janedoe/project",
+      "startYear": null,
+      "endYear": null,
+      "createdAt": "2026-01-15T09:12:00.000Z",
+      "updatedAt": "2026-01-15T09:12:00.000Z"
     }
   ],
   "user": { "name": "Jane Doe" }
@@ -764,6 +797,7 @@ Creates or updates the authenticated user's talent profile (upsert); if `skills`
 | `rightToWork`                                           | enum    | `"Vietnam only"` \| `"Vietnam + Singapore"` \| `"Vietnam + Australia"` \| `"Open to relocation / sponsorship"`                                                               |
 | `employmentTypes`                                       | array   | any of `"FULL_TIME"`, `"CONTRACT"`, `"PART_TIME"`; replaces the entire set, not a per-item toggle                                                                            |
 | `timezoneOverlap`                                       | array   | any of `"SG_HOURS"`, `"AU_HOURS"`, `"ASYNC_ONLY"`; replaces the entire set, not a per-item toggle                                                                            |
+| `noticePeriod`                                          | enum    | `"Immediate"` \| `"2 weeks"` \| `"1 month"` \| `"2+ months"`                                                                                                                 |
 | `desiredSalaryMin`, `desiredSalaryMax`                  | number  | integer, positive                                                                                                                                                            |
 | `skills`                                                | array   | `{ skillId: string (CUID), yearsExp?: number (int, min 0) }[]`; provided → replaces entire skill set; omitted → untouched; `[]` → clears                                     |
 
@@ -794,7 +828,7 @@ Public talent profile lookup by slug. Hides compensation fields unless `isOpenTo
 - **Auth**: None required, but an `Authorization: Bearer <jwt>` header is read if present — the only route in the app that's unauthenticated yet optionally auth-aware
 - **Path params**: `slug` (string)
 
-**Success response — `200 OK`** — same shape as the profile above, but `user` is `{ name, image }`; `visibility`, `primaryRole`, `rightToWork`, `employmentTypes`, and `timezoneOverlap` are never included (own-profile only); and `desiredSalaryMin`/`Max` keys are **omitted entirely** (not `null`) when `isOpenToWork` is `false`.
+**Success response — `200 OK`** — same shape as the profile above, but `user` is `{ name, image }`; `visibility` is never included (own-profile only, since it exists purely to gate this route); and `desiredSalaryMin`/`Max` keys are **omitted entirely** (not `null`) when `isOpenToWork` is `false`. `primaryRole`/`rightToWork`/`employmentTypes`/`timezoneOverlap`/`noticePeriod`, `workExperiences` (current role first, then most-recently-started), and `profileHighlights` (Selected work / Education / Languages, oldest first) ARE included — none of these are sensitive.
 
 **Errors**: `404 { "error": "Profile not found" }` — both for a nonexistent slug and for a `VERIFIED_EMPLOYERS` profile the caller isn't allowed to see (same response either way, so a gated profile's existence isn't revealed to a caller who can't view it).
 
@@ -802,7 +836,7 @@ Public talent profile lookup by slug. Hides compensation fields unless `isOpenTo
 
 ## Work Experience
 
-Base path: `/talent/me/experience`. Profile setup "Experience" section — up to 5 entries per talent profile, own-profile only (not included in `GET /talent/:slug`).
+Base path: `/talent/me/experience`. Profile setup "Experience" section — up to 5 entries per talent profile. These CRUD routes are own-profile only; the entries themselves are also readable via `GET /talent/:slug`'s `workExperiences` field.
 
 ### GET /talent/me/experience
 
@@ -895,6 +929,109 @@ Deletes one entry.
 ```
 
 **Errors**: `401`; `404 { "error": "Work experience not found" }` (same ownership semantics as `PATCH` above).
+
+---
+
+## Profile Highlights
+
+Base path: `/talent/me/highlights`. Backing model: `ProfileHighlight` — one table backs all three of the Profile setup "Selected work" (`type: PORTFOLIO`), "Education" (`type: EDUCATION`), and "Languages" (`type: LANGUAGE`) sections; which fields are meaningful depends on `type` (see the field table below). Capped at 5 entries **per `type`** (not 5 total). These CRUD routes are own-profile only; the entries themselves are also readable via `GET /talent/:slug`'s `profileHighlights` field.
+
+### GET /talent/me/highlights
+
+Lists the current user's highlight entries — all types together, oldest first (group by `type` client-side to render the three sections).
+
+- **Auth**: Bearer JWT required
+
+**Success response — `200 OK`**
+
+```json
+[
+  {
+    "id": "cme8f1a2b0000ug0h9x1n1a2",
+    "talentId": "cme8f1a2b0000ug0h9x1n1a3",
+    "type": "PORTFOLIO",
+    "title": "Merchant onboarding flow",
+    "subtitle": "Lead engineer · 4 months",
+    "description": "Reworked a multi-step KYC flow into a single-page progressive form.",
+    "tag": "Product · Production",
+    "url": "https://github.com/janedoe/project",
+    "startYear": null,
+    "endYear": null,
+    "createdAt": "2026-06-01T10:00:00.000Z",
+    "updatedAt": "2026-06-01T10:00:00.000Z"
+  }
+]
+```
+
+Returns `[]` (not an error) if the caller has no `TalentProfile` yet.
+
+**Errors**: `401` no/invalid token.
+
+---
+
+### POST /talent/me/highlights
+
+Creates a new highlight entry. `type` is required and immutable after creation — it decides which of the remaining fields are meaningful.
+
+- **Auth**: Bearer JWT required
+- **Body** (`createProfileHighlightSchema`, a Zod discriminated union on `type`):
+
+| Field         | Type   | Applies to  | Constraints                                                        |
+| ------------- | ------ | ----------- | ------------------------------------------------------------------ |
+| `type`        | enum   | all         | `PORTFOLIO` \| `EDUCATION` \| `LANGUAGE`, required                 |
+| `title`       | string | all         | required, trimmed — project title / school name / language name    |
+| `subtitle`    | string | all         | optional, trimmed — role · duration / degree · field / proficiency |
+| `description` | string | `PORTFOLIO` | optional, max 500 chars                                            |
+| `tag`         | string | `PORTFOLIO` | optional, max 60 chars — e.g. "Product · Production"               |
+| `url`         | string | `PORTFOLIO` | optional, valid http(s) URL                                        |
+| `startYear`   | number | `EDUCATION` | required for `EDUCATION`, 1950–(current year + 1)                  |
+| `endYear`     | number | `EDUCATION` | optional — omit for an ongoing program; must be ≥ `startYear`      |
+
+```json
+{
+  "type": "PORTFOLIO",
+  "title": "Merchant onboarding flow",
+  "subtitle": "Lead engineer · 4 months",
+  "description": "Reworked a multi-step KYC flow into a single-page progressive form.",
+  "tag": "Product · Production",
+  "url": "https://github.com/janedoe/project"
+}
+```
+
+**Success response — `201 Created`** — same shape as `GET` above.
+
+**Errors**: `400` validation failure (including `endYear` before `startYear`); `401`; `403 { "error": "Talent profile required" }` if the caller has no `TalentProfile` yet (create one via `PUT /talent/me` first); `409 { "error": "You can add up to 5 <type> entries — remove one before adding another." }` at the per-type cap.
+
+---
+
+### PATCH /talent/me/highlights/:id
+
+Partial update of one entry. `type` cannot be changed via this route (not part of the body) — the fields accepted are the union of all three types' fields (`title`, `subtitle`, `description`, `tag`, `url`, `startYear`, `endYear`, all optional, `subtitle`/`description`/`tag`/`url`/`endYear` also accept explicit `null` to clear).
+
+- **Auth**: Bearer JWT required
+- **Path params**: `id` (CUID)
+- **Body** (`updateProfileHighlightSchema`, all optional but ≥1 required)
+
+**Success response — `200 OK`** — same shape as `GET` above.
+
+**Errors**: `400` validation failure (including submitting an empty body); `401`; `404 { "error": "Profile highlight not found" }` — both for a nonexistent id and for another user's entry (ownership enforced by `ProfileHighlightOwnershipGuard`, not revealed to a non-owner).
+
+---
+
+### DELETE /talent/me/highlights/:id
+
+Deletes one entry.
+
+- **Auth**: Bearer JWT required
+- **Path params**: `id` (CUID)
+
+**Success response — `200 OK`**
+
+```json
+{ "success": true }
+```
+
+**Errors**: `401`; `404 { "error": "Profile highlight not found" }` (same ownership semantics as `PATCH` above).
 
 ---
 

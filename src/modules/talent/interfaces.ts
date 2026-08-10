@@ -11,6 +11,13 @@ export type TalentProfileWithSkills = Prisma.TalentProfileGetPayload<
 export const ownProfileArgs = {
   include: {
     skills: { include: { skill: true } },
+    workExperiences: {
+      orderBy: [
+        { endDate: { sort: "desc", nulls: "first" } },
+        { startDate: "desc" },
+      ],
+    },
+    profileHighlights: { orderBy: { createdAt: "asc" } },
     user: { select: { name: true } },
   },
 } satisfies Prisma.TalentProfileDefaultArgs;
@@ -46,12 +53,29 @@ export const publicProfileArgs = {
     // TalentService.getPublicProfile can enforce it before the profile is
     // ever returned.
     visibility: true,
+    // Not sensitive (unlike visibility itself) — a candidate's stated work
+    // preferences are reasonable to surface to anyone who can already see
+    // this profile, same as skills/salary below.
+    primaryRole: true,
+    rightToWork: true,
+    employmentTypes: true,
+    timezoneOverlap: true,
+    noticePeriod: true,
     desiredSalaryMin: true,
     desiredSalaryMax: true,
     currency: true,
     createdAt: true,
     updatedAt: true,
     skills: { include: { skill: true } },
+    // Same ordering as WorkExperienceRepository.findByTalentId — current
+    // roles first, then most-recently-started.
+    workExperiences: {
+      orderBy: [
+        { endDate: { sort: "desc", nulls: "first" } },
+        { startDate: "desc" },
+      ],
+    },
+    profileHighlights: { orderBy: { createdAt: "asc" } },
     user: { select: { name: true, image: true } },
   },
 } satisfies Prisma.TalentProfileDefaultArgs;

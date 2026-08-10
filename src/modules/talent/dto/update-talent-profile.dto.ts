@@ -41,6 +41,13 @@ export const timezoneOverlapSchema = z.enum([
   "ASYNC_ONLY",
 ]);
 
+export const noticePeriodSchema = z.enum([
+  "Immediate",
+  "2 weeks",
+  "1 month",
+  "2+ months",
+]);
+
 export const talentProfileSchema = z.object({
   headline: trimmedString({ max: 120 }).optional(),
   bio: trimmedString({ max: 2000 }).optional(),
@@ -59,6 +66,7 @@ export const talentProfileSchema = z.object({
   rightToWork: rightToWorkSchema.optional(),
   employmentTypes: z.array(employmentTypeSchema).optional(),
   timezoneOverlap: z.array(timezoneOverlapSchema).optional(),
+  noticePeriod: noticePeriodSchema.optional(),
   desiredSalaryMin: z.number().int().positive().max(10_000_000).optional(),
   desiredSalaryMax: z.number().int().positive().max(10_000_000).optional(),
   skills: z

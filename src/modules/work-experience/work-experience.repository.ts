@@ -39,9 +39,7 @@ export class WorkExperienceRepository {
     return this.prisma.workExperience.create({ data: { ...data, talentId } });
   }
 
-  findOwnerById(
-    id: string,
-  ): Promise<{
+  findOwnerById(id: string): Promise<{
     id: string;
     talentId: string;
     talent: { userId: string };

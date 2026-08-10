@@ -226,15 +226,55 @@ model TalentProfile {
   rightToWork      String?
   employmentTypes  String[]         @default([])
   timezoneOverlap  String[]         @default([])
+  noticePeriod     String?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  skills          TalentSkill[]
-  applications    Application[]
-  workExperiences WorkExperience[]
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills            TalentSkill[]
+  applications      Application[]
+  workExperiences   WorkExperience[]
+  profileHighlights ProfileHighlight[]
 
   @@map("talent_profiles")
+}
+
+enum ProfileHighlightType {
+  PORTFOLIO
+  EDUCATION
+  LANGUAGE
+}
+
+// Profile setup "Selected work" / "Education" / "Languages" — one model for
+// all three since they're all "a short list of labeled entries" shaped the
+// same way, just with different fields populated per `type` (validated in
+// the module's Zod schemas, not enforced by the DB). Capped at
+// MAX_HIGHLIGHTS_PER_TYPE entries per type per profile.
+model ProfileHighlight {
+  id       String               @id @default(cuid())
+  talentId String
+  type     ProfileHighlightType
+  // PORTFOLIO: project title / EDUCATION: school name / LANGUAGE: language name
+  title    String
+  // PORTFOLIO: role · duration / EDUCATION: degree · field / LANGUAGE: proficiency level
+  subtitle String?
+  // PORTFOLIO: description — unused for EDUCATION/LANGUAGE
+  description String? @db.Text
+  // PORTFOLIO: category tag (e.g. "Product · Production") — unused otherwise
+  tag       String?
+  // PORTFOLIO: project link — unused otherwise
+  url       String?
+  // EDUCATION only — unused otherwise
+  startYear Int?
+  // EDUCATION only; null = ongoing — unused otherwise
+  endYear   Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  talent TalentProfile @relation(fields: [talentId], references: [id], onDelete: Cascade)
+
+  @@index([talentId, type])
+  @@map("profile_highlights")
 }
 
 // Profile setup "Experience" — up to MAX_WORK_EXPERIENCES_PER_PROFILE entries
