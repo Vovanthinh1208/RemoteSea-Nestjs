@@ -15,6 +15,7 @@ import { JobsModule } from "@/modules/jobs/jobs.module";
 import { TaxonomyModule } from "@/modules/taxonomy/taxonomy.module";
 import { SalaryModule } from "@/modules/salary/salary.module";
 import { ApplicationsModule } from "@/modules/applications/applications.module";
+import { InvitationsModule } from "@/modules/invitations/invitations.module";
 import { SavedModule } from "@/modules/saved/saved.module";
 import { AdminModule } from "@/modules/admin/admin.module";
 import { AlertsModule } from "@/modules/alerts/alerts.module";
@@ -44,6 +45,7 @@ import { HealthModule } from "@/modules/health/health.module";
     TaxonomyModule,
     SalaryModule,
     ApplicationsModule,
+    InvitationsModule,
     SavedModule,
     AdminModule,
     AlertsModule,

@@ -43,6 +43,12 @@ enum ApplicationStatus {
   WITHDRAWN
 }
 
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
 enum AlertFrequency {
   IMMEDIATE
   DAILY
@@ -233,6 +239,7 @@ model TalentProfile {
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   skills            TalentSkill[]
   applications      Application[]
+  invitations       JobInvitation[]
   workExperiences   WorkExperience[]
   profileHighlights ProfileHighlight[]
 
@@ -251,25 +258,25 @@ enum ProfileHighlightType {
 // the module's Zod schemas, not enforced by the DB). Capped at
 // MAX_HIGHLIGHTS_PER_TYPE entries per type per profile.
 model ProfileHighlight {
-  id       String               @id @default(cuid())
-  talentId String
-  type     ProfileHighlightType
+  id          String               @id @default(cuid())
+  talentId    String
+  type        ProfileHighlightType
   // PORTFOLIO: project title / EDUCATION: school name / LANGUAGE: language name
-  title    String
+  title       String
   // PORTFOLIO: role · duration / EDUCATION: degree · field / LANGUAGE: proficiency level
-  subtitle String?
+  subtitle    String?
   // PORTFOLIO: description — unused for EDUCATION/LANGUAGE
-  description String? @db.Text
+  description String?              @db.Text
   // PORTFOLIO: category tag (e.g. "Product · Production") — unused otherwise
-  tag       String?
+  tag         String?
   // PORTFOLIO: project link — unused otherwise
-  url       String?
+  url         String?
   // EDUCATION only — unused otherwise
-  startYear Int?
+  startYear   Int?
   // EDUCATION only; null = ongoing — unused otherwise
-  endYear   Int?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  endYear     Int?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   talent TalentProfile @relation(fields: [talentId], references: [id], onDelete: Cascade)
 
@@ -346,8 +353,9 @@ model EmployerProfile {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  jobs Job[]
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs        Job[]
+  invitations JobInvitation[]
 
   // Composite, not single-column: AdminRepository.findEmployers filters
   // isVerified and orders by createdAt desc — the plain isVerified index
@@ -408,6 +416,7 @@ model Job {
   employer     EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Restrict)
   skills       JobSkill[]
   applications Application[]
+  invitations  JobInvitation[]
   categories   JobCategory[]
   savedBy      SavedJob[]
 
@@ -493,6 +502,35 @@ model Application {
   @@index([talentId, appliedAt])
   @@index([jobId, appliedAt])
   @@map("applications")
+}
+
+// ─── Invitations ────────────────────────────────────────────────────────────
+// An employer inviting a candidate (from Talent Search) to apply to a
+// specific job. Deliberately its own model rather than a new Application
+// status — accepting one creates a real Application via the same path a
+// self-initiated apply uses, so the existing status pipeline (pending ->
+// reviewing -> ... -> offered), ApplicantsPanel, and match scoring never
+// need to know an invitation was involved. Cascade on all three relations
+// (unlike Application/Job.employer's Restrict) — an invitation has no
+// independent record-keeping value once its job/talent/employer is gone.
+model JobInvitation {
+  id          String           @id @default(cuid())
+  jobId       String
+  talentId    String
+  employerId  String
+  message     String?          @db.Text
+  status      InvitationStatus @default(PENDING)
+  respondedAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  job      Job             @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  talent   TalentProfile   @relation(fields: [talentId], references: [id], onDelete: Cascade)
+  employer EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, talentId])
+  @@index([talentId, status, createdAt])
+  @@map("job_invitations")
 }
 
 // ─── Job Alerts ───────────────────────────────────────────────────────────────

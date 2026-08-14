@@ -146,6 +146,19 @@ export class EmailService {
     );
   }
 
+  async sendJobInvitationEmail(
+    to: string,
+    talentName: string,
+    jobTitle: string,
+    companyName: string,
+  ): Promise<void> {
+    await this.send(
+      to,
+      `${companyName} invited you to apply`,
+      `<p>Hi ${escapeHtml(talentName)},</p><p>${escapeHtml(companyName)} invited you to apply for "${escapeHtml(jobTitle)}". Log in to view the invitation.</p>`,
+    );
+  }
+
   async sendJobAlertEmail(to: string, jobs: JobWithRelations[]): Promise<void> {
     const rows = jobs
       .map(
