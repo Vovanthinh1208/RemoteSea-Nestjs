@@ -74,6 +74,16 @@ describe("buildTalentSearchWhere", () => {
     });
   });
 
+  it("filters noticePeriod with in (exact bucket match)", () => {
+    const where = buildTalentSearchWhere(
+      { ...baseQuery, noticePeriod: ["Immediate", "2 weeks"] },
+      false,
+    );
+    expect(where).toMatchObject({
+      AND: [{ noticePeriod: { in: ["Immediate", "2 weeks"] } }],
+    });
+  });
+
   it("searches q against headline OR the user's name", () => {
     const where = buildTalentSearchWhere({ ...baseQuery, q: "backend" }, false);
     expect(where).toMatchObject({

@@ -572,6 +572,13 @@ export class TalentSearchItemDto {
   })
   timezoneOverlap!: (typeof TIMEZONE_OVERLAP_OPTIONS)[number][];
 
+  @ApiPropertyOptional({
+    enum: NOTICE_PERIODS,
+    nullable: true,
+    example: "2 weeks",
+  })
+  noticePeriod!: (typeof NOTICE_PERIODS)[number] | null;
+
   @ApiProperty({ format: "date-time", example: "2026-06-30T14:02:31.000Z" })
   updatedAt!: string;
 

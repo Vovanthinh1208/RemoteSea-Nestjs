@@ -34,6 +34,9 @@ export function buildTalentSearchWhere(
   if (query.timezoneOverlap?.length) {
     and.push({ timezoneOverlap: { hasSome: query.timezoneOverlap } });
   }
+  if (query.noticePeriod?.length) {
+    and.push({ noticePeriod: { in: query.noticePeriod } });
+  }
 
   return {
     // Only candidates who opted into "Open to work" are ever searchable —

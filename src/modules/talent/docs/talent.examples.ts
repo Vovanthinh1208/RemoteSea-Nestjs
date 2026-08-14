@@ -160,6 +160,7 @@ export const TalentSearchExample = {
       currency: "USD",
       employmentTypes: ["FULL_TIME", "CONTRACT"],
       timezoneOverlap: ["SG_HOURS", "AU_HOURS"],
+      noticePeriod: "2 weeks",
       updatedAt: "2026-06-30T14:02:31.000Z",
       user: { name: "Jane Doe", image: "https://example.com/avatar.jpg" },
       skills: [

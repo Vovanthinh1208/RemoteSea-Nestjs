@@ -17,6 +17,7 @@ export const talentSearchItemSelect = {
   currency: true,
   employmentTypes: true,
   timezoneOverlap: true,
+  noticePeriod: true,
   updatedAt: true,
   user: { select: { name: true, image: true } },
   skills: {

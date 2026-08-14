@@ -263,6 +263,13 @@ export class EmployerRepository {
               employmentTypes: true,
               timezoneOverlap: true,
               rightToWork: true,
+              // noticePeriod feeds the same match-score calculation as the
+              // block above (see match.util.ts's scoreAvailability).
+              // isOpenToWork doesn't — it's read only to decide whether
+              // ApplicantsPanel's AvailabilityBadge renders at all (an
+              // applicant can have since turned it off after applying).
+              noticePeriod: true,
+              isOpenToWork: true,
             },
           },
         },

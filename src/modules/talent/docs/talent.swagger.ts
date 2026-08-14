@@ -114,6 +114,12 @@ export const ApiSearchTalent = () =>
       isArray: true,
       example: ["SG_HOURS"],
     }),
+    ApiQuery({
+      name: "noticePeriod",
+      required: false,
+      isArray: true,
+      example: ["Immediate", "2 weeks"],
+    }),
     ApiQuery({ name: "page", required: false, example: 1 }),
     ApiQuery({ name: "limit", required: false, example: 20 }),
     ApiOkResponse({

@@ -3,6 +3,7 @@ import { paginationQuerySchema } from "@/common/dto/pagination-query.schema";
 import { experienceLevelSchema } from "@/common/dto/enums.schema";
 import {
   employmentTypeSchema,
+  noticePeriodSchema,
   timezoneOverlapSchema,
 } from "./update-talent-profile.dto";
 
@@ -23,6 +24,7 @@ export const listTalentSearchSchema = paginationQuerySchema.extend({
   country: toArray(z.string().max(100)),
   employmentTypes: toArray(employmentTypeSchema),
   timezoneOverlap: toArray(timezoneOverlapSchema),
+  noticePeriod: toArray(noticePeriodSchema),
 });
 
 export type ListTalentSearchDto = z.infer<typeof listTalentSearchSchema>;
