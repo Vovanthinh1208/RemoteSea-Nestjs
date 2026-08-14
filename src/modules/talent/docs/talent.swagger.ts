@@ -5,9 +5,11 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiTags,
 } from "@nestjs/swagger";
 import {
+  ForbiddenApiResponse,
   InternalServerErrorApiResponse,
   UnauthorizedApiResponse,
 } from "@/core/swagger/common.responses";
@@ -15,12 +17,14 @@ import {
   PublicTalentProfileResponseDto,
   TalentProfileRequestDto,
   TalentProfileResponseDto,
+  TalentSearchResponseDto,
 } from "./talent.dto";
 import {
   OwnTalentProfileExample,
   PublicTalentProfileClosedExample,
   PublicTalentProfileOpenExample,
   TalentProfileRequestExample,
+  TalentSearchExample,
   UpsertTalentProfileExample,
 } from "./talent.examples";
 import {
@@ -68,6 +72,57 @@ export const ApiUpsertProfile = () =>
     }),
     ValidationErrorResponse,
     UnauthorizedApiResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiSearchTalent = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Search the talent pool (employer only)",
+      description:
+        "Lets an authenticated EMPLOYER browse candidates instead of only receiving applicants. Only returns profiles with `isOpenToWork: true` — someone who hasn't opted into being found never appears here, regardless of filters. `visibility: VERIFIED_EMPLOYERS` profiles are additionally included only when the caller's own EmployerProfile has `isVerified: true` (same rule `GET /talent/:slug` enforces). No relevance/match ranking — filters are exact-match/contains only; a personalized match score against one of the employer's own jobs is computed client-side, the same way it already is for GET /jobs and the applicants list.",
+    }),
+    ApiQuery({ name: "q", required: false, example: "backend engineer" }),
+    ApiQuery({
+      name: "skills",
+      required: false,
+      isArray: true,
+      example: ["clx4skill0001node"],
+    }),
+    ApiQuery({
+      name: "level",
+      required: false,
+      isArray: true,
+      example: ["SENIOR", "LEAD"],
+    }),
+    ApiQuery({
+      name: "country",
+      required: false,
+      isArray: true,
+      example: ["Vietnam"],
+    }),
+    ApiQuery({
+      name: "employmentTypes",
+      required: false,
+      isArray: true,
+      example: ["FULL_TIME"],
+    }),
+    ApiQuery({
+      name: "timezoneOverlap",
+      required: false,
+      isArray: true,
+      example: ["SG_HOURS"],
+    }),
+    ApiQuery({ name: "page", required: false, example: 1 }),
+    ApiQuery({ name: "limit", required: false, example: 20 }),
+    ApiOkResponse({
+      description: "Paginated candidates matching the filters",
+      type: TalentSearchResponseDto,
+      schema: { example: TalentSearchExample },
+    }),
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
     InternalServerErrorApiResponse,
   );
 

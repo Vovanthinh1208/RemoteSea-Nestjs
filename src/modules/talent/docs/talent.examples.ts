@@ -144,3 +144,30 @@ export const ValidationErrorExample = {
 };
 
 export const ProfileNotFoundExample = { error: "Profile not found" };
+
+export const TalentSearchExample = {
+  talents: [
+    {
+      id: "clx4talent0001abcd",
+      slug: "jane-doe-a1b2c3",
+      headline: "Senior Backend Engineer",
+      level: "SENIOR",
+      country: "Vietnam",
+      timezone: "Asia/Ho_Chi_Minh",
+      yearsExperience: 8,
+      desiredSalaryMin: 90000,
+      desiredSalaryMax: 130000,
+      currency: "USD",
+      employmentTypes: ["FULL_TIME", "CONTRACT"],
+      timezoneOverlap: ["SG_HOURS", "AU_HOURS"],
+      updatedAt: "2026-06-30T14:02:31.000Z",
+      user: { name: "Jane Doe", image: "https://example.com/avatar.jpg" },
+      skills: [
+        {
+          skill: { id: "clx4skill0001node", name: "Node.js", slug: "node-js" },
+        },
+      ],
+    },
+  ],
+  pagination: { page: 1, limit: 20, total: 1, pages: 1 },
+};

@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { TalentProfile, User } from "@prisma/client";
+import type { Prisma, TalentProfile, User } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 import type { TalentProfileDto } from "./dto/update-talent-profile.dto";
 import {
@@ -10,6 +10,10 @@ import {
   type PublicTalentProfile,
   type TalentProfileWithSkills,
 } from "./interfaces";
+import {
+  talentSearchItemSelect,
+  type TalentSearchItem,
+} from "@/common/types/talent-search-item.type";
 
 type ProfileScalarData = Omit<TalentProfileDto, "skills">;
 
@@ -103,5 +107,23 @@ export class TalentRepository {
       where: { id },
       ...talentProfileWithSkillsArgs,
     });
+  }
+
+  search(
+    where: Prisma.TalentProfileWhereInput,
+    skip: number,
+    take: number,
+  ): Promise<TalentSearchItem[]> {
+    return this.prisma.talentProfile.findMany({
+      where,
+      skip,
+      take,
+      orderBy: { updatedAt: "desc" },
+      select: talentSearchItemSelect,
+    });
+  }
+
+  count(where: Prisma.TalentProfileWhereInput): Promise<number> {
+    return this.prisma.talentProfile.count({ where });
   }
 }

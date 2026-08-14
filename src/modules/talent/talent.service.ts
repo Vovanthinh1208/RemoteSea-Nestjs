@@ -3,7 +3,12 @@ import { ConfigService } from "@nestjs/config";
 import { TalentRepository } from "./talent.repository";
 import { TalentMapper } from "./talent.mapper";
 import type { TalentProfileDto } from "./dto/update-talent-profile.dto";
+import type { ListTalentSearchDto } from "./dto/list-talent-search.dto";
+import { buildTalentSearchWhere } from "./talent-search.util";
 import type { OwnTalentProfile, TalentProfileWithSkills } from "./interfaces";
+import type { TalentSearchItem } from "@/common/types/talent-search-item.type";
+import type { Pagination } from "@/common/interfaces/pagination.interface";
+import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 import { uniqueSlug } from "@/common/utils/slugify";
 import { assertFound } from "@/common/utils/assert-found";
 import { isOwnedUploadUrl } from "@/modules/uploads/upload-url.util";
@@ -61,6 +66,25 @@ export class TalentService {
     }
 
     return TalentMapper.toPublicProfile(profile);
+  }
+
+  async search(
+    viewer: AuthenticatedUser,
+    query: ListTalentSearchDto,
+  ): Promise<{ talents: TalentSearchItem[]; pagination: Pagination }> {
+    const includeGated = await this.talentRepository.isVerifiedEmployer(
+      viewer.id,
+    );
+    const where = buildTalentSearchWhere(query, includeGated);
+    const { page, limit } = query;
+    const skip = paginationSkip(page, limit);
+
+    const [talents, total] = await Promise.all([
+      this.talentRepository.search(where, skip, limit),
+      this.talentRepository.count(where),
+    ]);
+
+    return { talents, pagination: buildPagination(page, limit, total) };
   }
 
   async upsertProfile(
