@@ -163,6 +163,23 @@ export class EmployerRepository {
         publishedAt: true,
         createdAt: true,
         _count: { select: { applications: true } },
+        // Below: not rendered by the jobs list itself — carried so the
+        // frontend can score this job's applicants against it (see
+        // ApplicantsPanel's match badge) without a second fetch.
+        level: true,
+        salaryMin: true,
+        salaryMax: true,
+        currency: true,
+        jobType: true,
+        timezone: true,
+        country: true,
+        isRemote: true,
+        skills: {
+          select: {
+            isRequired: true,
+            skill: { select: { id: true } },
+          },
+        },
       },
     });
   }
@@ -232,6 +249,20 @@ export class EmployerRepository {
               level: true,
               user: { select: { name: true } },
               skills: { include: { skill: true } },
+              // Below: same "not rendered directly, feeds the frontend's
+              // match-score calculation against the job" rationale as the
+              // job fields added to findJobsByEmployer's select above —
+              // already surfaced to anyone viewing this talent's public
+              // profile (see talent/interfaces.ts's publicProfileArgs).
+              yearsExperience: true,
+              desiredSalaryMin: true,
+              desiredSalaryMax: true,
+              currency: true,
+              timezone: true,
+              country: true,
+              employmentTypes: true,
+              timezoneOverlap: true,
+              rightToWork: true,
             },
           },
         },

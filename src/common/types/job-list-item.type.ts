@@ -12,6 +12,7 @@ export const jobListItemSelect = {
   level: true,
   salaryMin: true,
   salaryMax: true,
+  currency: true,
   isRemote: true,
   timezone: true,
   country: true,
@@ -26,7 +27,10 @@ export const jobListItemSelect = {
     },
   },
   skills: {
-    select: { skill: { select: { id: true, name: true, slug: true } } },
+    select: {
+      isRequired: true,
+      skill: { select: { id: true, name: true, slug: true } },
+    },
   },
 } satisfies Prisma.JobSelect;
 
