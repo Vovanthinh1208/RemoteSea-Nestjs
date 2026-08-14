@@ -1,7 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
-import type { SalaryBenchmark } from "./interfaces";
+import type {
+  SalaryBenchmark,
+  SalaryBenchmarkByCountry,
+  SalaryBenchmarkBySeniority,
+} from "./interfaces";
 
 @Injectable()
 export class SalaryRepository {
@@ -26,6 +30,45 @@ export class SalaryRepository {
       JOIN jobs j ON j.id = jc."jobId"
       WHERE j.status = 'ACTIVE' AND j."salaryMin" IS NOT NULL
       GROUP BY c.name
+      ORDER BY count DESC
+    `);
+  }
+
+  // Same shape as findBenchmarks, split further by Job.level — backs the
+  // Salary Insights explorer's role+seniority breakdown.
+  findBenchmarksBySeniority(): Promise<SalaryBenchmarkBySeniority[]> {
+    return this.prisma.$queryRaw<SalaryBenchmarkBySeniority[]>(Prisma.sql`
+      SELECT
+        c.name AS role,
+        j.level::text AS level,
+        ROUND(AVG(j."salaryMin"))::int AS min,
+        ROUND(AVG(COALESCE(j."salaryMax", j."salaryMin")))::int AS max,
+        ROUND(AVG(ROUND((j."salaryMin" + COALESCE(j."salaryMax", j."salaryMin")) / 2.0)))::int AS mid,
+        COUNT(*)::int AS count
+      FROM categories c
+      JOIN job_categories jc ON jc."categoryId" = c.id
+      JOIN jobs j ON j.id = jc."jobId"
+      WHERE j.status = 'ACTIVE' AND j."salaryMin" IS NOT NULL
+      GROUP BY c.name, j.level
+      ORDER BY count DESC
+    `);
+  }
+
+  // Grouped by the *employer's* HQ country, not Job.country (which is a
+  // candidate-location restriction, e.g. "Vietnam only") — Salary Insights'
+  // country section is about where the paying company is based.
+  findBenchmarksByCountry(): Promise<SalaryBenchmarkByCountry[]> {
+    return this.prisma.$queryRaw<SalaryBenchmarkByCountry[]>(Prisma.sql`
+      SELECT
+        e."hqCountry" AS country,
+        ROUND(AVG(j."salaryMin"))::int AS min,
+        ROUND(AVG(COALESCE(j."salaryMax", j."salaryMin")))::int AS max,
+        ROUND(AVG(ROUND((j."salaryMin" + COALESCE(j."salaryMax", j."salaryMin")) / 2.0)))::int AS mid,
+        COUNT(*)::int AS count
+      FROM jobs j
+      JOIN employer_profiles e ON e.id = j."employerId"
+      WHERE j.status = 'ACTIVE' AND j."salaryMin" IS NOT NULL AND e."hqCountry" IS NOT NULL
+      GROUP BY e."hqCountry"
       ORDER BY count DESC
     `);
   }
