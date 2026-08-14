@@ -332,36 +332,73 @@ model TalentSkill {
 // ─── Employer ─────────────────────────────────────────────────────────────────
 
 model EmployerProfile {
-  id          String    @id @default(cuid())
-  userId      String    @unique
-  companyName String
-  slug        String    @unique
-  logoUrl     String?
-  websiteUrl  String?
-  description String?   @db.Text
-  industry    String?
-  size        String?
-  founded     Int?
-  hqCountry   String?
-  hqCity      String?
-  isVerified  Boolean   @default(false)
+  id                 String                     @id @default(cuid())
+  userId             String                     @unique
+  companyName        String
+  slug               String                     @unique
+  logoUrl            String?
+  websiteUrl         String?
+  description        String?                    @db.Text
+  industry           String?
+  size               String?
+  founded            Int?
+  hqCountry          String?
+  hqCity             String?
+  isVerified         Boolean                    @default(false)
   // Neither is derivable from updatedAt: a later profile edit (updateProfile)
   // moves updatedAt without touching verification status, and re-verifying
   // after a suspension would otherwise erase the original suspension time.
-  verifiedAt  DateTime?
-  suspendedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  verifiedAt         DateTime?
+  suspendedAt        DateTime?
+  // Self-service domain/email verification — a second, independent path to
+  // isVerified alongside the existing admin verify/suspend toggle (that
+  // field stays the one gate every badge/check reads; this just tracks the
+  // submission process that can also flip it true). verificationEmail is
+  // the last address submitted, kept even after success/failure for
+  // display ("verified via jane@acme.com").
+  verificationEmail  String?
+  verificationStatus EmployerVerificationStatus @default(NOT_SUBMITTED)
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
 
-  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  jobs        Job[]
-  invitations JobInvitation[]
+  user               User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs               Job[]
+  invitations        JobInvitation[]
+  emailVerifications EmployerEmailVerification[]
 
   // Composite, not single-column: AdminRepository.findEmployers filters
   // isVerified and orders by createdAt desc — the plain isVerified index
   // only covered the filter half, forcing a separate sort.
   @@index([isVerified, createdAt])
   @@map("employer_profiles")
+}
+
+enum EmployerVerificationStatus {
+  NOT_SUBMITTED
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+// Deliberately its own table, not a reuse of VerificationToken — that
+// table's createVerificationToken unconditionally deletes every prior
+// token for an `identifier` (see auth.repository.ts), so sharing it across
+// a password-reset flow and this one for the same email address could
+// silently invalidate an unrelated in-flight reset. Same reasoning as
+// JobInvitation getting its own model instead of overloading Application.
+model EmployerEmailVerification {
+  id         String    @id @default(cuid())
+  employerId String
+  email      String
+  token      String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  employer EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
+
+  @@index([employerId, createdAt])
+  @@map("employer_email_verifications")
 }
 
 // ─── Jobs ─────────────────────────────────────────────────────────────────────

@@ -13,6 +13,7 @@ import {
   ForbiddenApiResponse,
   InternalServerErrorApiResponse,
   UnauthorizedApiResponse,
+  rateLimitResponse,
 } from "@/core/swagger/common.responses";
 import {
   JOB_STATUS_VALUES,
@@ -20,23 +21,30 @@ import {
 } from "@/common/constants/enum-values.constants";
 import {
   ApplicationResponseDto,
+  ConfirmVerificationRequestDto,
   CreateEmployerProfileRequestDto,
   CreateEmployerProfileResponseDto,
   EmployerProfileWithStatsResponseDto,
   EmployerProfileDto,
   ListEmployerJobsResponseDto,
   ListJobApplicationsResponseDto,
+  MessageResponseDto,
+  SubmitVerificationRequestDto,
   UpdateApplicationRequestDto,
   UpdateEmployerProfileRequestDto,
 } from "./employer.dto";
 import {
   ApplicationResponseExample,
+  ConfirmVerificationRequestExample,
+  ConfirmVerificationResponseExample,
   CreateEmployerProfileRequestExample,
   CreateEmployerProfileResponseExample,
   EmployerProfileResponseExample,
   EmployerProfileWithStatsResponseExample,
   ListEmployerJobsResponseExample,
   ListJobApplicationsResponseExample,
+  SubmitVerificationRequestExample,
+  SubmitVerificationResponseExample,
   UpdateApplicationRequestExample,
   UpdateEmployerProfileRequestExample,
 } from "./employer.examples";
@@ -47,9 +55,11 @@ import {
   EmployerProfileNotFoundResponse,
   EmployerProfileRequiredResponse,
   IllegalTransitionResponse,
+  InvalidOrExpiredVerificationTokenResponse,
   JobNotFoundResponse,
   NotOwningEmployerResponse,
   ValidationErrorResponse,
+  VerificationRejectedResponse,
 } from "./employer.responses";
 
 export const ApiEmployerTag = () => applyDecorators(ApiTags("Employer"));
@@ -215,5 +225,52 @@ export const ApiUpdateApplication = () =>
     NotOwningEmployerResponse,
     ApplicationNotFoundResponse,
     ApplicationConflictResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiSubmitVerification = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Submit company email verification",
+      description:
+        "Sends a confirmation link to the given email (TTL 24h) if its domain matches the company's websiteUrl. Requires the EMPLOYER role and a websiteUrl already on file. Resubmitting invalidates any prior unconsumed link for this employer.",
+    }),
+    ApiBody({
+      type: SubmitVerificationRequestDto,
+      examples: { default: { value: SubmitVerificationRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "Verification email sent",
+      type: MessageResponseDto,
+      schema: { example: SubmitVerificationResponseExample },
+    }),
+    ValidationErrorResponse,
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
+    EmployerProfileNotFoundResponse,
+    VerificationRejectedResponse,
+    rateLimitResponse("5 req/60s per employer"),
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiConfirmVerification = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "Confirm company email verification",
+      description:
+        "Consumes a verification token and, on success, sets EmployerProfile.isVerified true. Unauthenticated — the token itself is the proof, same as POST /auth/reset-password.",
+    }),
+    ApiBody({
+      type: ConfirmVerificationRequestDto,
+      examples: { default: { value: ConfirmVerificationRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "Company email verified",
+      type: MessageResponseDto,
+      schema: { example: ConfirmVerificationResponseExample },
+    }),
+    ValidationErrorResponse,
+    InvalidOrExpiredVerificationTokenResponse,
     InternalServerErrorApiResponse,
   );

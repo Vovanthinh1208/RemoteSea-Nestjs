@@ -7,8 +7,10 @@ import { BillingRepository } from "./billing.repository";
 import { JobPayerOwnershipGuard } from "./guards/job-payer-ownership.guard";
 import { STRIPE_CLIENT } from "./constants";
 import type { EnvConfig } from "@/core/config/env.validation";
+import { JobsModule } from "@/modules/jobs/jobs.module";
 
 @Module({
+  imports: [JobsModule],
   controllers: [BillingController],
   providers: [
     BillingService,

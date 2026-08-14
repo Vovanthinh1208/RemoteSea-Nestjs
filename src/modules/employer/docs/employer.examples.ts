@@ -116,3 +116,17 @@ export const EmployerValidationErrorExample = {
     },
   },
 };
+
+export const SubmitVerificationRequestExample = { email: "jane@acme.com" };
+
+export const SubmitVerificationResponseExample = {
+  message: "Verification email sent",
+};
+
+export const ConfirmVerificationRequestExample = {
+  token: "9f3c2a1b8e7d6f5a4c3b2a1908f7e6d5c4b3a2918f7e6d5c4b3a2918f7e6d5c4",
+};
+
+export const ConfirmVerificationResponseExample = {
+  message: "Company email verified",
+};

@@ -1,10 +1,20 @@
 import { Injectable } from "@nestjs/common";
-import type { Job } from "@prisma/client";
+import { Prisma, type Job } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
-import {
-  jobWithEmployerEmailInclude,
-  type JobWithEmployerEmail,
-} from "@/common/types/job-with-employer-email.type";
+
+// Wider than jobWithEmployerEmailInclude (which only carries employer.user.
+// email) — BillingService's auto-approval check also needs employer.
+// isVerified and the job's category count.
+const jobPaidAndSubmittedInclude = {
+  employer: {
+    select: { isVerified: true, user: { select: { email: true } } },
+  },
+  categories: { select: { categoryId: true } },
+} satisfies Prisma.JobInclude;
+
+export type JobPaidAndSubmitted = Prisma.JobGetPayload<{
+  include: typeof jobPaidAndSubmittedInclude;
+}>;
 
 @Injectable()
 export class BillingRepository {
@@ -38,7 +48,7 @@ export class BillingRepository {
   // no-op instead of re-sending the "payment received" email.
   async markJobPaidAndSubmitted(
     jobId: string,
-  ): Promise<JobWithEmployerEmail | null> {
+  ): Promise<JobPaidAndSubmitted | null> {
     const { count } = await this.prisma.job.updateMany({
       where: { id: jobId, planPaid: false },
       data: { planPaid: true, paidAt: new Date(), status: "PENDING_REVIEW" },
@@ -47,7 +57,7 @@ export class BillingRepository {
 
     return this.prisma.job.findUnique({
       where: { id: jobId },
-      include: jobWithEmployerEmailInclude,
+      include: jobPaidAndSubmittedInclude,
     });
   }
 }

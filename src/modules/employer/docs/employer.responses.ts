@@ -68,3 +68,24 @@ export const IllegalTransitionResponse = ApiBadRequestResponse({
     },
   },
 });
+
+export const VerificationRejectedResponse = ApiBadRequestResponse({
+  description:
+    "No website on file, or the submitted email's domain doesn't match the company website",
+  schema: {
+    examples: {
+      validation: { value: EmployerValidationErrorExample },
+      noWebsite: {
+        value: { error: "Add a company website before verifying" },
+      },
+      domainMismatch: {
+        value: { error: "Email domain must match your company website" },
+      },
+    },
+  },
+});
+
+export const InvalidOrExpiredVerificationTokenResponse = ApiBadRequestResponse({
+  description: "Token doesn't exist, was already used, or has expired",
+  schema: { example: { error: "Invalid or expired token" } },
+});

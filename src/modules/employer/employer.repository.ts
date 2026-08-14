@@ -23,6 +23,8 @@ const profileSelect = {
   hqCountry: true,
   hqCity: true,
   isVerified: true,
+  verificationEmail: true,
+  verificationStatus: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.EmployerProfileSelect;
@@ -140,6 +142,80 @@ export class EmployerRepository {
         data: { status: "CLOSED" },
       }),
     ]);
+  }
+
+  // Narrower than findProfileWithJobCount — EmployerService.submitVerification
+  // only needs enough to validate the domain-match and address the email.
+  findProfileForVerification(userId: string) {
+    return this.prisma.employerProfile.findUnique({
+      where: { userId },
+      select: { id: true, companyName: true, websiteUrl: true },
+    });
+  }
+
+  // Deletes any prior unconsumed row for this employer first (an employer
+  // resubmitting with a new/different address should invalidate the old
+  // link, not leave two live tokens), then creates the fresh one and marks
+  // the profile PENDING — one transaction so a submit can't half-apply.
+  async createEmailVerification(
+    employerId: string,
+    email: string,
+    token: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.employerEmailVerification.deleteMany({
+        where: { employerId, consumedAt: null },
+      }),
+      this.prisma.employerEmailVerification.create({
+        data: { employerId, email, token, expiresAt },
+      }),
+      this.prisma.employerProfile.update({
+        where: { id: employerId },
+        data: { verificationEmail: email, verificationStatus: "PENDING" },
+      }),
+    ]);
+  }
+
+  findEmailVerificationByToken(token: string) {
+    return this.prisma.employerEmailVerification.findUnique({
+      where: { token },
+    });
+  }
+
+  markVerificationFailed(employerId: string): Promise<EmployerProfile> {
+    return this.prisma.employerProfile.update({
+      where: { id: employerId },
+      data: { verificationStatus: "FAILED" },
+    });
+  }
+
+  // Conditional updateMany (consumedAt: null), not a plain update — same
+  // single-use-under-a-race guarantee as EmployerRepository.updateApplication
+  // and AuthRepository.consumePasswordReset: two concurrent confirms of the
+  // same token can't both flip isVerified. Returns false if the row was
+  // already consumed (or never existed) by the time this runs.
+  async consumeEmailVerification(
+    verificationId: string,
+    employerId: string,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.employerEmailVerification.updateMany({
+        where: { id: verificationId, consumedAt: null },
+        data: { consumedAt: new Date() },
+      });
+      if (count === 0) return false;
+
+      await tx.employerProfile.update({
+        where: { id: employerId },
+        data: {
+          isVerified: true,
+          verifiedAt: new Date(),
+          verificationStatus: "VERIFIED",
+        },
+      });
+      return true;
+    });
   }
 
   findJobsByEmployer(employerId: string, status?: JobStatus) {

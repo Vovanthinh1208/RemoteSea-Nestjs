@@ -20,6 +20,7 @@ describe("BillingService.createCheckoutSession", () => {
       billingRepository as never,
       {} as never,
       config as never,
+      {} as never,
     );
   };
 
@@ -85,5 +86,100 @@ describe("BillingService.createCheckoutSession", () => {
       service.createCheckoutSession(job, "owner-1"),
     ).rejects.toBeInstanceOf(ServiceUnavailableApiException);
     expect(stripeCreate).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe("BillingService.handleWebhookEvent auto-approval", () => {
+  const baseJob = {
+    id: "job-1",
+    title: "Backend Engineer",
+    slug: "backend-engineer",
+    description: "x".repeat(100),
+    salaryMin: 1000,
+    categories: [{ categoryId: "cat-1" }],
+    employer: { isVerified: true, user: { email: "employer@acme.com" } },
+  };
+
+  const makeService = ({
+    job,
+    jobsService = { approveForReview: jest.fn() },
+  }: {
+    job: typeof baseJob | null;
+    jobsService?: { approveForReview: jest.Mock };
+  }) => {
+    const stripe = {
+      webhooks: {
+        constructEvent: jest.fn().mockReturnValue({
+          type: "checkout.session.completed",
+          data: { object: { metadata: { jobId: "job-1" } } },
+        }),
+      },
+    };
+    const billingRepository = {
+      markJobPaidAndSubmitted: jest.fn().mockResolvedValue(job),
+    };
+    const emailService = {
+      sendJobLiveEmail: jest.fn().mockResolvedValue(undefined),
+      sendJobSubmittedEmail: jest.fn().mockResolvedValue(undefined),
+    };
+    const config = { get: jest.fn().mockReturnValue("whsec_test") };
+    const service = new BillingService(
+      stripe as never,
+      billingRepository as never,
+      emailService as never,
+      config as never,
+      jobsService as never,
+    );
+    return { service, jobsService, emailService };
+  };
+
+  it("auto-approves and sends the live email for a verified employer with a complete job", async () => {
+    const { service, jobsService, emailService } = makeService({
+      job: baseJob,
+    });
+
+    await service.handleWebhookEvent(Buffer.from(""), "sig");
+
+    expect(jobsService.approveForReview).toHaveBeenCalledWith("job-1");
+    expect(emailService.sendJobLiveEmail).toHaveBeenCalledWith(
+      "employer@acme.com",
+      "Backend Engineer",
+      "backend-engineer",
+    );
+  });
+
+  it("leaves the job queued and sends the submitted email when the employer isn't verified", async () => {
+    const { service, jobsService, emailService } = makeService({
+      job: { ...baseJob, employer: { ...baseJob.employer, isVerified: false } },
+    });
+
+    await service.handleWebhookEvent(Buffer.from(""), "sig");
+
+    expect(jobsService.approveForReview).not.toHaveBeenCalled();
+    expect(emailService.sendJobSubmittedEmail).toHaveBeenCalledWith(
+      "employer@acme.com",
+      "Backend Engineer",
+    );
+  });
+
+  it("leaves the job queued when a criterion (e.g. no categories) is missing", async () => {
+    const { service, jobsService, emailService } = makeService({
+      job: { ...baseJob, categories: [] },
+    });
+
+    await service.handleWebhookEvent(Buffer.from(""), "sig");
+
+    expect(jobsService.approveForReview).not.toHaveBeenCalled();
+    expect(emailService.sendJobSubmittedEmail).toHaveBeenCalled();
+  });
+
+  it("does nothing when the job was already handled (markJobPaidAndSubmitted returns null)", async () => {
+    const { service, jobsService, emailService } = makeService({ job: null });
+
+    await service.handleWebhookEvent(Buffer.from(""), "sig");
+
+    expect(jobsService.approveForReview).not.toHaveBeenCalled();
+    expect(emailService.sendJobLiveEmail).not.toHaveBeenCalled();
+    expect(emailService.sendJobSubmittedEmail).not.toHaveBeenCalled();
   });
 });

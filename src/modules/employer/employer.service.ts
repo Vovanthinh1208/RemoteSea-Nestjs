@@ -1,23 +1,29 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
+import * as crypto from "crypto";
 import {
   EmployerRepository,
   type ProfileWithJobCount,
   type PublicEmployerProfile,
 } from "./employer.repository";
-import { ALLOWED_TRANSITIONS } from "./constants";
+import { ALLOWED_TRANSITIONS, VERIFICATION_TOKEN_TTL_MS } from "./constants";
 import type { CreateEmployerProfileDto } from "./dto/create-employer-profile.dto";
 import type { UpdateEmployerProfileDto } from "./dto/update-employer-profile.dto";
 import type { ListEmployerJobsDto } from "./dto/list-employer-jobs.dto";
 import type { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
 import type { UpdateApplicationDto } from "./dto/update-application.dto";
+import type { SubmitVerificationDto } from "./dto/submit-verification.dto";
+import type { ConfirmVerificationDto } from "./dto/confirm-verification.dto";
+import { domainMatches } from "./verification.util";
 import { slugify, withUniqueSuffix } from "@/common/utils/slugify";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 import { assertFound } from "@/common/utils/assert-found";
 import { isOwnedUploadUrl } from "@/modules/uploads/upload-url.util";
 import { UploadsService } from "@/modules/uploads/uploads.service";
 import type { EnvConfig } from "@/core/config/env.validation";
+import { EmailService } from "@/common/services/email.service";
+import { runInBackground } from "@/common/utils/background-task.util";
 import {
   BadRequestApiException,
   ConflictApiException,
@@ -28,10 +34,13 @@ import type { ApplicationWithJobOwner } from "./guards/application-ownership.gua
 
 @Injectable()
 export class EmployerService {
+  private readonly logger = new Logger(EmployerService.name);
+
   constructor(
     private readonly employerRepository: EmployerRepository,
     private readonly config: ConfigService<EnvConfig, true>,
     private readonly uploadsService: UploadsService,
+    private readonly emailService: EmailService,
   ) {}
 
   async createProfile(
@@ -153,6 +162,82 @@ export class EmployerService {
 
   suspend(id: string): Promise<void> {
     return this.employerRepository.suspend(id);
+  }
+
+  async submitVerification(
+    userId: string,
+    dto: SubmitVerificationDto,
+  ): Promise<void> {
+    const profile =
+      await this.employerRepository.findProfileForVerification(userId);
+    assertFound(
+      profile,
+      "Profile not found",
+      ErrorCode.EMPLOYER_PROFILE_NOT_FOUND,
+    );
+
+    if (!profile.websiteUrl) {
+      throw new BadRequestApiException(
+        "Add a company website before verifying",
+        ErrorCode.EMPLOYER_WEBSITE_REQUIRED,
+      );
+    }
+
+    if (!domainMatches(profile.websiteUrl, dto.email)) {
+      throw new BadRequestApiException(
+        "Email domain must match your company website",
+        ErrorCode.EMPLOYER_VERIFICATION_DOMAIN_MISMATCH,
+      );
+    }
+
+    const token = crypto.randomBytes(32).toString("hex");
+    await this.employerRepository.createEmailVerification(
+      profile.id,
+      dto.email,
+      token,
+      new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
+    );
+
+    runInBackground(
+      this.emailService.sendEmployerVerificationEmail(
+        dto.email,
+        profile.companyName,
+        token,
+      ),
+      this.logger,
+      `Failed to send verification email for employer ${profile.id}`,
+    );
+  }
+
+  async confirmVerification(dto: ConfirmVerificationDto): Promise<void> {
+    const record = await this.employerRepository.findEmailVerificationByToken(
+      dto.token,
+    );
+    if (!record || record.consumedAt) {
+      throw new BadRequestApiException(
+        "Invalid or expired token",
+        ErrorCode.INVALID_OR_EXPIRED_TOKEN,
+      );
+    }
+
+    if (record.expiresAt < new Date()) {
+      await this.employerRepository.markVerificationFailed(record.employerId);
+      throw new BadRequestApiException(
+        "Invalid or expired token",
+        ErrorCode.INVALID_OR_EXPIRED_TOKEN,
+      );
+    }
+
+    const confirmed = await this.employerRepository.consumeEmailVerification(
+      record.id,
+      record.employerId,
+    );
+    if (!confirmed) {
+      throw new BadRequestApiException(
+        "Invalid or expired token",
+        ErrorCode.INVALID_OR_EXPIRED_TOKEN,
+      );
+    }
   }
 
   async listJobs(userId: string, dto: ListEmployerJobsDto) {
