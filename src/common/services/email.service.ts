@@ -159,6 +159,23 @@ export class EmailService {
     );
   }
 
+  async sendBacklogReminderEmail(
+    to: string,
+    items: { candidateName: string; jobTitle: string; daysStuck: number }[],
+  ): Promise<void> {
+    const rows = items
+      .map(
+        (item) =>
+          `<li>${escapeHtml(item.candidateName)} — "${escapeHtml(item.jobTitle)}" (${item.daysStuck}d awaiting your response)</li>`,
+      )
+      .join("");
+    await this.send(
+      to,
+      `${items.length} application${items.length === 1 ? "" : "s"} awaiting your response`,
+      `<p>These candidates have been waiting a while — take a look when you can:</p><ul>${rows}</ul>`,
+    );
+  }
+
   async sendJobAlertEmail(to: string, jobs: JobWithRelations[]): Promise<void> {
     const rows = jobs
       .map(

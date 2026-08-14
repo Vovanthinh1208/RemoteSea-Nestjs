@@ -164,11 +164,13 @@ export class EmployerService {
       );
     }
 
-    const [jobs, { totalApps, shortlisted, avgTimeToHireInDays }] =
-      await Promise.all([
-        this.employerRepository.findJobsByEmployer(employer.id, dto.status),
-        this.employerRepository.getEmployerJobStats(employer.id),
-      ]);
+    const [
+      jobs,
+      { totalApps, shortlisted, avgTimeToHireInDays, avgFirstResponseHours },
+    ] = await Promise.all([
+      this.employerRepository.findJobsByEmployer(employer.id, dto.status),
+      this.employerRepository.getEmployerJobStats(employer.id),
+    ]);
 
     return {
       jobs,
@@ -176,6 +178,7 @@ export class EmployerService {
         totalApps,
         shortlisted,
         avgTimeToHireInDays,
+        avgFirstResponseHours,
       },
     };
   }

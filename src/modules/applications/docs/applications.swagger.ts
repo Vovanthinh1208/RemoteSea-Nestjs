@@ -16,14 +16,17 @@ import {
   ApplicationResponseDto,
   ApplicationWithJobResponseDto,
   ApplyRequestDto,
+  BacklogDispatchResponseDto,
 } from "./applications.dto";
 import {
   ApplicationsListExample,
   ApplyRequestExample,
   ApplyResponseExample,
+  BacklogDispatchResponseExample,
 } from "./applications.examples";
 import {
   AlreadyAppliedResponse,
+  CronUnauthorizedResponse,
   TalentProfileRequiredResponse,
   ValidationErrorResponse,
 } from "./applications.responses";
@@ -71,5 +74,22 @@ export const ApiApply = () =>
     TalentProfileRequiredResponse,
     AlreadyAppliedResponse,
     rateLimitResponse("10 req/60s per user"),
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiDispatchBacklogReminders = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "Cron-triggered Employer Response SLA reminder dispatch",
+      description:
+        "Finds applications stuck past their stage's threshold (PENDING > 3 days unviewed, REVIEWING > 7 days) not reminded within the last 3 days, groups them by employer, and emails each employer one digest. Meant for an external scheduler, not browser clients. " +
+        "**Auth**: not JWT — requires the exact header `Authorization: Bearer <CRON_SECRET>`, same as `GET /alerts/cron/dispatch`.",
+    }),
+    ApiOkResponse({
+      description: "Dispatch summary",
+      type: BacklogDispatchResponseDto,
+      schema: { example: BacklogDispatchResponseExample },
+    }),
+    CronUnauthorizedResponse,
     InternalServerErrorApiResponse,
   );

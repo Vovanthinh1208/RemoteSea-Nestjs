@@ -204,6 +204,13 @@ export class EmployerJobStatsDto {
     description: "Computed only over OFFERED applications; 0 if none",
   })
   avgTimeToHireInDays!: number;
+
+  @ApiProperty({
+    example: 18.2,
+    description:
+      "Average time from appliedAt to the first non-PENDING ApplicationStatusEvent (first real employer action, any status). Computed only over applications with at least one such event; 0 if none.",
+  })
+  avgFirstResponseHours!: number;
 }
 
 export class ListEmployerJobsResponseDto {
@@ -259,6 +266,21 @@ export class JobApplicationListItemDto {
 
   @ApiProperty({ example: "2026-06-10T12:00:00.000Z" })
   appliedAt!: string;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: null,
+    description:
+      "First time this applicant appeared in this response — see EmployerRepository.findApplicationsForJob",
+  })
+  viewedAt!: string | null;
+
+  @ApiProperty({
+    example: "2026-06-10T12:00:00.000Z",
+    description:
+      "Only real status transitions bump this (a notes-only save doesn't)",
+  })
+  updatedAt!: string;
 
   @ApiPropertyOptional({
     example: "I would love to join your team...",

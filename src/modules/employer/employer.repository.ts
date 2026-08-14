@@ -188,28 +188,49 @@ export class EmployerRepository {
     totalApps: number;
     shortlisted: number;
     avgTimeToHireInDays: number;
+    avgFirstResponseHours: number;
   }> {
-    const [totalApps, shortlisted, avgRows] = await Promise.all([
-      this.prisma.application.count({ where: { job: { employerId } } }),
-      this.prisma.application.count({
-        where: { job: { employerId }, status: "SHORTLISTED" },
-      }),
-      // Averages appliedAt -> updatedAt in SQL instead of pulling every OFFERED
-      // application row (unbounded per employer) into app memory just to
-      // average two dates in JS.
-      this.prisma.$queryRaw<Array<{ avgDays: number | null }>>(Prisma.sql`
+    const [totalApps, shortlisted, avgRows, avgResponseRows] =
+      await Promise.all([
+        this.prisma.application.count({ where: { job: { employerId } } }),
+        this.prisma.application.count({
+          where: { job: { employerId }, status: "SHORTLISTED" },
+        }),
+        // Averages appliedAt -> updatedAt in SQL instead of pulling every OFFERED
+        // application row (unbounded per employer) into app memory just to
+        // average two dates in JS.
+        this.prisma.$queryRaw<Array<{ avgDays: number | null }>>(Prisma.sql`
         SELECT AVG(EXTRACT(EPOCH FROM (a."updatedAt" - a."appliedAt")) / 86400.0)::float AS "avgDays"
         FROM applications a
         JOIN jobs j ON j.id = a."jobId"
         WHERE j."employerId" = ${employerId} AND a.status = 'OFFERED'
       `),
-    ]);
+        // Application Transparency's SLA metric: time from appliedAt to the
+        // first ApplicationStatusEvent that isn't the initial PENDING one —
+        // i.e. the first real employer action, regardless of which status it
+        // moved to. Only over applications that have such an event (an
+        // untouched PENDING application has no "response" to average yet).
+        this.prisma.$queryRaw<Array<{ avgHours: number | null }>>(Prisma.sql`
+        SELECT AVG(EXTRACT(EPOCH FROM (first_event."createdAt" - a."appliedAt")) / 3600.0)::float AS "avgHours"
+        FROM applications a
+        JOIN jobs j ON j.id = a."jobId"
+        JOIN LATERAL (
+          SELECT MIN(e."createdAt") AS "createdAt"
+          FROM application_status_events e
+          WHERE e."applicationId" = a.id AND e.status != 'PENDING'
+        ) first_event ON first_event."createdAt" IS NOT NULL
+        WHERE j."employerId" = ${employerId}
+      `),
+      ]);
 
     const avgDays = avgRows[0]?.avgDays ?? null;
+    const avgHours = avgResponseRows[0]?.avgHours ?? null;
     return {
       totalApps,
       shortlisted,
       avgTimeToHireInDays: avgDays === null ? 0 : Math.round(avgDays * 10) / 10,
+      avgFirstResponseHours:
+        avgHours === null ? 0 : Math.round(avgHours * 10) / 10,
     };
   }
 
@@ -240,6 +261,12 @@ export class EmployerRepository {
           id: true,
           status: true,
           appliedAt: true,
+          viewedAt: true,
+          // Only real transitions bump updatedAt (see updateApplication's
+          // notes-only guard) — this is "time since entering the current
+          // status," the same measure the backlog-reminder cron uses for
+          // REVIEWING, so ApplicantsPanel's indicator can match it exactly.
+          updatedAt: true,
           coverLetter: true,
           talent: {
             select: {
@@ -276,6 +303,27 @@ export class EmployerRepository {
       }),
       this.prisma.application.count({ where }),
     ]);
+
+    // Application Transparency: this list view IS the "employer looked at
+    // it" signal (see the plan's confirmed default — no separate detail
+    // page exists to hang a more granular action off). Stamped once; the
+    // IS-NULL-implied filter below makes repeat views a no-op. The
+    // in-memory patch means this same response already reflects the
+    // stamp instead of the caller needing a second fetch to see it.
+    const unviewedIds = applications
+      .filter((a) => a.viewedAt === null)
+      .map((a) => a.id);
+    if (unviewedIds.length > 0) {
+      const now = new Date();
+      await this.prisma.application.updateMany({
+        where: { id: { in: unviewedIds } },
+        data: { viewedAt: now },
+      });
+      for (const a of applications) {
+        if (unviewedIds.includes(a.id)) a.viewedAt = now;
+      }
+    }
+
     return { applications, total };
   }
 
@@ -293,18 +341,32 @@ export class EmployerRepository {
   // Only writes if status still matches what the caller last read, so two
   // concurrent PATCHes against the same application can't silently overwrite
   // one another (last-write-wins). Returns null if the row moved underneath us.
+  // Interactive transaction (not the array form) because the
+  // ApplicationStatusEvent write below is conditional on the updateMany
+  // actually having matched — a no-op status-transition attempt shouldn't
+  // add a spurious event to Application Transparency's timeline.
   async updateApplication(
     id: string,
     expectedStatus: ApplicationStatus,
     status: ApplicationStatus,
     notes: string | undefined,
   ): Promise<Application | null> {
-    const { count } = await this.prisma.application.updateMany({
-      where: { id, status: expectedStatus },
-      data: { status, ...(notes !== undefined && { notes }) },
-    });
-    if (count === 0) return null;
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.application.updateMany({
+        where: { id, status: expectedStatus },
+        data: { status, ...(notes !== undefined && { notes }) },
+      });
+      if (count === 0) return null;
 
-    return this.prisma.application.findUnique({ where: { id } });
+      // A notes-only save (status === expectedStatus, e.g. no real
+      // transition) must not log a spurious duplicate event — the timeline
+      // represents transitions, not every write to the row.
+      if (status !== expectedStatus) {
+        await tx.applicationStatusEvent.create({
+          data: { applicationId: id, status },
+        });
+      }
+      return tx.application.findUnique({ where: { id } });
+    });
   }
 }

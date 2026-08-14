@@ -115,25 +115,37 @@ export class InvitationsRepository {
 
   /** Accepting turns the invitation into a real Application — same create +
    * applyCount increment ApplicationsRepository.createAndIncrementApplyCount
-   * does, plus marking the invitation ACCEPTED, all in one transaction. */
+   * does (including its initial PENDING ApplicationStatusEvent — Application
+   * Transparency's timeline treats an accepted invite exactly like a
+   * self-initiated apply), plus marking the invitation ACCEPTED, all in one
+   * transaction. */
   async accept(
     invitation: InvitationOwner,
   ): Promise<{ application: OwnApplication; job: JobWithEmployerEmail }> {
-    const [, application, job] = await this.prisma.$transaction([
-      this.prisma.jobInvitation.update({
+    return this.prisma.$transaction(async (tx) => {
+      await tx.jobInvitation.update({
         where: { id: invitation.id },
         data: { status: "ACCEPTED", respondedAt: new Date() },
-      }),
-      this.prisma.application.create({
+      });
+      const created = await tx.application.create({
         data: { jobId: invitation.jobId, talentId: invitation.talentId },
-        select: ownApplicationSelect,
-      }),
-      this.prisma.job.update({
-        where: { id: invitation.jobId },
-        data: { applyCount: { increment: 1 } },
-        include: jobWithEmployerEmailInclude,
-      }),
-    ]);
-    return { application, job };
+        select: { id: true },
+      });
+      await tx.applicationStatusEvent.create({
+        data: { applicationId: created.id, status: "PENDING" },
+      });
+      const [application, job] = await Promise.all([
+        tx.application.findUniqueOrThrow({
+          where: { id: created.id },
+          select: ownApplicationSelect,
+        }),
+        tx.job.update({
+          where: { id: invitation.jobId },
+          data: { applyCount: { increment: 1 } },
+          include: jobWithEmployerEmailInclude,
+        }),
+      ]);
+      return { application, job };
+    });
   }
 }

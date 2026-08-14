@@ -485,23 +485,53 @@ model JobSkill {
 // ─── Applications ─────────────────────────────────────────────────────────────
 
 model Application {
-  id          String            @id @default(cuid())
-  jobId       String
-  talentId    String
-  coverLetter String?           @db.Text
-  resumeUrl   String?
-  status      ApplicationStatus @default(PENDING)
-  notes       String?           @db.Text
-  appliedAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id                 String            @id @default(cuid())
+  jobId              String
+  talentId           String
+  coverLetter        String?           @db.Text
+  resumeUrl          String?
+  status             ApplicationStatus @default(PENDING)
+  notes              String?           @db.Text
+  appliedAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  // Application Transparency — set once, the first time this row appears in
+  // an employer's GET /employer/jobs/:id/applications response (see
+  // EmployerRepository.findApplicationsForJob). Distinct from `status`
+  // changing: an employer can see a candidate in the list without having
+  // acted on them yet.
+  viewedAt           DateTime?
+  // Backlog-reminder cron dedupe (ApplicationsService's cron/reminders) —
+  // null until the first reminder fires, then re-stamped each time so the
+  // same stuck application isn't re-emailed every run.
+  lastReminderSentAt DateTime?
 
-  job    Job           @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  talent TalentProfile @relation(fields: [talentId], references: [id], onDelete: Cascade)
+  job          Job                      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  talent       TalentProfile            @relation(fields: [talentId], references: [id], onDelete: Cascade)
+  statusEvents ApplicationStatusEvent[]
 
   @@unique([jobId, talentId])
   @@index([talentId, appliedAt])
   @@index([jobId, appliedAt])
+  // Backs the backlog-reminder cron's WHERE status IN (...) AND appliedAt < ...
+  @@index([status, appliedAt])
   @@map("applications")
+}
+
+// One row per status an Application has ever been in (including the initial
+// PENDING at creation) — the talent-facing timeline (Application
+// Transparency) and the employer's avgFirstResponseHours SLA metric are both
+// computed by reading this log rather than inferring history from `status`
+// alone, which only ever holds the current value.
+model ApplicationStatusEvent {
+  id            String            @id @default(cuid())
+  applicationId String
+  status        ApplicationStatus
+  createdAt     DateTime          @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+  @@map("application_status_events")
 }
 
 // ─── Invitations ────────────────────────────────────────────────────────────

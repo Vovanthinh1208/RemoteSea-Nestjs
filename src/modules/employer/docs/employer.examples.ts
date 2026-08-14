@@ -61,7 +61,12 @@ export const ListEmployerJobsResponseExample = {
       _count: { applications: 12 },
     },
   ],
-  stats: { totalApps: 27, shortlisted: 5, avgTimeToHireInDays: 6.4 },
+  stats: {
+    totalApps: 27,
+    shortlisted: 5,
+    avgTimeToHireInDays: 6.4,
+    avgFirstResponseHours: 18.2,
+  },
 };
 
 export const ListJobApplicationsResponseExample = {
@@ -70,6 +75,8 @@ export const ListJobApplicationsResponseExample = {
       id: "clapp1a2b3c4d5e6f7g8h9i0",
       status: "REVIEWING",
       appliedAt: "2026-06-10T12:00:00.000Z",
+      viewedAt: "2026-06-11T08:00:00.000Z",
+      updatedAt: "2026-06-11T09:15:00.000Z",
       coverLetter: "I would love to join your team...",
       talent: {
         id: "cltal1a2b3c4d5e6f7g8h9i0",
