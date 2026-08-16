@@ -1,5 +1,6 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { CACHE_MANAGER, type Cache } from "@nestjs/cache-manager";
 import { Prisma } from "@prisma/client";
 import * as crypto from "crypto";
 import {
@@ -24,6 +25,7 @@ import { UploadsService } from "@/modules/uploads/uploads.service";
 import type { EnvConfig } from "@/core/config/env.validation";
 import { EmailService } from "@/common/services/email.service";
 import { runInBackground } from "@/common/utils/background-task.util";
+import { getOrSetCache } from "@/common/caching/cache.util";
 import {
   BadRequestApiException,
   ConflictApiException,
@@ -31,6 +33,13 @@ import {
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { ApplicationWithJobOwner } from "./guards/application-ownership.guard";
+
+// Below this many responded applications, a public "responds within ~Xh"
+// figure is more noise than signal (and trivially gameable by an employer
+// with 1-2 fast responses) — the stat simply doesn't render rather than
+// showing a misleadingly precise number.
+const MIN_RESPONDED_APPLICATIONS_FOR_PUBLIC_STAT = 3;
+const PUBLIC_RESPONSE_STATS_CACHE_TTL_MS = 300_000;
 
 @Injectable()
 export class EmployerService {
@@ -41,6 +50,7 @@ export class EmployerService {
     private readonly config: ConfigService<EnvConfig, true>,
     private readonly uploadsService: UploadsService,
     private readonly emailService: EmailService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
   async createProfile(
@@ -162,6 +172,25 @@ export class EmployerService {
 
   suspend(id: string): Promise<void> {
     return this.employerRepository.suspend(id);
+  }
+
+  // Called by JobsService when rendering a public job detail page (see
+  // jobs.module.ts's import of EmployerModule) — cached per-employer since
+  // it's a live two-table aggregate and the job-detail route itself has no
+  // HTTP cache layer (it increments viewCount per request). Returns null
+  // below the sample-size floor, same "just don't show it" handling a job
+  // with no salary gets rather than a misleading number.
+  async getPublicResponseHours(employerId: string): Promise<number | null> {
+    const { avgHours, respondedCount } = await getOrSetCache(
+      this.cache,
+      `employer:${employerId}:public-response-stats`,
+      PUBLIC_RESPONSE_STATS_CACHE_TTL_MS,
+      () => this.employerRepository.getPublicResponseStats(employerId),
+    );
+    if (respondedCount < MIN_RESPONDED_APPLICATIONS_FOR_PUBLIC_STAT) {
+      return null;
+    }
+    return avgHours;
   }
 
   async submitVerification(

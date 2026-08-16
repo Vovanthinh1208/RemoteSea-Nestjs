@@ -142,13 +142,11 @@ describe("JobReportsService.resolve", () => {
   });
 
   it("resolves an OPEN report", async () => {
-    const updateStatus = jest
-      .fn()
-      .mockResolvedValue({
-        id: "rep-1",
-        status: "RESOLVED",
-        resolvedAt: new Date(),
-      });
+    const updateStatus = jest.fn().mockResolvedValue({
+      id: "rep-1",
+      status: "RESOLVED",
+      resolvedAt: new Date(),
+    });
     const { service } = makeService({
       findByIdForAdmin: jest
         .fn()
@@ -167,13 +165,11 @@ describe("JobReportsService.resolve", () => {
   });
 
   it("dismisses an OPEN report", async () => {
-    const updateStatus = jest
-      .fn()
-      .mockResolvedValue({
-        id: "rep-1",
-        status: "DISMISSED",
-        resolvedAt: new Date(),
-      });
+    const updateStatus = jest.fn().mockResolvedValue({
+      id: "rep-1",
+      status: "DISMISSED",
+      resolvedAt: new Date(),
+    });
     const { service } = makeService({
       findByIdForAdmin: jest
         .fn()

@@ -105,6 +105,7 @@ export const JobDetailResponseExample = {
     size: "51-200",
     description: "We build tools for remote teams across Southeast Asia.",
     hqCountry: "Singapore",
+    avgFirstResponseHours: 18.5,
   },
   categories: [
     {

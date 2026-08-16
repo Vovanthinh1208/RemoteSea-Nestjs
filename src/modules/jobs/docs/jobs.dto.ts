@@ -218,6 +218,14 @@ export class JobDetailEmployerDto extends JobListEmployerDto {
 
   @ApiPropertyOptional({ example: "Singapore", nullable: true })
   hqCountry?: string | null;
+
+  @ApiPropertyOptional({
+    example: 18.5,
+    nullable: true,
+    description:
+      "Average hours from application to this employer's first status change away from PENDING, computed across all their jobs. Null if they have fewer than 3 responded applications on record (not enough signal to publish).",
+  })
+  avgFirstResponseHours?: number | null;
 }
 
 export class JobListItemEmployerDto {

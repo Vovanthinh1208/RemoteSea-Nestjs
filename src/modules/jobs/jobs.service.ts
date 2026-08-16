@@ -24,6 +24,7 @@ import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.i
 import type { JobWithOwner } from "./guards/job-ownership.guard";
 import { SalaryRange } from "./salary-range";
 import { ViewCountBuffer } from "./view-count.buffer";
+import { EmployerService } from "@/modules/employer/employer.service";
 
 // Facets are a single global aggregate (findFacetRows() ignores the caller's search
 // filters entirely — see job-search.util.ts), so a flat cache key is correct: every
@@ -37,6 +38,7 @@ export class JobsService {
     private readonly jobsRepository: JobsRepository,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly viewCounts: ViewCountBuffer,
+    private readonly employerService: EmployerService,
   ) {}
 
   async list(query: ListJobsDto) {
@@ -151,7 +153,13 @@ export class JobsService {
     // Buffered, not a per-view UPDATE — see ViewCountBuffer for the rationale.
     this.viewCounts.record(job.id);
 
-    return job;
+    const avgFirstResponseHours =
+      await this.employerService.getPublicResponseHours(job.employerId);
+
+    return {
+      ...job,
+      employer: { ...job.employer, avgFirstResponseHours },
+    };
   }
 
   async create(userId: string, dto: CreateJobDto) {

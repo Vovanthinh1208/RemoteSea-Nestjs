@@ -28,13 +28,18 @@ const makeService = (
     sendEmployerVerificationEmail: jest.fn().mockResolvedValue(undefined),
     ...emailServiceOverrides,
   };
+  // No-op cache (always a miss, set() does nothing) — fine for every
+  // existing test in this file since none of them exercise the cached
+  // getPublicResponseHours path, which builds its own cache stub instead.
+  const cache = { get: jest.fn().mockResolvedValue(undefined), set: jest.fn() };
   const service = new EmployerService(
     repo,
     {} as never,
     {} as never,
     emailService as never,
+    cache as never,
   );
-  return { service, repo, emailService };
+  return { service, repo, emailService, cache };
 };
 
 describe("EmployerService.updateApplication", () => {
@@ -223,5 +228,41 @@ describe("EmployerService.confirmVerification", () => {
     await expect(
       service.confirmVerification({ token: "raced" }),
     ).rejects.toBeInstanceOf(BadRequestApiException);
+  });
+});
+
+describe("EmployerService.getPublicResponseHours", () => {
+  it("returns null below the minimum sample size", async () => {
+    const { service } = makeService({
+      getPublicResponseStats: jest
+        .fn()
+        .mockResolvedValue({ avgHours: 4, respondedCount: 2 }),
+    });
+
+    await expect(service.getPublicResponseHours("emp-1")).resolves.toBeNull();
+  });
+
+  it("returns the average once the sample size floor is met", async () => {
+    const { service } = makeService({
+      getPublicResponseStats: jest
+        .fn()
+        .mockResolvedValue({ avgHours: 18.5, respondedCount: 3 }),
+    });
+
+    await expect(service.getPublicResponseHours("emp-1")).resolves.toBe(18.5);
+  });
+
+  it("caches the underlying stats so a second call doesn't re-query", async () => {
+    const getPublicResponseStats = jest
+      .fn()
+      .mockResolvedValue({ avgHours: 10, respondedCount: 5 });
+    const { service, cache } = makeService({ getPublicResponseStats });
+
+    await service.getPublicResponseHours("emp-1");
+    // Simulate the cache now holding the value getOrSetCache would have set.
+    cache.get.mockResolvedValueOnce({ avgHours: 10, respondedCount: 5 });
+    await service.getPublicResponseHours("emp-1");
+
+    expect(getPublicResponseStats).toHaveBeenCalledTimes(1);
   });
 });

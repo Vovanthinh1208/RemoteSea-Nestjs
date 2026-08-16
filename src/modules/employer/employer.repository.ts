@@ -310,6 +310,38 @@ export class EmployerRepository {
     };
   }
 
+  // Public-facing counterpart to getEmployerJobStats's avgFirstResponseHours —
+  // same "first non-PENDING ApplicationStatusEvent" definition of "response,"
+  // but also returns the sample count so the caller can gate on a minimum
+  // before showing a number nobody asked this employer to publish. Unlike
+  // the private version, does NOT collapse "no data" to 0 — respondedCount
+  // is the only signal for that, avgHours stays null.
+  async getPublicResponseStats(
+    employerId: string,
+  ): Promise<{ avgHours: number | null; respondedCount: number }> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ avgHours: number | null; respondedCount: number }>
+    >(Prisma.sql`
+      SELECT
+        COUNT(*)::int AS "respondedCount",
+        AVG(EXTRACT(EPOCH FROM (first_event."createdAt" - a."appliedAt")) / 3600.0)::float AS "avgHours"
+      FROM applications a
+      JOIN jobs j ON j.id = a."jobId"
+      JOIN LATERAL (
+        SELECT MIN(e."createdAt") AS "createdAt"
+        FROM application_status_events e
+        WHERE e."applicationId" = a.id AND e.status != 'PENDING'
+      ) first_event ON first_event."createdAt" IS NOT NULL
+      WHERE j."employerId" = ${employerId}
+    `);
+    const row = rows[0];
+    return {
+      avgHours:
+        row?.avgHours == null ? null : Math.round(row.avgHours * 10) / 10,
+      respondedCount: row?.respondedCount ?? 0,
+    };
+  }
+
   findJobWithEmployerOwner(id: string) {
     return this.prisma.job.findUnique({
       where: { id },

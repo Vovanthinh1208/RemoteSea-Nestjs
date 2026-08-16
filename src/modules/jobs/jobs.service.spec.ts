@@ -57,7 +57,12 @@ const makeService = (repoOverrides: Partial<JobsRepository> = {}) => {
   const viewCounts = { record: jest.fn() };
   const cache = { get: jest.fn().mockResolvedValue(undefined), set: jest.fn() };
   return {
-    service: new JobsService(repo, cache as never, viewCounts as never),
+    service: new JobsService(
+      repo,
+      cache as never,
+      viewCounts as never,
+      {} as never,
+    ),
     repo,
     cache,
   };
