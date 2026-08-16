@@ -2,10 +2,13 @@ import { Injectable, Logger } from "@nestjs/common";
 import { AdminRepository } from "./admin.repository";
 import { EmployerService } from "@/modules/employer/employer.service";
 import { JobsService } from "@/modules/jobs/jobs.service";
+import { JobReportsService } from "@/modules/job-reports/job-reports.service";
 import type { ListEmployersDto } from "./dto/list-employers.dto";
 import type { UpdateEmployerDto } from "./dto/update-employer.dto";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
 import type { ReviewJobDto } from "./dto/review-job.dto";
+import type { ListJobReportsDto } from "@/modules/job-reports/dto/list-job-reports.dto";
+import type { ResolveJobReportDto } from "@/modules/job-reports/dto/resolve-job-report.dto";
 import type { RevenueSummary } from "./interfaces";
 import {
   buildMonthlyRevenueBuckets,
@@ -36,6 +39,7 @@ export class AdminService {
     private readonly adminRepository: AdminRepository,
     private readonly employerService: EmployerService,
     private readonly jobsService: JobsService,
+    private readonly jobReportsService: JobReportsService,
     private readonly emailService: EmailService,
   ) {}
 
@@ -198,5 +202,13 @@ export class AdminService {
     );
 
     return { months, mix, transactions, totals };
+  }
+
+  listReports(query: ListJobReportsDto) {
+    return this.jobReportsService.listForAdmin(query);
+  }
+
+  resolveReport(id: string, dto: ResolveJobReportDto, adminId: string) {
+    return this.jobReportsService.resolve(id, dto, adminId);
   }
 }

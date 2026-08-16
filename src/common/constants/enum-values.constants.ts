@@ -29,3 +29,16 @@ export const APPLICATION_STATUS_VALUES = [
 ] as const;
 export const PLAN_TYPE_VALUES = ["STANDARD", "FEATURED", "HANDS_ON"] as const;
 export const ALERT_FREQUENCY_VALUES = ["IMMEDIATE", "DAILY", "WEEKLY"] as const;
+export const JOB_REPORT_REASON_VALUES = [
+  "SCAM",
+  "MISLEADING",
+  "ALREADY_FILLED",
+  "DISCRIMINATORY",
+  "DUPLICATE",
+  "OTHER",
+] as const;
+export const JOB_REPORT_STATUS_VALUES = [
+  "OPEN",
+  "RESOLVED",
+  "DISMISSED",
+] as const;

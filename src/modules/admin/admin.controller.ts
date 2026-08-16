@@ -18,6 +18,14 @@ import {
 } from "./dto/update-employer.dto";
 import { listJobsSchema, type ListJobsDto } from "./dto/list-jobs.dto";
 import { reviewJobSchema, type ReviewJobDto } from "./dto/review-job.dto";
+import {
+  listJobReportsSchema,
+  type ListJobReportsDto,
+} from "@/modules/job-reports/dto/list-job-reports.dto";
+import {
+  resolveJobReportSchema,
+  type ResolveJobReportDto,
+} from "@/modules/job-reports/dto/resolve-job-report.dto";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { RolesGuard } from "@/core/guards/roles.guard";
@@ -29,6 +37,8 @@ import {
   ApiGetRevenue,
   ApiListEmployers,
   ApiListJobs,
+  ApiListReports,
+  ApiResolveReport,
   ApiReviewJob,
   ApiUpdateEmployer,
 } from "./docs/admin.swagger";
@@ -80,5 +90,25 @@ export class AdminController {
   @Get("revenue")
   async getRevenue() {
     return this.adminService.getRevenue();
+  }
+
+  @ApiListReports()
+  @Get("reports")
+  async listReports(
+    @Query(new ZodValidationPipe(listJobReportsSchema))
+    query: ListJobReportsDto,
+  ) {
+    return this.adminService.listReports(query);
+  }
+
+  @ApiResolveReport()
+  @Patch("reports/:id")
+  async resolveReport(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(resolveJobReportSchema))
+    body: ResolveJobReportDto,
+    @CurrentUser() admin: AuthenticatedUser,
+  ) {
+    return this.adminService.resolveReport(id, body, admin.id);
   }
 }

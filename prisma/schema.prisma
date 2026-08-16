@@ -49,6 +49,21 @@ enum InvitationStatus {
   DECLINED
 }
 
+enum JobReportReason {
+  SCAM
+  MISLEADING
+  ALREADY_FILLED
+  DISCRIMINATORY
+  DUPLICATE
+  OTHER
+}
+
+enum JobReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
 enum AlertFrequency {
   IMMEDIATE
   DAILY
@@ -117,6 +132,7 @@ model User {
   jobAlerts              JobAlert[]
   savedJobs              SavedJob[]
   notificationPreference NotificationPreference?
+  jobReports             JobReport[]
 
   @@map("users")
 }
@@ -456,6 +472,7 @@ model Job {
   invitations  JobInvitation[]
   categories   JobCategory[]
   savedBy      SavedJob[]
+  reports      JobReport[]
 
   @@index([status, publishedAt])
   @@index([status, isFeatured, publishedAt])
@@ -598,6 +615,32 @@ model JobInvitation {
   @@unique([jobId, talentId])
   @@index([talentId, status, createdAt])
   @@map("job_invitations")
+}
+
+// A talent or employer flagging a listing as suspicious/scam. Deliberately
+// its own table, not a flag/count on Job — a report is a signal *about* a
+// job, not a moderation action taken *on* it, so Job.status is never touched
+// by this flow (same reasoning JobInvitation got its own model instead of
+// overloading Application). No DB-level uniqueness on (jobId, reporterId): a
+// true "one OPEN report per pair" constraint needs a partial unique index,
+// which isn't worth the hand-edited-migration complexity for this low-stakes
+// write — JobReportsService enforces it with a plain read-check instead.
+model JobReport {
+  id         String          @id @default(cuid())
+  jobId      String
+  reporterId String
+  reason     JobReportReason
+  details    String?         @db.Text
+  status     JobReportStatus @default(OPEN)
+  resolvedAt DateTime?
+  createdAt  DateTime        @default(now())
+
+  job      Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  reporter User @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([jobId])
+  @@map("job_reports")
 }
 
 // ─── Job Alerts ───────────────────────────────────────────────────────────────

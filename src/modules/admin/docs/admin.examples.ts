@@ -158,3 +158,39 @@ export const RevenueResponseExample = {
   ],
   totals: { allTime: 720000, thisMonth: 15000 },
 };
+
+export const ListReportsResponseExample = {
+  reports: [
+    {
+      id: "crep1a2b0000ug0h9x1n1a2",
+      reason: "SCAM",
+      details: "Asked me to pay $200 for a 'starter laptop'.",
+      status: "OPEN",
+      createdAt: "2026-08-16T09:00:00.000Z",
+      resolvedAt: null,
+      job: {
+        id: "cjob1a2b0000ug0h9x1n1a2",
+        title: "Senior Backend Engineer",
+        slug: "senior-backend-engineer",
+        status: "ACTIVE",
+        employer: { companyName: "Acme Corp" },
+      },
+      reporter: {
+        id: "clx1tal0000ug0h9x1n1a2",
+        email: "jane@example.com",
+        name: "Jane Nguyen",
+      },
+    },
+  ],
+  pagination: { page: 1, limit: 20, total: 3, pages: 1 },
+};
+
+export const ResolveReportRequestExample = { action: "resolve" };
+
+export const ResolveReportResponseExample = {
+  id: "crep1a2b0000ug0h9x1n1a2",
+  status: "RESOLVED",
+  resolvedAt: "2026-08-16T10:00:00.000Z",
+};
+
+export const ReportNotFoundExample = { error: "Report not found" };
