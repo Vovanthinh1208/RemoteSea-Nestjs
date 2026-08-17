@@ -2,7 +2,9 @@ import { EmployerService } from "./employer.service";
 import {
   BadRequestApiException,
   ConflictApiException,
+  NotFoundApiException,
 } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { EmployerRepository } from "./employer.repository";
 import type { ApplicationWithJobOwner } from "./guards/application-ownership.guard";
 
@@ -264,5 +266,50 @@ describe("EmployerService.getPublicResponseHours", () => {
     await service.getPublicResponseHours("emp-1");
 
     expect(getPublicResponseStats).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("EmployerService.getPublicCompanyProfile", () => {
+  it("throws EMPLOYER_PROFILE_NOT_FOUND for an unknown slug", async () => {
+    const { service } = makeService({
+      findPublicProfileBySlug: jest.fn().mockResolvedValue(null),
+    });
+
+    const error = await service
+      .getPublicCompanyProfile("nonexistent")
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(NotFoundApiException);
+    expect((error as NotFoundApiException).getResponse()).toMatchObject({
+      code: ErrorCode.EMPLOYER_PROFILE_NOT_FOUND,
+    });
+  });
+
+  it("composes the profile, stats, jobs, and response-time signal for a known slug", async () => {
+    const { service } = makeService({
+      findPublicProfileBySlug: jest.fn().mockResolvedValue({
+        id: "emp-1",
+        companyName: "Acme",
+        slug: "acme",
+      }),
+      getPublicCompanyStats: jest
+        .fn()
+        .mockResolvedValue({ activeJobCount: 2, vnHireTotal: 5 }),
+      findActiveJobsForCompany: jest.fn().mockResolvedValue([{ id: "job-1" }]),
+      getPublicResponseStats: jest
+        .fn()
+        .mockResolvedValue({ avgHours: 12, respondedCount: 4 }),
+    });
+
+    const result = await service.getPublicCompanyProfile("acme");
+
+    expect(result).toMatchObject({
+      id: "emp-1",
+      companyName: "Acme",
+      activeJobCount: 2,
+      vnHireTotal: 5,
+      avgFirstResponseHours: 12,
+      jobs: [{ id: "job-1" }],
+    });
   });
 });

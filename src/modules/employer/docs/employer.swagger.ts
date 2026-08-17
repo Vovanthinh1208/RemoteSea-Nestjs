@@ -29,6 +29,7 @@ import {
   ListEmployerJobsResponseDto,
   ListJobApplicationsResponseDto,
   MessageResponseDto,
+  PublicCompanyProfileDto,
   SubmitVerificationRequestDto,
   UpdateApplicationRequestDto,
   UpdateEmployerProfileRequestDto,
@@ -43,6 +44,7 @@ import {
   EmployerProfileWithStatsResponseExample,
   ListEmployerJobsResponseExample,
   ListJobApplicationsResponseExample,
+  PublicCompanyProfileResponseExample,
   SubmitVerificationRequestExample,
   SubmitVerificationResponseExample,
   UpdateApplicationRequestExample,
@@ -51,6 +53,7 @@ import {
 import {
   ApplicationConflictResponse,
   ApplicationNotFoundResponse,
+  CompanyNotFoundResponse,
   EmployerProfileAlreadyExistsResponse,
   EmployerProfileNotFoundResponse,
   EmployerProfileRequiredResponse,
@@ -272,5 +275,28 @@ export const ApiConfirmVerification = () =>
     }),
     ValidationErrorResponse,
     InvalidOrExpiredVerificationTokenResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiCompaniesTag = () => applyDecorators(ApiTags("Companies"));
+
+export const ApiGetCompanyProfile = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "Get a company's public profile",
+      description:
+        "Fetches a company's public profile by slug — company info, active job count, cumulative vnHireTotal, the same sample-gated avgFirstResponseHours as GET /jobs/:id, and up to 50 currently ACTIVE jobs. No authentication required, no visibility gate (every company profile is public).",
+    }),
+    ApiParam({
+      name: "slug",
+      description: "EmployerProfile slug",
+      example: "remotesea-ltd",
+    }),
+    ApiOkResponse({
+      description: "Company profile",
+      type: PublicCompanyProfileDto,
+      schema: { example: PublicCompanyProfileResponseExample },
+    }),
+    CompanyNotFoundResponse,
     InternalServerErrorApiResponse,
   );

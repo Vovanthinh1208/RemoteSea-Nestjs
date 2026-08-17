@@ -20,7 +20,8 @@ export const jobListItemSelect = {
   vnHireCount: true,
   publishedAt: true,
   createdAt: true,
-  employer: { select: { companyName: true, isVerified: true } },
+  // slug backs the company profile link on JobCard (GET /companies/:slug).
+  employer: { select: { companyName: true, isVerified: true, slug: true } },
   categories: {
     select: {
       category: { select: { id: true, name: true, slug: true, icon: true } },

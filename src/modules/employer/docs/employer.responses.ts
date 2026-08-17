@@ -4,7 +4,10 @@ import {
   ApiForbiddenResponse,
   ApiNotFoundResponse,
 } from "@nestjs/swagger";
-import { EmployerValidationErrorExample } from "./employer.examples";
+import {
+  CompanyNotFoundExample,
+  EmployerValidationErrorExample,
+} from "./employer.examples";
 
 /** Reusable, module-specific Swagger response decorators for the Employer module. */
 
@@ -88,4 +91,9 @@ export const VerificationRejectedResponse = ApiBadRequestResponse({
 export const InvalidOrExpiredVerificationTokenResponse = ApiBadRequestResponse({
   description: "Token doesn't exist, was already used, or has expired",
   schema: { example: { error: "Invalid or expired token" } },
+});
+
+export const CompanyNotFoundResponse = ApiNotFoundResponse({
+  description: "No EmployerProfile with that slug",
+  schema: { example: CompanyNotFoundExample },
 });

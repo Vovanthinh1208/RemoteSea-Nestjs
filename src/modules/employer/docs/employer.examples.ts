@@ -130,3 +130,40 @@ export const ConfirmVerificationRequestExample = {
 export const ConfirmVerificationResponseExample = {
   message: "Company email verified",
 };
+
+export const PublicCompanyProfileResponseExample = {
+  id: "clx1a2b3c4d5e6f7g8h9i0j1",
+  userId: "clxuser1a2b3c4d5e6f7g8h9",
+  companyName: "Saigon Cloudworks",
+  slug: "saigon-cloudworks-pSqMpG",
+  logoUrl: null,
+  websiteUrl: "https://saigoncloudworks.dev",
+  description: "We build remote-friendly products for teams across SEA.",
+  industry: "Technology",
+  size: "11-50",
+  founded: 2019,
+  hqCountry: "Malaysia",
+  hqCity: null,
+  isVerified: true,
+  verifiedAt: "2026-05-01T09:00:00.000Z",
+  createdAt: "2026-01-05T09:00:00.000Z",
+  activeJobCount: 3,
+  vnHireTotal: 12,
+  avgFirstResponseHours: 18.5,
+  jobs: [
+    {
+      id: "cjob1a2b0000ug0h9x1n1a2",
+      title: "Senior Backend Engineer",
+      jobType: "FULL_TIME",
+      level: "SENIOR",
+      salaryMin: 3000,
+      salaryMax: 5000,
+      currency: "USD",
+      isRemote: true,
+      isFeatured: false,
+      publishedAt: "2026-07-11T09:26:19.006Z",
+    },
+  ],
+};
+
+export const CompanyNotFoundExample = { error: "Company not found" };

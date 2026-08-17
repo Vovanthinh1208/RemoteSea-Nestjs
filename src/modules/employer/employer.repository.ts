@@ -7,8 +7,41 @@ import type {
   JobStatus,
 } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
+import {
+  jobListItemSelect,
+  type JobListItem,
+} from "@/common/types/job-list-item.type";
 
 const EMPLOYER_JOBS_LIST_CAP = 200;
+const COMPANY_PROFILE_JOBS_CAP = 50;
+
+// GET /companies/:slug is unauthenticated — explicit select so every public
+// field is a decision, not an accident (same reasoning as talent's
+// publicProfileArgs). verificationEmail/verificationStatus are deliberately
+// excluded — those are self-service-verification internals, not something
+// an employer asked to publish; isVerified/verifiedAt are the public-facing
+// signal that self-service verification (among other paths) can flip.
+const publicProfileSelect = {
+  id: true,
+  userId: true,
+  companyName: true,
+  slug: true,
+  logoUrl: true,
+  websiteUrl: true,
+  description: true,
+  industry: true,
+  size: true,
+  founded: true,
+  hqCountry: true,
+  hqCity: true,
+  isVerified: true,
+  verifiedAt: true,
+  createdAt: true,
+} satisfies Prisma.EmployerProfileSelect;
+
+export type PublicCompanyProfile = Prisma.EmployerProfileGetPayload<{
+  select: typeof publicProfileSelect;
+}>;
 
 const profileSelect = {
   id: true,
@@ -59,6 +92,45 @@ export class EmployerRepository {
     return this.prisma.employerProfile.findUnique({
       where: { slug },
       select: { id: true },
+    });
+  }
+
+  findPublicProfileBySlug(slug: string): Promise<PublicCompanyProfile | null> {
+    return this.prisma.employerProfile.findUnique({
+      where: { slug },
+      select: publicProfileSelect,
+    });
+  }
+
+  // vnHireCount is summed across every job regardless of status — it's a
+  // cumulative "we've hired N people in Vietnam through this company"
+  // track-record signal, not tied to which listings currently happen to be
+  // open.
+  async getPublicCompanyStats(
+    employerId: string,
+  ): Promise<{ activeJobCount: number; vnHireTotal: number }> {
+    const [activeJobCount, vnHireAgg] = await Promise.all([
+      this.prisma.job.count({ where: { employerId, status: "ACTIVE" } }),
+      this.prisma.job.aggregate({
+        where: { employerId },
+        _sum: { vnHireCount: true },
+      }),
+    ]);
+    return {
+      activeJobCount,
+      vnHireTotal: vnHireAgg._sum.vnHireCount ?? 0,
+    };
+  }
+
+  // Reuses jobListItemSelect (the exact shape JobCard already renders) so
+  // the company profile page can drop these straight into the same
+  // component, nested `employer` redundancy and all — no new frontend type.
+  findActiveJobsForCompany(employerId: string): Promise<JobListItem[]> {
+    return this.prisma.job.findMany({
+      where: { employerId, status: "ACTIVE" },
+      orderBy: [{ isFeatured: "desc" }, { publishedAt: "desc" }],
+      take: COMPANY_PROFILE_JOBS_CAP,
+      select: jobListItemSelect,
     });
   }
 

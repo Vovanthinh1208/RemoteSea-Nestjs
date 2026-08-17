@@ -115,6 +115,26 @@ export class EmployerService {
     return { ...profile, totalApplications };
   }
 
+  // Unauthenticated (GET /companies/:slug) — no visibility gate like talent's
+  // VERIFIED_EMPLOYERS, since there's no equivalent privacy concept on
+  // EmployerProfile: every company that exists is fine to show publicly.
+  async getPublicCompanyProfile(slug: string) {
+    const profile = await this.employerRepository.findPublicProfileBySlug(slug);
+    assertFound(
+      profile,
+      "Company not found",
+      ErrorCode.EMPLOYER_PROFILE_NOT_FOUND,
+    );
+
+    const [stats, jobs, avgFirstResponseHours] = await Promise.all([
+      this.employerRepository.getPublicCompanyStats(profile.id),
+      this.employerRepository.findActiveJobsForCompany(profile.id),
+      this.getPublicResponseHours(profile.id),
+    ]);
+
+    return { ...profile, ...stats, avgFirstResponseHours, jobs };
+  }
+
   async updateProfile(
     userId: string,
     dto: UpdateEmployerProfileDto,
