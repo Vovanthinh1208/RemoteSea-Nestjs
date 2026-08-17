@@ -12,22 +12,31 @@ import {
   ForbiddenApiResponse,
   InternalServerErrorApiResponse,
   UnauthorizedApiResponse,
+  rateLimitResponse,
 } from "@/core/swagger/common.responses";
 import {
+  ConfirmVerificationRequestDto,
+  MessageResponseDto,
   PublicTalentProfileResponseDto,
+  SubmitVerificationRequestDto,
   TalentProfileRequestDto,
   TalentProfileResponseDto,
   TalentSearchResponseDto,
 } from "./talent.dto";
 import {
+  ConfirmVerificationRequestExample,
+  ConfirmVerificationResponseExample,
   OwnTalentProfileExample,
   PublicTalentProfileClosedExample,
   PublicTalentProfileOpenExample,
+  SubmitVerificationRequestExample,
+  SubmitVerificationResponseExample,
   TalentProfileRequestExample,
   TalentSearchExample,
   UpsertTalentProfileExample,
 } from "./talent.examples";
 import {
+  InvalidOrExpiredVerificationTokenResponse,
   ProfileNotFoundResponse,
   ValidationErrorResponse,
 } from "./talent.responses";
@@ -152,5 +161,50 @@ export const ApiGetPublicProfile = () =>
       },
     }),
     ProfileNotFoundResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiSubmitVerification = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Submit email verification",
+      description:
+        "Sends a confirmation link to the given email (TTL 1h). Requires an existing TalentProfile. Resubmitting invalidates any prior unconsumed link for this profile — no domain-match check (unlike the employer equivalent), just proof of control of the address.",
+    }),
+    ApiBody({
+      type: SubmitVerificationRequestDto,
+      examples: { default: { value: SubmitVerificationRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "Verification email sent",
+      type: MessageResponseDto,
+      schema: { example: SubmitVerificationResponseExample },
+    }),
+    ValidationErrorResponse,
+    UnauthorizedApiResponse,
+    ProfileNotFoundResponse,
+    rateLimitResponse("5 req/60s per user"),
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiConfirmVerification = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "Confirm email verification",
+      description:
+        "Consumes a verification token and, on success, sets TalentProfile.isVerified true. Unauthenticated — the token itself is the proof, same as POST /auth/reset-password.",
+    }),
+    ApiBody({
+      type: ConfirmVerificationRequestDto,
+      examples: { default: { value: ConfirmVerificationRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "Email verified",
+      type: MessageResponseDto,
+      schema: { example: ConfirmVerificationResponseExample },
+    }),
+    ValidationErrorResponse,
+    InvalidOrExpiredVerificationTokenResponse,
     InternalServerErrorApiResponse,
   );

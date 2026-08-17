@@ -610,3 +610,18 @@ export class TalentSearchResponseDto {
   @ApiProperty({ type: TalentSearchPaginationDto })
   pagination!: TalentSearchPaginationDto;
 }
+
+export class SubmitVerificationRequestDto {
+  @ApiProperty({ format: "email", example: "jane@example.com" })
+  email!: string;
+}
+
+export class ConfirmVerificationRequestDto {
+  @ApiProperty({ minLength: 1, example: "9f3c2a1b8e7d6f5a4c3b2a1908f7e6d5" })
+  token!: string;
+}
+
+export class MessageResponseDto {
+  @ApiProperty({ example: "Verification email sent" })
+  message!: string;
+}

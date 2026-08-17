@@ -1,5 +1,9 @@
 import { TalentService } from "./talent.service";
-import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import {
+  BadRequestApiException,
+  NotFoundApiException,
+} from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { TalentRepository } from "./talent.repository";
 import type { UploadsService } from "@/modules/uploads/uploads.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
@@ -16,9 +20,18 @@ const makeService = (repoOverrides: Partial<TalentRepository> = {}) => {
     ...repoOverrides,
   } as unknown as TalentRepository;
   const config = { get: jest.fn().mockReturnValue("https://cdn.example.com") };
+  const emailService = {
+    sendTalentVerificationEmail: jest.fn().mockResolvedValue(undefined),
+  };
   return {
-    service: new TalentService(repo, config as never, {} as UploadsService),
+    service: new TalentService(
+      repo,
+      config as never,
+      {} as UploadsService,
+      emailService as never,
+    ),
     repo,
+    emailService,
   };
 };
 
@@ -104,6 +117,124 @@ describe("TalentService.upsertProfile", () => {
 
     await expect(
       service.upsertProfile("user-1", { desiredSalaryMax: 500 }),
+    ).rejects.toBeInstanceOf(BadRequestApiException);
+  });
+});
+
+describe("TalentService.submitVerification", () => {
+  it("throws TALENT_PROFILE_NOT_FOUND when the caller has no profile", async () => {
+    const { service } = makeService({
+      findProfileForVerification: jest.fn().mockResolvedValue(null),
+    });
+
+    const error = await service
+      .submitVerification("user-1", { email: "jane@example.com" })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(NotFoundApiException);
+    expect((error as NotFoundApiException).getResponse()).toMatchObject({
+      code: ErrorCode.TALENT_PROFILE_NOT_FOUND,
+    });
+  });
+
+  it("creates a verification token and emails it — no domain-match check", async () => {
+    const createEmailVerification = jest.fn().mockResolvedValue(undefined);
+    const { service, emailService } = makeService({
+      findProfileForVerification: jest
+        .fn()
+        .mockResolvedValue({ id: "talent-1" }),
+      createEmailVerification,
+    });
+
+    await service.submitVerification("user-1", { email: "jane@gmail.com" });
+
+    expect(createEmailVerification).toHaveBeenCalledWith(
+      "talent-1",
+      "jane@gmail.com",
+      expect.any(String),
+      expect.any(Date),
+    );
+    expect(emailService.sendTalentVerificationEmail).toHaveBeenCalledWith(
+      "jane@gmail.com",
+      expect.any(String),
+    );
+  });
+});
+
+describe("TalentService.confirmVerification", () => {
+  it("rejects an unknown token", async () => {
+    const { service } = makeService({
+      findEmailVerificationByToken: jest.fn().mockResolvedValue(null),
+    });
+
+    await expect(
+      service.confirmVerification({ token: "bogus" }),
+    ).rejects.toBeInstanceOf(BadRequestApiException);
+  });
+
+  it("rejects an already-consumed token", async () => {
+    const { service } = makeService({
+      findEmailVerificationByToken: jest.fn().mockResolvedValue({
+        id: "ver-1",
+        talentId: "talent-1",
+        consumedAt: new Date(),
+        expiresAt: new Date(Date.now() + 10_000),
+      }),
+    });
+
+    await expect(
+      service.confirmVerification({ token: "used" }),
+    ).rejects.toBeInstanceOf(BadRequestApiException);
+  });
+
+  it("marks the profile FAILED and rejects an expired token", async () => {
+    const { service, repo } = makeService({
+      findEmailVerificationByToken: jest.fn().mockResolvedValue({
+        id: "ver-1",
+        talentId: "talent-1",
+        consumedAt: null,
+        expiresAt: new Date(Date.now() - 10_000),
+      }),
+      markVerificationFailed: jest.fn().mockResolvedValue(undefined),
+    });
+
+    await expect(
+      service.confirmVerification({ token: "expired" }),
+    ).rejects.toBeInstanceOf(BadRequestApiException);
+    expect(repo.markVerificationFailed).toHaveBeenCalledWith("talent-1");
+  });
+
+  it("consumes a valid token and verifies the profile", async () => {
+    const { service, repo } = makeService({
+      findEmailVerificationByToken: jest.fn().mockResolvedValue({
+        id: "ver-1",
+        talentId: "talent-1",
+        consumedAt: null,
+        expiresAt: new Date(Date.now() + 10_000),
+      }),
+      consumeEmailVerification: jest.fn().mockResolvedValue(true),
+    });
+
+    await service.confirmVerification({ token: "good" });
+    expect(repo.consumeEmailVerification).toHaveBeenCalledWith(
+      "ver-1",
+      "talent-1",
+    );
+  });
+
+  it("rejects when consumeEmailVerification loses the race (already consumed concurrently)", async () => {
+    const { service } = makeService({
+      findEmailVerificationByToken: jest.fn().mockResolvedValue({
+        id: "ver-1",
+        talentId: "talent-1",
+        consumedAt: null,
+        expiresAt: new Date(Date.now() + 10_000),
+      }),
+      consumeEmailVerification: jest.fn().mockResolvedValue(false),
+    });
+
+    await expect(
+      service.confirmVerification({ token: "raced" }),
     ).rejects.toBeInstanceOf(BadRequestApiException);
   });
 });

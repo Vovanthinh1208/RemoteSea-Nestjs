@@ -51,6 +51,79 @@ export class TalentRepository {
     return employer?.isVerified ?? false;
   }
 
+  findProfileForVerification(userId: string): Promise<{ id: string } | null> {
+    return this.prisma.talentProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+  }
+
+  // Deletes any prior unconsumed row for this talent first (resubmitting
+  // with a new/different address invalidates the old link, not a second
+  // live token), then creates the fresh one and marks the profile PENDING —
+  // one transaction so a submit can't half-apply. Mirrors
+  // EmployerRepository.createEmailVerification exactly, minus the
+  // domain-match precondition (nothing to validate it against here).
+  async createEmailVerification(
+    talentId: string,
+    email: string,
+    token: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.talentEmailVerification.deleteMany({
+        where: { talentId, consumedAt: null },
+      }),
+      this.prisma.talentEmailVerification.create({
+        data: { talentId, email, token, expiresAt },
+      }),
+      this.prisma.talentProfile.update({
+        where: { id: talentId },
+        data: { verificationEmail: email, verificationStatus: "PENDING" },
+      }),
+    ]);
+  }
+
+  findEmailVerificationByToken(token: string) {
+    return this.prisma.talentEmailVerification.findUnique({
+      where: { token },
+    });
+  }
+
+  markVerificationFailed(talentId: string): Promise<TalentProfile> {
+    return this.prisma.talentProfile.update({
+      where: { id: talentId },
+      data: { verificationStatus: "FAILED" },
+    });
+  }
+
+  // Conditional updateMany (consumedAt: null), not a plain update — same
+  // single-use-under-a-race guarantee as
+  // EmployerRepository.consumeEmailVerification. Returns false if the row
+  // was already consumed (or never existed) by the time this runs.
+  async consumeEmailVerification(
+    verificationId: string,
+    talentId: string,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.talentEmailVerification.updateMany({
+        where: { id: verificationId, consumedAt: null },
+        data: { consumedAt: new Date() },
+      });
+      if (count === 0) return false;
+
+      await tx.talentProfile.update({
+        where: { id: talentId },
+        data: {
+          isVerified: true,
+          verifiedAt: new Date(),
+          verificationStatus: "VERIFIED",
+        },
+      });
+      return true;
+    });
+  }
+
   // upsertProfile only needs these 3 scalars (to validate the *effective*
   // post-patch salary range and resume-URL ownership) — not the full
   // skills+skill+user join ownProfileArgs pulls in for the "get my profile"

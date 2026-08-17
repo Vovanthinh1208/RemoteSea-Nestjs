@@ -2,7 +2,10 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
+  Post,
   Put,
   Query,
   Req,
@@ -18,6 +21,14 @@ import {
   listTalentSearchSchema,
   type ListTalentSearchDto,
 } from "./dto/list-talent-search.dto";
+import {
+  submitVerificationSchema,
+  type SubmitVerificationDto,
+} from "./dto/submit-verification.dto";
+import {
+  confirmVerificationSchema,
+  type ConfirmVerificationDto,
+} from "./dto/confirm-verification.dto";
 import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
@@ -28,9 +39,11 @@ import { RateLimitService } from "@/common/services/rate-limit.service";
 import { AuthService } from "@/modules/auth/auth.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import {
+  ApiConfirmVerification,
   ApiGetOwnProfile,
   ApiGetPublicProfile,
   ApiSearchTalent,
+  ApiSubmitVerification,
   ApiTalentTag,
   ApiUpsertProfile,
 } from "./docs/talent.swagger";
@@ -64,6 +77,37 @@ export class TalentController {
       RATE_LIMITS.UPSERT_PROFILE.windowMs,
     );
     return this.talentService.upsertProfile(user.id, body);
+  }
+
+  @ApiSubmitVerification()
+  @Post("verification")
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async submitVerification(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(submitVerificationSchema))
+    body: SubmitVerificationDto,
+  ) {
+    this.rateLimitService.enforce(
+      `talent-submit-verification:${user.id}`,
+      RATE_LIMITS.SUBMIT_VERIFICATION.limit,
+      RATE_LIMITS.SUBMIT_VERIFICATION.windowMs,
+    );
+    await this.talentService.submitVerification(user.id, body);
+    return { message: "Verification email sent" };
+  }
+
+  // Unauthenticated by design — the token in the body is itself the proof,
+  // same as POST /auth/reset-password and /employer/verification/confirm.
+  @ApiConfirmVerification()
+  @Post("verification/confirm")
+  @HttpCode(HttpStatus.OK)
+  async confirmVerification(
+    @Body(new ZodValidationPipe(confirmVerificationSchema))
+    body: ConfirmVerificationDto,
+  ) {
+    await this.talentService.confirmVerification(body);
+    return { message: "Email verified" };
   }
 
   // Registered before @Get(':slug') — Nest matches routes in declaration

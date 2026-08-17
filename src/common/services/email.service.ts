@@ -115,6 +115,15 @@ export class EmailService {
     );
   }
 
+  async sendTalentVerificationEmail(to: string, token: string): Promise<void> {
+    const verifyUrl = `${this.appUrl}/talent/verify?token=${token}`;
+    await this.send(
+      to,
+      "Verify your email",
+      `<p>Confirm you control this address by clicking <a href="${verifyUrl}">here</a>. This link expires in 1 hour.</p>`,
+    );
+  }
+
   async sendJobLiveEmail(
     to: string,
     jobTitle: string,

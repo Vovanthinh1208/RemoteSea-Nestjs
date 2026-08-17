@@ -48,6 +48,12 @@ export const publicProfileArgs = {
     githubUrl: true,
     linkedinUrl: true,
     isOpenToWork: true,
+    // The one flag any "Verified" badge reads — verificationEmail/
+    // verificationStatus (the submission-process internals) deliberately
+    // stay out of this select, same split as EmployerRepository's
+    // publicProfileSelect vs profileSelect.
+    isVerified: true,
+    verifiedAt: true,
     // Not part of the public response shape (stripped in
     // TalentMapper.toPublicProfile) — selected here only so
     // TalentService.getPublicProfile can enforce it before the profile is
