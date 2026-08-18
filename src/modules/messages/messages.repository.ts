@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "@/core/database/prisma.service";
+import { applicationPartiesSelect } from "@/common/interfaces/application-parties.interface";
 import {
   messageSelect,
   type CreateMessageInput,
@@ -43,18 +44,7 @@ export class MessagesRepository {
   findApplicationForTalentOwnership(id: string) {
     return this.prisma.application.findUnique({
       where: { id },
-      select: {
-        id: true,
-        talent: { select: { userId: true, user: { select: { name: true } } } },
-        job: {
-          select: {
-            title: true,
-            employer: {
-              select: { userId: true, companyName: true },
-            },
-          },
-        },
-      },
+      select: applicationPartiesSelect,
     });
   }
 }

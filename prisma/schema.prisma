@@ -165,6 +165,8 @@ enum NotificationType {
   APPLICATION_STATUS_CHANGED
   JOB_REPORT_RESOLVED
   MESSAGE_RECEIVED
+  INTERVIEW_PROPOSED
+  INTERVIEW_CONFIRMED
 }
 
 // In-app notification feed (bell + /notifications page). Content is baked in
@@ -632,6 +634,7 @@ model Application {
   talent       TalentProfile            @relation(fields: [talentId], references: [id], onDelete: Cascade)
   statusEvents ApplicationStatusEvent[]
   messages     Message[]
+  interview    Interview?
 
   @@unique([jobId, talentId])
   @@index([talentId, appliedAt])
@@ -664,6 +667,32 @@ model Message {
   // it would on a low-volume table.
   @@index([senderId])
   @@map("messages")
+}
+
+enum InterviewStatus {
+  PENDING
+  CONFIRMED
+}
+
+// 1:1 with Application (applicationId unique) — v1 supports exactly one
+// active interview per application, no history of past proposals and no
+// CANCELLED state (confirmed with the user: v1 has no cancel/decline path —
+// the employer may revise proposedSlots freely while still PENDING, but the
+// row is locked once CONFIRMED).
+model Interview {
+  id              String          @id @default(cuid())
+  applicationId   String          @unique
+  durationMinutes Int
+  proposedSlots   DateTime[]
+  confirmedSlot   DateTime?
+  meetingUrl      String?
+  status          InterviewStatus @default(PENDING)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@map("interviews")
 }
 
 // One row per status an Application has ever been in (including the initial

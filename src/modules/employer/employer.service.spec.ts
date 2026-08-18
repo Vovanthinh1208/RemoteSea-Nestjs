@@ -38,6 +38,10 @@ const makeService = (
     list: jest.fn(),
     send: jest.fn(),
   };
+  const interviewsService = {
+    get: jest.fn(),
+    propose: jest.fn(),
+  };
   // No-op cache (always a miss, set() does nothing) — fine for every
   // existing test in this file since none of them exercise the cached
   // getPublicResponseHours path, which builds its own cache stub instead.
@@ -49,6 +53,7 @@ const makeService = (
     emailService as never,
     notificationsService as never,
     messagesService as never,
+    interviewsService as never,
     cache as never,
   );
   return {
@@ -57,6 +62,7 @@ const makeService = (
     emailService,
     notificationsService,
     messagesService,
+    interviewsService,
     cache,
   };
 };
@@ -497,5 +503,41 @@ describe("EmployerService.listApplicationMessages / sendApplicationMessage", () 
       body: "hi",
     });
     expect(result).toEqual({ id: "m2" });
+  });
+});
+
+describe("EmployerService.getApplicationInterview / proposeInterview", () => {
+  it("delegates getting to InterviewsService", async () => {
+    const { service, interviewsService } = makeService();
+    interviewsService.get.mockResolvedValue({
+      interview: null,
+      jobTitle: "Engineer",
+      employerName: "Acme",
+      talentName: "Talent One",
+    });
+
+    const result = await service.getApplicationInterview(application);
+
+    expect(interviewsService.get).toHaveBeenCalledWith(application);
+    expect(result).toEqual({
+      interview: null,
+      jobTitle: "Engineer",
+      employerName: "Acme",
+      talentName: "Talent One",
+    });
+  });
+
+  it("delegates proposing to InterviewsService", async () => {
+    const { service, interviewsService } = makeService();
+    interviewsService.propose.mockResolvedValue({ id: "intv-1" });
+
+    const dto = {
+      durationMinutes: 30,
+      proposedSlots: ["2026-08-25T07:00:00.000Z"],
+    };
+    const result = await service.proposeInterview(application, dto);
+
+    expect(interviewsService.propose).toHaveBeenCalledWith(application, dto);
+    expect(result).toEqual({ id: "intv-1" });
   });
 });

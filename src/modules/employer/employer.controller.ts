@@ -46,6 +46,10 @@ import {
   sendMessageSchema,
   type SendMessageDto,
 } from "@/modules/messages/dto/send-message.dto";
+import {
+  proposeInterviewSchema,
+  type ProposeInterviewDto,
+} from "@/modules/interviews/dto/propose-interview.dto";
 import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
@@ -80,6 +84,11 @@ import {
   ApiSendMessage,
 } from "@/modules/messages/docs/messages.swagger";
 import { RATE_LIMITS as MESSAGE_RATE_LIMITS } from "@/modules/messages/constants";
+import {
+  ApiGetInterview,
+  ApiProposeInterview,
+} from "@/modules/interviews/docs/interviews.swagger";
+import { RATE_LIMITS as INTERVIEW_RATE_LIMITS } from "@/modules/interviews/constants";
 
 @ApiEmployerTag()
 @Controller("employer")
@@ -231,6 +240,35 @@ export class EmployerController {
       user.id,
       body,
     );
+  }
+
+  @ApiGetInterview()
+  @Get("applications/:id/interview")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
+  @Roles("EMPLOYER")
+  getApplicationInterview(
+    @CurrentResource() application: ApplicationWithJobOwner,
+  ) {
+    return this.employerService.getApplicationInterview(application);
+  }
+
+  @ApiProposeInterview()
+  @Post("applications/:id/interview")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
+  @Roles("EMPLOYER")
+  @HttpCode(HttpStatus.CREATED)
+  proposeInterview(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentResource() application: ApplicationWithJobOwner,
+    @Body(new ZodValidationPipe(proposeInterviewSchema))
+    body: ProposeInterviewDto,
+  ) {
+    this.rateLimitService.enforce(
+      `propose-interview:${user.id}`,
+      INTERVIEW_RATE_LIMITS.PROPOSE_INTERVIEW.limit,
+      INTERVIEW_RATE_LIMITS.PROPOSE_INTERVIEW.windowMs,
+    );
+    return this.employerService.proposeInterview(application, body);
   }
 
   @ApiSubmitVerification()
