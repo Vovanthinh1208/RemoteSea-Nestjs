@@ -27,7 +27,9 @@ const makeService = (overrides?: {
     findUserIdByEmail: jest.fn(),
     createUser: jest.fn(),
     createSession: jest.fn().mockResolvedValue({ id: "s1" }),
-    findSessionState: jest.fn().mockResolvedValue({ id: "s1", revokedAt: null }),
+    findSessionState: jest
+      .fn()
+      .mockResolvedValue({ id: "s1", revokedAt: null }),
     findOrCreateOAuthUser: jest.fn(),
     createVerificationToken: jest.fn(),
     findVerificationToken: jest.fn(),
@@ -270,7 +272,9 @@ describe("AuthService.verifySession", () => {
       jwtService: { sign: jest.fn(), verify },
     });
 
-    await expect(service.verifySession("Be" + "arer bad.token")).resolves.toBeNull();
+    await expect(
+      service.verifySession("Be" + "arer bad.token"),
+    ).resolves.toBeNull();
   });
 
   it("maps a valid token's payload to an AuthenticatedUser", async () => {
