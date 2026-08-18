@@ -32,7 +32,14 @@ FROM base AS prod-deps
 # in this stage only; the runner copies just node_modules.
 RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# --ignore-scripts: package.json's postinstall runs `prisma generate`, which
+# needs prisma/schema.prisma — not copied into this stage (only package.json/
+# package-lock.json are, above), so it would fail with "schema not found".
+# This stage is only meant to produce a clean prod node_modules; the runner
+# below copies the *real* generated client from the build stage instead (see
+# the COPY --from=build lines further down), so running generate here would
+# be both broken and wasted work even if it were fixed by copying the schema.
+RUN npm ci --omit=dev --ignore-scripts
 
 # ─── Runner ─────────────────────────────────────────────────────────────────
 FROM base AS runner
