@@ -8,7 +8,11 @@ import {
   type ProfileWithJobCount,
   type PublicEmployerProfile,
 } from "./employer.repository";
-import { ALLOWED_TRANSITIONS, VERIFICATION_TOKEN_TTL_MS } from "./constants";
+import {
+  ALLOWED_TRANSITIONS,
+  APPLICATION_STATUS_LABELS,
+  VERIFICATION_TOKEN_TTL_MS,
+} from "./constants";
 import type { CreateEmployerProfileDto } from "./dto/create-employer-profile.dto";
 import type { UpdateEmployerProfileDto } from "./dto/update-employer-profile.dto";
 import type { ListEmployerJobsDto } from "./dto/list-employer-jobs.dto";
@@ -24,6 +28,7 @@ import { isOwnedUploadUrl } from "@/modules/uploads/upload-url.util";
 import { UploadsService } from "@/modules/uploads/uploads.service";
 import type { EnvConfig } from "@/core/config/env.validation";
 import { EmailService } from "@/common/services/email.service";
+import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { runInBackground } from "@/common/utils/background-task.util";
 import { getOrSetCache } from "@/common/caching/cache.util";
 import {
@@ -50,6 +55,7 @@ export class EmployerService {
     private readonly config: ConfigService<EnvConfig, true>,
     private readonly uploadsService: UploadsService,
     private readonly emailService: EmailService,
+    private readonly notificationsService: NotificationsService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
@@ -363,6 +369,24 @@ export class EmployerService {
         ErrorCode.APPLICATION_UPDATE_CONFLICT,
       );
     }
+
+    // Only a real transition is notification-worthy — a notes-only save
+    // (status === application.status) already skips the audit-log event for
+    // the same reason, see EmployerRepository.updateApplication's comment.
+    if (status !== application.status) {
+      runInBackground(
+        this.notificationsService.create({
+          userId: application.talent.userId,
+          type: "APPLICATION_STATUS_CHANGED",
+          title: "Your application status changed",
+          body: `Your application for ${application.job.title} is now ${APPLICATION_STATUS_LABELS[status]}.`,
+          link: "/talent",
+        }),
+        this.logger,
+        `Failed to create application-status notification for application ${application.id}`,
+      );
+    }
+
     return updated;
   }
 }

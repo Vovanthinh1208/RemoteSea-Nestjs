@@ -10,7 +10,14 @@ import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.i
 
 const makeService = (repoOverrides: Partial<JobReportsRepository> = {}) => {
   const repo = { ...repoOverrides } as unknown as JobReportsRepository;
-  return { service: new JobReportsService(repo), repo };
+  const notificationsService = {
+    create: jest.fn().mockResolvedValue(undefined),
+  };
+  return {
+    service: new JobReportsService(repo, notificationsService as never),
+    repo,
+    notificationsService,
+  };
 };
 
 const talentUser: AuthenticatedUser = {
@@ -141,16 +148,19 @@ describe("JobReportsService.resolve", () => {
     });
   });
 
-  it("resolves an OPEN report", async () => {
+  it("resolves an OPEN report and notifies the reporter", async () => {
     const updateStatus = jest.fn().mockResolvedValue({
       id: "rep-1",
       status: "RESOLVED",
       resolvedAt: new Date(),
     });
-    const { service } = makeService({
-      findByIdForAdmin: jest
-        .fn()
-        .mockResolvedValue({ id: "rep-1", status: "OPEN" }),
+    const { service, notificationsService } = makeService({
+      findByIdForAdmin: jest.fn().mockResolvedValue({
+        id: "rep-1",
+        status: "OPEN",
+        reporterId: "reporter-1",
+        job: { title: "Backend Engineer", slug: "backend-engineer-a1b2c3" },
+      }),
       updateStatus,
     });
 
@@ -162,18 +172,28 @@ describe("JobReportsService.resolve", () => {
 
     expect(updateStatus).toHaveBeenCalledWith("rep-1", "RESOLVED");
     expect(result.status).toBe("RESOLVED");
+    expect(notificationsService.create).toHaveBeenCalledWith({
+      userId: "reporter-1",
+      type: "JOB_REPORT_RESOLVED",
+      title: "Your report was resolved",
+      body: 'Your report on "Backend Engineer" has been resolved.',
+      link: "/jobs/backend-engineer-a1b2c3",
+    });
   });
 
-  it("dismisses an OPEN report", async () => {
+  it("dismisses an OPEN report and notifies the reporter", async () => {
     const updateStatus = jest.fn().mockResolvedValue({
       id: "rep-1",
       status: "DISMISSED",
       resolvedAt: new Date(),
     });
-    const { service } = makeService({
-      findByIdForAdmin: jest
-        .fn()
-        .mockResolvedValue({ id: "rep-1", status: "OPEN" }),
+    const { service, notificationsService } = makeService({
+      findByIdForAdmin: jest.fn().mockResolvedValue({
+        id: "rep-1",
+        status: "OPEN",
+        reporterId: "reporter-1",
+        job: { title: "Backend Engineer", slug: "backend-engineer-a1b2c3" },
+      }),
       updateStatus,
     });
 
@@ -185,5 +205,12 @@ describe("JobReportsService.resolve", () => {
 
     expect(updateStatus).toHaveBeenCalledWith("rep-1", "DISMISSED");
     expect(result.status).toBe("DISMISSED");
+    expect(notificationsService.create).toHaveBeenCalledWith({
+      userId: "reporter-1",
+      type: "JOB_REPORT_RESOLVED",
+      title: "Your report was dismissed",
+      body: 'Your report on "Backend Engineer" has been dismissed.',
+      link: "/jobs/backend-engineer-a1b2c3",
+    });
   });
 });

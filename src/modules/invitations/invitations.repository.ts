@@ -36,7 +36,13 @@ export class InvitationsRepository {
   findJobForInvite(jobId: string) {
     return this.prisma.job.findUnique({
       where: { id: jobId },
-      select: { id: true, title: true, status: true, employerId: true },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        status: true,
+        employerId: true,
+      },
     });
   }
 

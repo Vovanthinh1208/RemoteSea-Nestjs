@@ -45,12 +45,15 @@ export class JobReportsRepository {
     });
   }
 
-  findByIdForAdmin(
-    id: string,
-  ): Promise<Pick<JobReport, "id" | "status"> | null> {
+  findByIdForAdmin(id: string) {
     return this.prisma.jobReport.findUnique({
       where: { id },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        reporterId: true,
+        job: { select: { title: true, slug: true } },
+      },
     });
   }
 

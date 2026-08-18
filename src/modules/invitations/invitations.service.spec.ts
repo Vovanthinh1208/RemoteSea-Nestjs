@@ -14,10 +14,18 @@ const emailService = {
   sendApplicationReceivedEmail: jest.fn().mockResolvedValue(undefined),
 };
 
+const notificationsService = {
+  create: jest.fn().mockResolvedValue(undefined),
+};
+
 const makeService = (repoOverrides: Partial<InvitationsRepository> = {}) => {
   const repo = { ...repoOverrides } as unknown as InvitationsRepository;
   return {
-    service: new InvitationsService(repo, emailService as never),
+    service: new InvitationsService(
+      repo,
+      emailService as never,
+      notificationsService as never,
+    ),
     repo,
   };
 };
@@ -88,7 +96,7 @@ describe("InvitationsService.send", () => {
     });
   });
 
-  it("skips the notification email when employerMessages is disabled but still creates the invitation", async () => {
+  it("skips the notification email when employerMessages is disabled but still creates the invitation and the in-app notification", async () => {
     const create = jest.fn().mockResolvedValue({ id: "inv-1" });
     const { service } = makeService({
       findEmployerProfileByUserId: jest
@@ -97,6 +105,7 @@ describe("InvitationsService.send", () => {
       findJobForInvite: jest.fn().mockResolvedValue({
         id: "job-1",
         title: "Engineer",
+        slug: "engineer-a1b2c3",
         status: "ACTIVE",
         employerId: "employer-1",
       }),
@@ -114,6 +123,15 @@ describe("InvitationsService.send", () => {
 
     expect(create).toHaveBeenCalled();
     expect(emailService.sendJobInvitationEmail).not.toHaveBeenCalled();
+    // In-app notifications are a separate, always-on channel — the email
+    // toggle above must not suppress this.
+    expect(notificationsService.create).toHaveBeenCalledWith({
+      userId: "talent-user-1",
+      type: "INVITATION_RECEIVED",
+      title: "Acme invited you to apply",
+      body: "You've been invited to apply for Engineer.",
+      link: "/jobs/engineer-a1b2c3",
+    });
   });
 });
 

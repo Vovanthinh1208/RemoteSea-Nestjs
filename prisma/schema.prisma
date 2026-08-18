@@ -133,6 +133,7 @@ model User {
   savedJobs              SavedJob[]
   notificationPreference NotificationPreference?
   jobReports             JobReport[]
+  notifications          Notification[]
 
   @@map("users")
 }
@@ -156,6 +157,36 @@ model NotificationPreference {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notification_preferences")
+}
+
+enum NotificationType {
+  INVITATION_RECEIVED
+  APPLICATION_STATUS_CHANGED
+  JOB_REPORT_RESOLVED
+}
+
+// In-app notification feed (bell + /notifications page). Content is baked in
+// at creation time — same philosophy as EmailService.sendXxx hard-coding
+// subject/HTML at send time rather than computing it at read time — so
+// `type` is a lean classifier only (future per-type icon), never used to
+// derive title/body/link dynamically. Not gated by NotificationPreference:
+// that model governs the external email/push channel, this is a separate,
+// always-on in-app channel.
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String?          @db.Text
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("notifications")
 }
 
 model Account {

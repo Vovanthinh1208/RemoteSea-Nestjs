@@ -22,6 +22,7 @@ import { AlertsModule } from "@/modules/alerts/alerts.module";
 import { BillingModule } from "@/modules/billing/billing.module";
 import { UploadsModule } from "@/modules/uploads/uploads.module";
 import { HealthModule } from "@/modules/health/health.module";
+import { NotificationsModule } from "@/modules/notifications/notifications.module";
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { HealthModule } from "@/modules/health/health.module";
     CacheModule.register({ isGlobal: true }),
     PrismaModule,
     SharedServicesModule,
+    NotificationsModule,
     AuthModule,
     UsersModule,
     TalentModule,

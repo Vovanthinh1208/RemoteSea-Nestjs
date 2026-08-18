@@ -15,7 +15,8 @@ import type { ApplicationWithJobOwner } from "./guards/application-ownership.gua
 const application = {
   id: "app-1",
   status: "PENDING",
-  job: { employer: { userId: "owner-1" } },
+  talent: { userId: "talent-user-1" },
+  job: { title: "Engineer", employer: { userId: "owner-1" } },
 } as unknown as ApplicationWithJobOwner;
 
 const makeService = (
@@ -30,6 +31,9 @@ const makeService = (
     sendEmployerVerificationEmail: jest.fn().mockResolvedValue(undefined),
     ...emailServiceOverrides,
   };
+  const notificationsService = {
+    create: jest.fn().mockResolvedValue(undefined),
+  };
   // No-op cache (always a miss, set() does nothing) — fine for every
   // existing test in this file since none of them exercise the cached
   // getPublicResponseHours path, which builds its own cache stub instead.
@@ -39,15 +43,16 @@ const makeService = (
     {} as never,
     {} as never,
     emailService as never,
+    notificationsService as never,
     cache as never,
   );
-  return { service, repo, emailService, cache };
+  return { service, repo, emailService, notificationsService, cache };
 };
 
 describe("EmployerService.updateApplication", () => {
-  it("allows a valid transition (PENDING -> REVIEWING)", async () => {
+  it("allows a valid transition (PENDING -> REVIEWING) and notifies the talent", async () => {
     const updated = { ...application, status: "REVIEWING" };
-    const { service, repo } = makeService({
+    const { service, repo, notificationsService } = makeService({
       updateApplication: jest.fn().mockResolvedValue(updated),
     });
 
@@ -61,6 +66,13 @@ describe("EmployerService.updateApplication", () => {
       undefined,
     );
     expect(result).toBe(updated);
+    expect(notificationsService.create).toHaveBeenCalledWith({
+      userId: "talent-user-1",
+      type: "APPLICATION_STATUS_CHANGED",
+      title: "Your application status changed",
+      body: "Your application for Engineer is now In review.",
+      link: "/talent",
+    });
   });
 
   it("rejects an invalid transition (PENDING -> OFFERED)", async () => {
@@ -71,9 +83,9 @@ describe("EmployerService.updateApplication", () => {
     ).rejects.toBeInstanceOf(BadRequestApiException);
   });
 
-  it("allows a no-op status update (same status, e.g. notes-only edit)", async () => {
+  it("allows a no-op status update (same status, e.g. notes-only edit) without notifying", async () => {
     const updated = { ...application };
-    const { service, repo } = makeService({
+    const { service, repo, notificationsService } = makeService({
       updateApplication: jest.fn().mockResolvedValue(updated),
     });
 
@@ -87,6 +99,7 @@ describe("EmployerService.updateApplication", () => {
       "PENDING",
       "left a note",
     );
+    expect(notificationsService.create).not.toHaveBeenCalled();
   });
 
   it("throws Conflict when the row was updated concurrently", async () => {

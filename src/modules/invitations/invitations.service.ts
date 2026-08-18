@@ -9,6 +9,7 @@ import { ErrorCode } from "@/common/exceptions/error-codes";
 import { assertFound } from "@/common/utils/assert-found";
 import { runInBackground } from "@/common/utils/background-task.util";
 import { EmailService } from "@/common/services/email.service";
+import { NotificationsService } from "@/modules/notifications/notifications.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import { InvitationsRepository } from "./invitations.repository";
 import type { SendInvitationDto } from "./dto/send-invitation.dto";
@@ -22,6 +23,7 @@ export class InvitationsService {
   constructor(
     private readonly invitationsRepository: InvitationsRepository,
     private readonly emailService: EmailService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async send(
@@ -105,6 +107,20 @@ export class InvitationsService {
         `Failed to send invitation email for invitation ${invitation.id}`,
       );
     }
+
+    // In-app notification is a separate, always-on channel — unlike the
+    // email above, it's never gated by NotificationPreference.employerMessages.
+    runInBackground(
+      this.notificationsService.create({
+        userId: talent.userId,
+        type: "INVITATION_RECEIVED",
+        title: `${employer.companyName} invited you to apply`,
+        body: `You've been invited to apply for ${job.title}.`,
+        link: `/jobs/${job.slug}`,
+      }),
+      this.logger,
+      `Failed to create invitation notification for invitation ${invitation.id}`,
+    );
 
     return invitation;
   }

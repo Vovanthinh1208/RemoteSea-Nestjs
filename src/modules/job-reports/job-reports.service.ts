@@ -10,13 +10,18 @@ import {
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { assertFound } from "@/common/utils/assert-found";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
+import { runInBackground } from "@/common/utils/background-task.util";
+import { NotificationsService } from "@/modules/notifications/notifications.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 
 @Injectable()
 export class JobReportsService {
   private readonly logger = new Logger(JobReportsService.name);
 
-  constructor(private readonly jobReportsRepository: JobReportsRepository) {}
+  constructor(
+    private readonly jobReportsRepository: JobReportsRepository,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async create(
     user: AuthenticatedUser,
@@ -81,6 +86,22 @@ export class JobReportsService {
     // same reasoning as AdminService.reviewJob/updateEmployer's own logging.
     const verb = dto.action === "resolve" ? "resolved" : "dismissed";
     this.logger.log(`Report ${id} ${verb} by admin ${adminId}`);
+
+    runInBackground(
+      this.notificationsService.create({
+        userId: report.reporterId,
+        type: "JOB_REPORT_RESOLVED",
+        title:
+          verb === "resolved"
+            ? "Your report was resolved"
+            : "Your report was dismissed",
+        body: `Your report on "${report.job.title}" has been ${verb}.`,
+        link: `/jobs/${report.job.slug}`,
+      }),
+      this.logger,
+      `Failed to create job-report notification for report ${id}`,
+    );
+
     return updated;
   }
 }

@@ -98,6 +98,9 @@ export const ErrorCode = {
   JOB_REPORT_NOT_FOUND: "JOB_REPORT_NOT_FOUND",
   JOB_REPORT_ALREADY_RESOLVED: "JOB_REPORT_ALREADY_RESOLVED",
   JOB_ALREADY_REPORTED: "JOB_ALREADY_REPORTED",
+
+  // Notifications
+  NOTIFICATION_NOT_FOUND: "NOTIFICATION_NOT_FOUND",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
