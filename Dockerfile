@@ -32,14 +32,16 @@ FROM base AS prod-deps
 # in this stage only; the runner copies just node_modules.
 RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json ./
-# --ignore-scripts: package.json's postinstall runs `prisma generate`, which
-# needs prisma/schema.prisma — not copied into this stage (only package.json/
-# package-lock.json are, above), so it would fail with "schema not found".
-# This stage is only meant to produce a clean prod node_modules; the runner
-# below copies the *real* generated client from the build stage instead (see
-# the COPY --from=build lines further down), so running generate here would
-# be both broken and wasted work even if it were fixed by copying the schema.
-RUN npm ci --omit=dev --ignore-scripts
+# package.json's postinstall runs `prisma generate`, which needs
+# prisma/schema.prisma — without this, npm ci fails with "schema not found".
+# (Deliberately not fixed with --ignore-scripts: that would also skip
+# bcrypt's own install-time step, which is exactly what the python3/make/g++
+# toolchain above exists to support as a from-source fallback on Alpine/musl
+# — silently breaking bcrypt at runtime instead of failing loudly here at
+# build time.) The client this generates gets discarded either way; the
+# runner stage below copies the real one from the build stage instead.
+COPY prisma ./prisma
+RUN npm ci --omit=dev
 
 # ─── Runner ─────────────────────────────────────────────────────────────────
 FROM base AS runner
