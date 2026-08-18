@@ -38,6 +38,10 @@ import {
   confirmVerificationSchema,
   type ConfirmVerificationDto,
 } from "./dto/confirm-verification.dto";
+import {
+  sendMessageSchema,
+  type SendMessageDto,
+} from "@/modules/messages/dto/send-message.dto";
 import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
@@ -66,6 +70,11 @@ import {
   ApiUpdateApplication,
   ApiUpdateEmployerProfile,
 } from "./docs/employer.swagger";
+import {
+  ApiListMessages,
+  ApiSendMessage,
+} from "@/modules/messages/docs/messages.swagger";
+import { RATE_LIMITS as MESSAGE_RATE_LIMITS } from "@/modules/messages/constants";
 
 @ApiEmployerTag()
 @Controller("employer")
@@ -163,6 +172,38 @@ export class EmployerController {
       RATE_LIMITS.UPDATE_APPLICATION.windowMs,
     );
     return this.employerService.updateApplication(application, body);
+  }
+
+  @ApiListMessages()
+  @Get("applications/:id/messages")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
+  @Roles("EMPLOYER")
+  listApplicationMessages(
+    @CurrentResource() application: ApplicationWithJobOwner,
+  ) {
+    return this.employerService.listApplicationMessages(application);
+  }
+
+  @ApiSendMessage()
+  @Post("applications/:id/messages")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
+  @Roles("EMPLOYER")
+  @HttpCode(HttpStatus.CREATED)
+  sendApplicationMessage(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentResource() application: ApplicationWithJobOwner,
+    @Body(new ZodValidationPipe(sendMessageSchema)) body: SendMessageDto,
+  ) {
+    this.rateLimitService.enforce(
+      `send-message:${user.id}`,
+      MESSAGE_RATE_LIMITS.SEND_MESSAGE.limit,
+      MESSAGE_RATE_LIMITS.SEND_MESSAGE.windowMs,
+    );
+    return this.employerService.sendApplicationMessage(
+      application,
+      user.id,
+      body,
+    );
   }
 
   @ApiSubmitVerification()

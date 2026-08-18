@@ -513,11 +513,13 @@ export class EmployerRepository {
       select: {
         id: true,
         status: true,
-        talent: { select: { userId: true } },
+        talent: { select: { userId: true, user: { select: { name: true } } } },
         job: {
           select: {
             title: true,
-            employer: { select: { userId: true } },
+            employer: {
+              select: { userId: true, companyName: true },
+            },
           },
         },
       },

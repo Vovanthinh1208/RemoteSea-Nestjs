@@ -134,6 +134,7 @@ model User {
   notificationPreference NotificationPreference?
   jobReports             JobReport[]
   notifications          Notification[]
+  messages               Message[]
 
   @@map("users")
 }
@@ -163,6 +164,7 @@ enum NotificationType {
   INVITATION_RECEIVED
   APPLICATION_STATUS_CHANGED
   JOB_REPORT_RESOLVED
+  MESSAGE_RECEIVED
 }
 
 // In-app notification feed (bell + /notifications page). Content is baked in
@@ -629,6 +631,7 @@ model Application {
   job          Job                      @relation(fields: [jobId], references: [id], onDelete: Cascade)
   talent       TalentProfile            @relation(fields: [talentId], references: [id], onDelete: Cascade)
   statusEvents ApplicationStatusEvent[]
+  messages     Message[]
 
   @@unique([jobId, talentId])
   @@index([talentId, appliedAt])
@@ -636,6 +639,31 @@ model Application {
   // Backs the backlog-reminder cron's WHERE status IN (...) AND appliedAt < ...
   @@index([status, appliedAt])
   @@map("applications")
+}
+
+// A single 1:1 thread per Application — the natural, already-authorized
+// boundary between one talent and one employer. No per-message readAt:
+// unread signaling is fully delegated to the Notification Center (a new
+// message creates a MESSAGE_RECEIVED Notification) instead of a second,
+// parallel unread system.
+model Message {
+  id            String   @id @default(cuid())
+  applicationId String
+  senderId      String
+  body          String   @db.Text
+  createdAt     DateTime @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  sender      User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+  // Without this, DELETE /users/me's cascade (UsersService.deleteAccount)
+  // has to full-scan `messages` to find this user's sent rows — messages
+  // is the highest-write-volume table in the schema (up to 30 inserts/hour
+  // per user, no cap on thread count), so this index matters more here than
+  // it would on a low-volume table.
+  @@index([senderId])
+  @@map("messages")
 }
 
 // One row per status an Application has ever been in (including the initial

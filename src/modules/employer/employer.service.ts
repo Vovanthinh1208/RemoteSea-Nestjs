@@ -29,6 +29,8 @@ import { UploadsService } from "@/modules/uploads/uploads.service";
 import type { EnvConfig } from "@/core/config/env.validation";
 import { EmailService } from "@/common/services/email.service";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
+import { MessagesService } from "@/modules/messages/messages.service";
+import type { SendMessageDto } from "@/modules/messages/dto/send-message.dto";
 import { runInBackground } from "@/common/utils/background-task.util";
 import { getOrSetCache } from "@/common/caching/cache.util";
 import {
@@ -56,6 +58,7 @@ export class EmployerService {
     private readonly uploadsService: UploadsService,
     private readonly emailService: EmailService,
     private readonly notificationsService: NotificationsService,
+    private readonly messagesService: MessagesService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
@@ -388,5 +391,17 @@ export class EmployerService {
     }
 
     return updated;
+  }
+
+  listApplicationMessages(application: ApplicationWithJobOwner) {
+    return this.messagesService.list(application);
+  }
+
+  sendApplicationMessage(
+    application: ApplicationWithJobOwner,
+    userId: string,
+    dto: SendMessageDto,
+  ) {
+    return this.messagesService.send(application, userId, dto);
   }
 }

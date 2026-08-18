@@ -34,6 +34,10 @@ const makeService = (
   const notificationsService = {
     create: jest.fn().mockResolvedValue(undefined),
   };
+  const messagesService = {
+    list: jest.fn(),
+    send: jest.fn(),
+  };
   // No-op cache (always a miss, set() does nothing) — fine for every
   // existing test in this file since none of them exercise the cached
   // getPublicResponseHours path, which builds its own cache stub instead.
@@ -44,9 +48,17 @@ const makeService = (
     {} as never,
     emailService as never,
     notificationsService as never,
+    messagesService as never,
     cache as never,
   );
-  return { service, repo, emailService, notificationsService, cache };
+  return {
+    service,
+    repo,
+    emailService,
+    notificationsService,
+    messagesService,
+    cache,
+  };
 };
 
 describe("EmployerService.updateApplication", () => {
@@ -324,5 +336,43 @@ describe("EmployerService.getPublicCompanyProfile", () => {
       avgFirstResponseHours: 12,
       jobs: [{ id: "job-1" }],
     });
+  });
+});
+
+describe("EmployerService.listApplicationMessages / sendApplicationMessage", () => {
+  it("delegates listing to MessagesService", async () => {
+    const { service, messagesService } = makeService();
+    messagesService.list.mockResolvedValue({
+      messages: [{ id: "m1" }],
+      jobTitle: "Engineer",
+      employerName: "Acme",
+      talentName: "Talent One",
+    });
+
+    const result = await service.listApplicationMessages(application);
+
+    expect(messagesService.list).toHaveBeenCalledWith(application);
+    expect(result).toEqual({
+      messages: [{ id: "m1" }],
+      jobTitle: "Engineer",
+      employerName: "Acme",
+      talentName: "Talent One",
+    });
+  });
+
+  it("delegates sending to MessagesService", async () => {
+    const { service, messagesService } = makeService();
+    messagesService.send.mockResolvedValue({ id: "m2" });
+
+    const result = await service.sendApplicationMessage(
+      application,
+      "owner-1",
+      { body: "hi" },
+    );
+
+    expect(messagesService.send).toHaveBeenCalledWith(application, "owner-1", {
+      body: "hi",
+    });
+    expect(result).toEqual({ id: "m2" });
   });
 });
