@@ -15,12 +15,14 @@ import { JobsModule } from "@/modules/jobs/jobs.module";
 import { TaxonomyModule } from "@/modules/taxonomy/taxonomy.module";
 import { SalaryModule } from "@/modules/salary/salary.module";
 import { ApplicationsModule } from "@/modules/applications/applications.module";
+import { InvitationsModule } from "@/modules/invitations/invitations.module";
 import { SavedModule } from "@/modules/saved/saved.module";
 import { AdminModule } from "@/modules/admin/admin.module";
 import { AlertsModule } from "@/modules/alerts/alerts.module";
 import { BillingModule } from "@/modules/billing/billing.module";
 import { UploadsModule } from "@/modules/uploads/uploads.module";
 import { HealthModule } from "@/modules/health/health.module";
+import { NotificationsModule } from "@/modules/notifications/notifications.module";
 
 @Module({
   imports: [
@@ -34,6 +36,7 @@ import { HealthModule } from "@/modules/health/health.module";
     CacheModule.register({ isGlobal: true }),
     PrismaModule,
     SharedServicesModule,
+    NotificationsModule,
     AuthModule,
     UsersModule,
     TalentModule,
@@ -44,6 +47,7 @@ import { HealthModule } from "@/modules/health/health.module";
     TaxonomyModule,
     SalaryModule,
     ApplicationsModule,
+    InvitationsModule,
     SavedModule,
     AdminModule,
     AlertsModule,

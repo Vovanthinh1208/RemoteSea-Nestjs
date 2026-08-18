@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { TalentProfile, User } from "@prisma/client";
+import type { Prisma, TalentProfile, User } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 import type { TalentProfileDto } from "./dto/update-talent-profile.dto";
 import {
@@ -10,6 +10,10 @@ import {
   type PublicTalentProfile,
   type TalentProfileWithSkills,
 } from "./interfaces";
+import {
+  talentSearchItemSelect,
+  type TalentSearchItem,
+} from "@/common/types/talent-search-item.type";
 
 type ProfileScalarData = Omit<TalentProfileDto, "skills">;
 
@@ -45,6 +49,79 @@ export class TalentRepository {
       select: { isVerified: true },
     });
     return employer?.isVerified ?? false;
+  }
+
+  findProfileForVerification(userId: string): Promise<{ id: string } | null> {
+    return this.prisma.talentProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+  }
+
+  // Deletes any prior unconsumed row for this talent first (resubmitting
+  // with a new/different address invalidates the old link, not a second
+  // live token), then creates the fresh one and marks the profile PENDING —
+  // one transaction so a submit can't half-apply. Mirrors
+  // EmployerRepository.createEmailVerification exactly, minus the
+  // domain-match precondition (nothing to validate it against here).
+  async createEmailVerification(
+    talentId: string,
+    email: string,
+    token: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.talentEmailVerification.deleteMany({
+        where: { talentId, consumedAt: null },
+      }),
+      this.prisma.talentEmailVerification.create({
+        data: { talentId, email, token, expiresAt },
+      }),
+      this.prisma.talentProfile.update({
+        where: { id: talentId },
+        data: { verificationEmail: email, verificationStatus: "PENDING" },
+      }),
+    ]);
+  }
+
+  findEmailVerificationByToken(token: string) {
+    return this.prisma.talentEmailVerification.findUnique({
+      where: { token },
+    });
+  }
+
+  markVerificationFailed(talentId: string): Promise<TalentProfile> {
+    return this.prisma.talentProfile.update({
+      where: { id: talentId },
+      data: { verificationStatus: "FAILED" },
+    });
+  }
+
+  // Conditional updateMany (consumedAt: null), not a plain update — same
+  // single-use-under-a-race guarantee as
+  // EmployerRepository.consumeEmailVerification. Returns false if the row
+  // was already consumed (or never existed) by the time this runs.
+  async consumeEmailVerification(
+    verificationId: string,
+    talentId: string,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.talentEmailVerification.updateMany({
+        where: { id: verificationId, consumedAt: null },
+        data: { consumedAt: new Date() },
+      });
+      if (count === 0) return false;
+
+      await tx.talentProfile.update({
+        where: { id: talentId },
+        data: {
+          isVerified: true,
+          verifiedAt: new Date(),
+          verificationStatus: "VERIFIED",
+        },
+      });
+      return true;
+    });
   }
 
   // upsertProfile only needs these 3 scalars (to validate the *effective*
@@ -103,5 +180,23 @@ export class TalentRepository {
       where: { id },
       ...talentProfileWithSkillsArgs,
     });
+  }
+
+  search(
+    where: Prisma.TalentProfileWhereInput,
+    skip: number,
+    take: number,
+  ): Promise<TalentSearchItem[]> {
+    return this.prisma.talentProfile.findMany({
+      where,
+      skip,
+      take,
+      orderBy: { updatedAt: "desc" },
+      select: talentSearchItemSelect,
+    });
+  }
+
+  count(where: Prisma.TalentProfileWhereInput): Promise<number> {
+    return this.prisma.talentProfile.count({ where });
   }
 }

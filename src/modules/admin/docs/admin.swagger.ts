@@ -13,10 +13,16 @@ import {
   InternalServerErrorApiResponse,
   UnauthorizedApiResponse,
 } from "@/core/swagger/common.responses";
-import { JOB_STATUS_VALUES } from "@/common/constants/enum-values.constants";
+import {
+  JOB_REPORT_STATUS_VALUES,
+  JOB_STATUS_VALUES,
+} from "@/common/constants/enum-values.constants";
 import {
   ListEmployersResponseDto,
   ListJobsResponseDto,
+  ListReportsResponseDto,
+  ResolveReportRequestDto,
+  ResolveReportResponseDto,
   ReviewJobRequestDto,
   ReviewJobResponseDto,
   RevenueResponseDto,
@@ -26,6 +32,9 @@ import {
 import {
   ListEmployersResponseExample,
   ListJobsResponseExample,
+  ListReportsResponseExample,
+  ResolveReportRequestExample,
+  ResolveReportResponseExample,
   ReviewJobApprovedResponseExample,
   ReviewJobRequestApproveExample,
   ReviewJobRequestRejectExample,
@@ -36,6 +45,8 @@ import {
 import {
   EmployerNotFoundResponse,
   JobNotFoundResponse,
+  ReportAlreadyResolvedResponse,
+  ReportNotFoundResponse,
   ValidationErrorResponse,
 } from "./admin.responses";
 
@@ -162,5 +173,56 @@ export const ApiGetRevenue = () =>
     }),
     UnauthorizedApiResponse,
     ForbiddenApiResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiListReports = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "List job reports for moderation",
+      description:
+        "Lists talent/employer-filed job reports, filtered by status (defaults to OPEN), paginated, newest first. Requires ADMIN role.",
+    }),
+    ApiQuery({
+      name: "status",
+      required: false,
+      enum: JOB_REPORT_STATUS_VALUES,
+      description: "Defaults to OPEN",
+    }),
+    ApiQuery({ name: "page", required: false, type: Number, example: 1 }),
+    ApiQuery({ name: "limit", required: false, type: Number, example: 20 }),
+    ApiOkResponse({
+      description: "Paginated report list",
+      type: ListReportsResponseDto,
+      schema: { example: ListReportsResponseExample },
+    }),
+    ValidationErrorResponse,
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiResolveReport = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "Resolve or dismiss a job report",
+      description:
+        "Marks an OPEN report RESOLVED or DISMISSED. Does not touch the reported Job's own status — resolving a report is a separate action from approving/rejecting the listing itself. No email notifications (neither the reporter nor the employer is told). Requires ADMIN role.",
+    }),
+    ApiParam({ name: "id", description: "JobReport id" }),
+    ApiBody({
+      type: ResolveReportRequestDto,
+      examples: { default: { value: ResolveReportRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "Report resolved",
+      type: ResolveReportResponseDto,
+      schema: { example: ResolveReportResponseExample },
+    }),
+    ValidationErrorResponse,
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
+    ReportNotFoundResponse,
+    ReportAlreadyResolvedResponse,
     InternalServerErrorApiResponse,
   );

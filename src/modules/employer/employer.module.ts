@@ -1,14 +1,18 @@
 import { Module } from "@nestjs/common";
 import { EmployerController } from "./employer.controller";
+import { CompaniesController } from "./companies.controller";
 import { EmployerService } from "./employer.service";
 import { EmployerRepository } from "./employer.repository";
 import { EmployerJobOwnershipGuard } from "./guards/employer-job-ownership.guard";
 import { ApplicationOwnershipGuard } from "./guards/application-ownership.guard";
 import { UploadsModule } from "@/modules/uploads/uploads.module";
+import { MessagesModule } from "@/modules/messages/messages.module";
 
 @Module({
-  imports: [UploadsModule],
-  controllers: [EmployerController],
+  // MessagesModule: EmployerService.listApplicationMessages/sendApplicationMessage
+  // delegate to MessagesService, same shape as AdminModule -> JobReportsModule.
+  imports: [UploadsModule, MessagesModule],
+  controllers: [EmployerController, CompaniesController],
   providers: [
     EmployerService,
     EmployerRepository,

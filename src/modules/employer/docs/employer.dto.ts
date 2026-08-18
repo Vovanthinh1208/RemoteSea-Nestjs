@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   JOB_STATUS_VALUES,
+  JOB_TYPE_VALUES,
   APPLICATION_STATUS_VALUES,
   PLAN_TYPE_VALUES,
   EXPERIENCE_LEVEL_VALUES,
@@ -204,6 +205,13 @@ export class EmployerJobStatsDto {
     description: "Computed only over OFFERED applications; 0 if none",
   })
   avgTimeToHireInDays!: number;
+
+  @ApiProperty({
+    example: 18.2,
+    description:
+      "Average time from appliedAt to the first non-PENDING ApplicationStatusEvent (first real employer action, any status). Computed only over applications with at least one such event; 0 if none.",
+  })
+  avgFirstResponseHours!: number;
 }
 
 export class ListEmployerJobsResponseDto {
@@ -259,6 +267,21 @@ export class JobApplicationListItemDto {
 
   @ApiProperty({ example: "2026-06-10T12:00:00.000Z" })
   appliedAt!: string;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: null,
+    description:
+      "First time this applicant appeared in this response — see EmployerRepository.findApplicationsForJob",
+  })
+  viewedAt!: string | null;
+
+  @ApiProperty({
+    example: "2026-06-10T12:00:00.000Z",
+    description:
+      "Only real status transitions bump this (a notes-only save doesn't)",
+  })
+  updatedAt!: string;
 
   @ApiPropertyOptional({
     example: "I would love to join your team...",
@@ -337,4 +360,174 @@ export class ApplicationResponseDto {
 
   @ApiProperty({ example: "2026-06-15T09:30:00.000Z" })
   updatedAt!: string;
+}
+
+const BULK_UPDATE_FAILURE_REASONS = [
+  "NOT_FOUND",
+  "INVALID_TRANSITION",
+  "STALE",
+] as const;
+
+export class BulkUpdateApplicationsRequestDto {
+  @ApiProperty({
+    type: [String],
+    maxItems: 50,
+    example: ["clapp1a2b3c4d5e6f7g8h9i0", "clapp2a2b3c4d5e6f7g8h9i1"],
+  })
+  ids!: string[];
+
+  @ApiProperty({ enum: APPLICATION_STATUS_VALUES, example: "REJECTED" })
+  status!: (typeof APPLICATION_STATUS_VALUES)[number];
+}
+
+class BulkUpdateFailureDto {
+  @ApiProperty({ example: "clapp2a2b3c4d5e6f7g8h9i1" })
+  id!: string;
+
+  @ApiProperty({
+    enum: BULK_UPDATE_FAILURE_REASONS,
+    example: "INVALID_TRANSITION",
+  })
+  reason!: (typeof BULK_UPDATE_FAILURE_REASONS)[number];
+}
+
+export class BulkUpdateApplicationsResponseDto {
+  @ApiProperty({ type: [String], example: ["clapp1a2b3c4d5e6f7g8h9i0"] })
+  updated!: string[];
+
+  @ApiProperty({ type: [BulkUpdateFailureDto] })
+  failed!: BulkUpdateFailureDto[];
+}
+
+export class SubmitVerificationRequestDto {
+  @ApiProperty({ format: "email", example: "jane@acme.com" })
+  email!: string;
+}
+
+export class ConfirmVerificationRequestDto {
+  @ApiProperty({ minLength: 1, example: "9f3c2a1b8e7d6f5a4c3b2a1908f7e6d5" })
+  token!: string;
+}
+
+export class CompanyJobSummaryDto {
+  @ApiProperty({ example: "cjob1a2b0000ug0h9x1n1a2" })
+  id!: string;
+
+  @ApiProperty({ example: "Senior Backend Engineer" })
+  title!: string;
+
+  @ApiProperty({ enum: JOB_TYPE_VALUES, example: "FULL_TIME" })
+  jobType!: (typeof JOB_TYPE_VALUES)[number];
+
+  @ApiProperty({ enum: EXPERIENCE_LEVEL_VALUES, example: "SENIOR" })
+  level!: (typeof EXPERIENCE_LEVEL_VALUES)[number];
+
+  @ApiPropertyOptional({ example: 3000, nullable: true })
+  salaryMin?: number | null;
+
+  @ApiPropertyOptional({ example: 5000, nullable: true })
+  salaryMax?: number | null;
+
+  @ApiProperty({ example: "USD" })
+  currency!: string;
+
+  @ApiProperty({ example: true })
+  isRemote!: boolean;
+
+  @ApiProperty({ example: false })
+  isFeatured!: boolean;
+
+  @ApiPropertyOptional({ example: "2026-07-11T09:26:19.006Z", nullable: true })
+  publishedAt?: string | null;
+}
+
+export class PublicCompanyProfileDto {
+  @ApiProperty({ example: "clx1a2b3c4d5e6f7g8h9i0j1" })
+  id!: string;
+
+  @ApiProperty({
+    example: "clxuser1a2b3c4d5e6f7g8h9",
+    description:
+      "Owning User.id — lets the frontend show an Edit link when the viewer is the owner",
+  })
+  userId!: string;
+
+  @ApiProperty({ example: "RemoteSEA Ltd" })
+  companyName!: string;
+
+  @ApiProperty({ example: "remotesea-ltd" })
+  slug!: string;
+
+  @ApiPropertyOptional({
+    format: "url",
+    example: "https://remotesea.io/logo.png",
+    nullable: true,
+  })
+  logoUrl?: string | null;
+
+  @ApiPropertyOptional({
+    format: "url",
+    example: "https://remotesea.io",
+    nullable: true,
+  })
+  websiteUrl?: string | null;
+
+  @ApiPropertyOptional({
+    example: "We help remote teams hire across SEA.",
+    nullable: true,
+  })
+  description?: string | null;
+
+  @ApiPropertyOptional({ example: "Technology", nullable: true })
+  industry?: string | null;
+
+  @ApiPropertyOptional({ example: "11-50", nullable: true })
+  size?: string | null;
+
+  @ApiPropertyOptional({ example: 2019, nullable: true })
+  founded?: number | null;
+
+  @ApiPropertyOptional({ example: "Vietnam", nullable: true })
+  hqCountry?: string | null;
+
+  @ApiPropertyOptional({ example: "Ho Chi Minh City", nullable: true })
+  hqCity?: string | null;
+
+  @ApiProperty({ example: true })
+  isVerified!: boolean;
+
+  @ApiPropertyOptional({ example: "2026-05-01T09:00:00.000Z", nullable: true })
+  verifiedAt?: string | null;
+
+  @ApiProperty({ example: "2026-01-05T09:00:00.000Z" })
+  createdAt!: string;
+
+  @ApiProperty({
+    example: 3,
+    description: "Count of this company's currently ACTIVE jobs",
+  })
+  activeJobCount!: number;
+
+  @ApiProperty({
+    example: 12,
+    description:
+      "Sum of vnHireCount across every job this company has ever posted, regardless of status",
+  })
+  vnHireTotal!: number;
+
+  @ApiPropertyOptional({
+    example: 18.5,
+    nullable: true,
+    description:
+      "Same sample-gated stat as GET /jobs/:id's employer.avgFirstResponseHours",
+  })
+  avgFirstResponseHours?: number | null;
+
+  @ApiProperty({ type: [CompanyJobSummaryDto] })
+  jobs!: CompanyJobSummaryDto[];
+}
+
+export class MessageResponseDto {
+  @ApiProperty({ example: "Verification email sent" })
+  message!: string;
 }

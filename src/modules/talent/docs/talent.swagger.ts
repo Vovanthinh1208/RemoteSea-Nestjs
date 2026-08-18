@@ -5,25 +5,38 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiTags,
 } from "@nestjs/swagger";
 import {
+  ForbiddenApiResponse,
   InternalServerErrorApiResponse,
   UnauthorizedApiResponse,
+  rateLimitResponse,
 } from "@/core/swagger/common.responses";
 import {
+  ConfirmVerificationRequestDto,
+  MessageResponseDto,
   PublicTalentProfileResponseDto,
+  SubmitVerificationRequestDto,
   TalentProfileRequestDto,
   TalentProfileResponseDto,
+  TalentSearchResponseDto,
 } from "./talent.dto";
 import {
+  ConfirmVerificationRequestExample,
+  ConfirmVerificationResponseExample,
   OwnTalentProfileExample,
   PublicTalentProfileClosedExample,
   PublicTalentProfileOpenExample,
+  SubmitVerificationRequestExample,
+  SubmitVerificationResponseExample,
   TalentProfileRequestExample,
+  TalentSearchExample,
   UpsertTalentProfileExample,
 } from "./talent.examples";
 import {
+  InvalidOrExpiredVerificationTokenResponse,
   ProfileNotFoundResponse,
   ValidationErrorResponse,
 } from "./talent.responses";
@@ -71,6 +84,63 @@ export const ApiUpsertProfile = () =>
     InternalServerErrorApiResponse,
   );
 
+export const ApiSearchTalent = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Search the talent pool (employer only)",
+      description:
+        "Lets an authenticated EMPLOYER browse candidates instead of only receiving applicants. Only returns profiles with `isOpenToWork: true` — someone who hasn't opted into being found never appears here, regardless of filters. `visibility: VERIFIED_EMPLOYERS` profiles are additionally included only when the caller's own EmployerProfile has `isVerified: true` (same rule `GET /talent/:slug` enforces). No relevance/match ranking — filters are exact-match/contains only; a personalized match score against one of the employer's own jobs is computed client-side, the same way it already is for GET /jobs and the applicants list.",
+    }),
+    ApiQuery({ name: "q", required: false, example: "backend engineer" }),
+    ApiQuery({
+      name: "skills",
+      required: false,
+      isArray: true,
+      example: ["clx4skill0001node"],
+    }),
+    ApiQuery({
+      name: "level",
+      required: false,
+      isArray: true,
+      example: ["SENIOR", "LEAD"],
+    }),
+    ApiQuery({
+      name: "country",
+      required: false,
+      isArray: true,
+      example: ["Vietnam"],
+    }),
+    ApiQuery({
+      name: "employmentTypes",
+      required: false,
+      isArray: true,
+      example: ["FULL_TIME"],
+    }),
+    ApiQuery({
+      name: "timezoneOverlap",
+      required: false,
+      isArray: true,
+      example: ["SG_HOURS"],
+    }),
+    ApiQuery({
+      name: "noticePeriod",
+      required: false,
+      isArray: true,
+      example: ["Immediate", "2 weeks"],
+    }),
+    ApiQuery({ name: "page", required: false, example: 1 }),
+    ApiQuery({ name: "limit", required: false, example: 20 }),
+    ApiOkResponse({
+      description: "Paginated candidates matching the filters",
+      type: TalentSearchResponseDto,
+      schema: { example: TalentSearchExample },
+    }),
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
+    InternalServerErrorApiResponse,
+  );
+
 export const ApiGetPublicProfile = () =>
   applyDecorators(
     ApiOperation({
@@ -91,5 +161,50 @@ export const ApiGetPublicProfile = () =>
       },
     }),
     ProfileNotFoundResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiSubmitVerification = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Submit email verification",
+      description:
+        "Sends a confirmation link to the given email (TTL 1h). Requires an existing TalentProfile. Resubmitting invalidates any prior unconsumed link for this profile — no domain-match check (unlike the employer equivalent), just proof of control of the address.",
+    }),
+    ApiBody({
+      type: SubmitVerificationRequestDto,
+      examples: { default: { value: SubmitVerificationRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "Verification email sent",
+      type: MessageResponseDto,
+      schema: { example: SubmitVerificationResponseExample },
+    }),
+    ValidationErrorResponse,
+    UnauthorizedApiResponse,
+    ProfileNotFoundResponse,
+    rateLimitResponse("5 req/60s per user"),
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiConfirmVerification = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "Confirm email verification",
+      description:
+        "Consumes a verification token and, on success, sets TalentProfile.isVerified true. Unauthenticated — the token itself is the proof, same as POST /auth/reset-password.",
+    }),
+    ApiBody({
+      type: ConfirmVerificationRequestDto,
+      examples: { default: { value: ConfirmVerificationRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "Email verified",
+      type: MessageResponseDto,
+      schema: { example: ConfirmVerificationResponseExample },
+    }),
+    ValidationErrorResponse,
+    InvalidOrExpiredVerificationTokenResponse,
     InternalServerErrorApiResponse,
   );

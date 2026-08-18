@@ -37,6 +37,7 @@ const makeService = (
       adminRepository,
       employerService,
       jobsService,
+      {} as never,
       emailService as never,
     ),
     adminRepository,

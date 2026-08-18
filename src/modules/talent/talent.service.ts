@@ -1,14 +1,25 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import * as crypto from "crypto";
 import { TalentRepository } from "./talent.repository";
 import { TalentMapper } from "./talent.mapper";
 import type { TalentProfileDto } from "./dto/update-talent-profile.dto";
+import type { ListTalentSearchDto } from "./dto/list-talent-search.dto";
+import type { SubmitVerificationDto } from "./dto/submit-verification.dto";
+import type { ConfirmVerificationDto } from "./dto/confirm-verification.dto";
+import { buildTalentSearchWhere } from "./talent-search.util";
+import { VERIFICATION_TOKEN_TTL_MS } from "./constants";
 import type { OwnTalentProfile, TalentProfileWithSkills } from "./interfaces";
+import type { TalentSearchItem } from "@/common/types/talent-search-item.type";
+import type { Pagination } from "@/common/interfaces/pagination.interface";
+import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 import { uniqueSlug } from "@/common/utils/slugify";
 import { assertFound } from "@/common/utils/assert-found";
 import { isOwnedUploadUrl } from "@/modules/uploads/upload-url.util";
 import { UploadsService } from "@/modules/uploads/uploads.service";
 import type { EnvConfig } from "@/core/config/env.validation";
+import { EmailService } from "@/common/services/email.service";
+import { runInBackground } from "@/common/utils/background-task.util";
 import {
   BadRequestApiException,
   NotFoundApiException,
@@ -19,10 +30,13 @@ import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.i
 
 @Injectable()
 export class TalentService {
+  private readonly logger = new Logger(TalentService.name);
+
   constructor(
     private readonly talentRepository: TalentRepository,
     private readonly config: ConfigService<EnvConfig, true>,
     private readonly uploadsService: UploadsService,
+    private readonly emailService: EmailService,
   ) {}
 
   async getOwnProfile(userId: string): Promise<OwnTalentProfile> {
@@ -61,6 +75,25 @@ export class TalentService {
     }
 
     return TalentMapper.toPublicProfile(profile);
+  }
+
+  async search(
+    viewer: AuthenticatedUser,
+    query: ListTalentSearchDto,
+  ): Promise<{ talents: TalentSearchItem[]; pagination: Pagination }> {
+    const includeGated = await this.talentRepository.isVerifiedEmployer(
+      viewer.id,
+    );
+    const where = buildTalentSearchWhere(query, includeGated);
+    const { page, limit } = query;
+    const skip = paginationSkip(page, limit);
+
+    const [talents, total] = await Promise.all([
+      this.talentRepository.search(where, skip, limit),
+      this.talentRepository.count(where),
+    ]);
+
+    return { talents, pagination: buildPagination(page, limit, total) };
   }
 
   async upsertProfile(
@@ -147,5 +180,66 @@ export class TalentService {
       ErrorCode.TALENT_PROFILE_NOT_FOUND,
     );
     return updated;
+  }
+
+  // Mirrors EmployerService.submitVerification exactly, minus the
+  // domain-match precondition — a person has no company website to check
+  // the address against, so submitting is just proving control of it.
+  async submitVerification(
+    userId: string,
+    dto: SubmitVerificationDto,
+  ): Promise<void> {
+    const profile =
+      await this.talentRepository.findProfileForVerification(userId);
+    assertFound(
+      profile,
+      "Profile not found",
+      ErrorCode.TALENT_PROFILE_NOT_FOUND,
+    );
+
+    const token = crypto.randomBytes(32).toString("hex");
+    await this.talentRepository.createEmailVerification(
+      profile.id,
+      dto.email,
+      token,
+      new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
+    );
+
+    runInBackground(
+      this.emailService.sendTalentVerificationEmail(dto.email, token),
+      this.logger,
+      `Failed to send verification email for talent ${profile.id}`,
+    );
+  }
+
+  async confirmVerification(dto: ConfirmVerificationDto): Promise<void> {
+    const record = await this.talentRepository.findEmailVerificationByToken(
+      dto.token,
+    );
+    if (!record || record.consumedAt) {
+      throw new BadRequestApiException(
+        "Invalid or expired token",
+        ErrorCode.INVALID_OR_EXPIRED_TOKEN,
+      );
+    }
+
+    if (record.expiresAt < new Date()) {
+      await this.talentRepository.markVerificationFailed(record.talentId);
+      throw new BadRequestApiException(
+        "Invalid or expired token",
+        ErrorCode.INVALID_OR_EXPIRED_TOKEN,
+      );
+    }
+
+    const confirmed = await this.talentRepository.consumeEmailVerification(
+      record.id,
+      record.talentId,
+    );
+    if (!confirmed) {
+      throw new BadRequestApiException(
+        "Invalid or expired token",
+        ErrorCode.INVALID_OR_EXPIRED_TOKEN,
+      );
+    }
   }
 }

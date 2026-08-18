@@ -17,18 +17,19 @@ import {
 import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
+import { CronSecretGuard } from "@/modules/alerts/guards/cron-secret.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import { RateLimitService } from "@/common/services/rate-limit.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import {
   ApiApplicationsTag,
   ApiApply,
+  ApiDispatchBacklogReminders,
   ApiListApplications,
 } from "./docs/applications.swagger";
 
 @ApiApplicationsTag()
 @Controller("applications")
-@UseGuards(JwtAuthGuard)
 export class ApplicationsController {
   constructor(
     private readonly applicationsService: ApplicationsService,
@@ -37,6 +38,7 @@ export class ApplicationsController {
 
   @ApiListApplications()
   @Get()
+  @UseGuards(JwtAuthGuard)
   findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query(new ZodValidationPipe(listApplicationsSchema))
@@ -52,6 +54,7 @@ export class ApplicationsController {
   // Static path segment — doesn't collide with any :id-style route (there is none
   // in this controller). DB-side aggregate for TalentDashboard's stat tiles.
   @Get("stats")
+  @UseGuards(JwtAuthGuard)
   getStats(@CurrentUser() user: AuthenticatedUser) {
     return this.applicationsService.getStatusCounts(user.id);
   }
@@ -59,6 +62,7 @@ export class ApplicationsController {
   // Membership set for "already applied?" checks (ApplyButton) — the twin of
   // GET /saved/ids. Static segment, no :id routes here to collide with.
   @Get("ids")
+  @UseGuards(JwtAuthGuard)
   async listIds(@CurrentUser() user: AuthenticatedUser) {
     const jobIds = await this.applicationsService.getAppliedJobIds(user.id);
     return { jobIds };
@@ -66,6 +70,7 @@ export class ApplicationsController {
 
   @ApiApply()
   @Post()
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
   apply(
     @CurrentUser() user: AuthenticatedUser,
@@ -77,5 +82,14 @@ export class ApplicationsController {
       RATE_LIMITS.APPLY.windowMs,
     );
     return this.applicationsService.apply(user.id, body);
+  }
+
+  // Employer Response SLA — external scheduler only (CronSecretGuard, same
+  // as alerts/cron/dispatch), never a user JWT.
+  @ApiDispatchBacklogReminders()
+  @Get("cron/reminders")
+  @UseGuards(CronSecretGuard)
+  dispatchBacklogReminders() {
+    return this.applicationsService.dispatchBacklogReminders();
   }
 }

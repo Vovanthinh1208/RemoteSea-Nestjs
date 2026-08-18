@@ -102,6 +102,28 @@ export class EmailService {
     );
   }
 
+  async sendEmployerVerificationEmail(
+    to: string,
+    companyName: string,
+    token: string,
+  ): Promise<void> {
+    const verifyUrl = `${this.appUrl}/employer/verify?token=${token}`;
+    await this.send(
+      to,
+      "Verify your company email",
+      `<p>Confirm ${escapeHtml(companyName)} controls this address by clicking <a href="${verifyUrl}">here</a>. This link expires in 24 hours.</p>`,
+    );
+  }
+
+  async sendTalentVerificationEmail(to: string, token: string): Promise<void> {
+    const verifyUrl = `${this.appUrl}/talent/verify?token=${token}`;
+    await this.send(
+      to,
+      "Verify your email",
+      `<p>Confirm you control this address by clicking <a href="${verifyUrl}">here</a>. This link expires in 1 hour.</p>`,
+    );
+  }
+
   async sendJobLiveEmail(
     to: string,
     jobTitle: string,
@@ -143,6 +165,36 @@ export class EmailService {
       to,
       `New application: ${talentName}`,
       `<p>${escapeHtml(talentName)} applied to "${escapeHtml(jobTitle)}". Log in to review the application.</p>`,
+    );
+  }
+
+  async sendJobInvitationEmail(
+    to: string,
+    talentName: string,
+    jobTitle: string,
+    companyName: string,
+  ): Promise<void> {
+    await this.send(
+      to,
+      `${companyName} invited you to apply`,
+      `<p>Hi ${escapeHtml(talentName)},</p><p>${escapeHtml(companyName)} invited you to apply for "${escapeHtml(jobTitle)}". Log in to view the invitation.</p>`,
+    );
+  }
+
+  async sendBacklogReminderEmail(
+    to: string,
+    items: { candidateName: string; jobTitle: string; daysStuck: number }[],
+  ): Promise<void> {
+    const rows = items
+      .map(
+        (item) =>
+          `<li>${escapeHtml(item.candidateName)} — "${escapeHtml(item.jobTitle)}" (${item.daysStuck}d awaiting your response)</li>`,
+      )
+      .join("");
+    await this.send(
+      to,
+      `${items.length} application${items.length === 1 ? "" : "s"} awaiting your response`,
+      `<p>These candidates have been waiting a while — take a look when you can:</p><ul>${rows}</ul>`,
     );
   }
 

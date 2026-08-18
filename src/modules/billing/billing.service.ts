@@ -15,6 +15,8 @@ import { runInBackground } from "@/common/utils/background-task.util";
 import { CircuitBreaker } from "@/common/utils/circuit-breaker";
 import type { EnvConfig } from "@/core/config/env.validation";
 import type { JobPayer } from "./guards/job-payer-ownership.guard";
+import { JobsService } from "@/modules/jobs/jobs.service";
+import { isEligibleForAutoApproval } from "@/modules/jobs/job-verification.util";
 
 // Opens after 5 consecutive failures and stays open for 30s before letting a
 // single trial through — same thresholds as EmailService's breaker. Unlike
@@ -40,6 +42,7 @@ export class BillingService {
     private readonly billingRepository: BillingRepository,
     private readonly emailService: EmailService,
     private readonly config: ConfigService<EnvConfig, true>,
+    private readonly jobsService: JobsService,
   ) {}
 
   async createCheckoutSession(
@@ -140,18 +143,41 @@ export class BillingService {
       if (jobId) {
         const job = await this.billingRepository.markJobPaidAndSubmitted(jobId);
         if (job) {
+          const eligible = isEligibleForAutoApproval(
+            {
+              description: job.description,
+              salaryMin: job.salaryMin,
+              categoryCount: job.categories.length,
+            },
+            job.employer.isVerified,
+          );
+
+          // approveForReview is itself conditioned on status === PENDING_REVIEW
+          // (jobs.repository.ts's approveJob), so this can't race a concurrent
+          // admin action into a double-approve — it just no-ops if the job
+          // already moved.
+          if (eligible) {
+            await this.jobsService.approveForReview(jobId);
+          }
+
           // Payment is already recorded above — an email failure here must return
           // 200 to Stripe, not trigger a webhook retry: markJobPaidAndSubmitted is
           // idempotent on planPaid, so a retry would just no-op and the email would
           // never go out at all. Background send also acks Stripe faster (Stripe
           // times out slow webhook handlers and retries them).
           runInBackground(
-            this.emailService.sendJobSubmittedEmail(
-              job.employer.user.email,
-              job.title,
-            ),
+            eligible
+              ? this.emailService.sendJobLiveEmail(
+                  job.employer.user.email,
+                  job.title,
+                  job.slug,
+                )
+              : this.emailService.sendJobSubmittedEmail(
+                  job.employer.user.email,
+                  job.title,
+                ),
             this.logger,
-            `Failed to send job-submitted email for job ${jobId}`,
+            `Failed to send job-${eligible ? "live" : "submitted"} email for job ${jobId}`,
           );
         }
       }

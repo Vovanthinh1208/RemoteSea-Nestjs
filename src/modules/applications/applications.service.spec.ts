@@ -1,13 +1,18 @@
 import { Prisma } from "@prisma/client";
 import { ApplicationsService } from "./applications.service";
 import type { ApplicationsRepository } from "./applications.repository";
-import type { ApplicationWithJob } from "./interfaces";
+import type { ApplicationWithJob, BackloggedApplication } from "./interfaces";
+import type { EmailService } from "@/common/services/email.service";
 import { ConflictApiException } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 
-const makeService = (repoOverrides: Partial<ApplicationsRepository> = {}) => {
+const makeService = (
+  repoOverrides: Partial<ApplicationsRepository> = {},
+  emailOverrides: Partial<EmailService> = {},
+) => {
   const repo = { ...repoOverrides } as unknown as ApplicationsRepository;
-  return new ApplicationsService(repo, {} as never, {} as never);
+  const email = { ...emailOverrides } as unknown as EmailService;
+  return new ApplicationsService(repo, email, {} as never);
 };
 
 describe("ApplicationsService.findAllForUser", () => {
@@ -91,5 +96,101 @@ describe("ApplicationsService.apply", () => {
     expect((error as ConflictApiException).getResponse()).toMatchObject({
       code: ErrorCode.ALREADY_APPLIED,
     });
+  });
+});
+
+const makeBacklogged = (
+  overrides: Partial<BackloggedApplication> = {},
+): BackloggedApplication =>
+  ({
+    id: "app-1",
+    status: "PENDING",
+    appliedAt: new Date("2026-08-01T00:00:00.000Z"),
+    talent: { user: { name: "Jane Doe" } },
+    job: {
+      title: "Backend Engineer",
+      employer: {
+        id: "employer-1",
+        companyName: "Acme",
+        user: { email: "acme@example.com" },
+      },
+    },
+    ...overrides,
+  }) as BackloggedApplication;
+
+describe("ApplicationsService.dispatchBacklogReminders", () => {
+  it("skips a run that starts while a previous one on this instance is still in progress", async () => {
+    let resolveFindBacklogged!: (rows: BackloggedApplication[]) => void;
+    const findBacklogged = jest.fn(
+      () =>
+        new Promise<BackloggedApplication[]>((resolve) => {
+          resolveFindBacklogged = resolve;
+        }),
+    );
+    const service = makeService({ findBacklogged });
+
+    const first = service.dispatchBacklogReminders();
+    const secondResult = await service.dispatchBacklogReminders();
+
+    expect(secondResult).toEqual({ processed: 0, sent: 0 });
+    expect(findBacklogged).toHaveBeenCalledTimes(1);
+
+    resolveFindBacklogged([]);
+    await expect(first).resolves.toEqual({ processed: 0, sent: 0 });
+  });
+
+  it("emails one digest per employer and stamps lastReminderSentAt only for the applications that were sent", async () => {
+    const findBacklogged = jest
+      .fn()
+      .mockResolvedValue([makeBacklogged({ id: "app-1" })]);
+    const markRemindersSent = jest.fn().mockResolvedValue(undefined);
+    const sendBacklogReminderEmail = jest.fn().mockResolvedValue(undefined);
+    const service = makeService(
+      { findBacklogged, markRemindersSent },
+      { sendBacklogReminderEmail },
+    );
+
+    const result = await service.dispatchBacklogReminders();
+
+    expect(sendBacklogReminderEmail).toHaveBeenCalledWith(
+      "acme@example.com",
+      expect.arrayContaining([
+        expect.objectContaining({ jobTitle: "Backend Engineer" }),
+      ]),
+    );
+    expect(markRemindersSent).toHaveBeenCalledWith(["app-1"]);
+    expect(result).toEqual({ processed: 1, sent: 1 });
+  });
+
+  it("a failed send for one employer doesn't block the others or mark that one as reminded", async () => {
+    const findBacklogged = jest.fn().mockResolvedValue([
+      makeBacklogged({ id: "app-1" }),
+      makeBacklogged({
+        id: "app-2",
+        job: {
+          title: "Designer",
+          employer: {
+            id: "employer-2",
+            companyName: "Beta",
+            user: { email: "beta@example.com" },
+          },
+        },
+      }),
+    ]);
+    const markRemindersSent = jest.fn().mockResolvedValue(undefined);
+    const sendBacklogReminderEmail = jest
+      .fn()
+      .mockRejectedValueOnce(new Error("Resend down"))
+      .mockResolvedValueOnce(undefined);
+    const service = makeService(
+      { findBacklogged, markRemindersSent },
+      { sendBacklogReminderEmail },
+    );
+
+    const result = await service.dispatchBacklogReminders();
+
+    expect(result).toEqual({ processed: 2, sent: 1 });
+    expect(markRemindersSent).toHaveBeenCalledTimes(1);
+    expect(markRemindersSent).not.toHaveBeenCalledWith(["app-1"]);
   });
 });

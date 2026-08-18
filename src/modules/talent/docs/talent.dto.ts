@@ -526,3 +526,102 @@ export class PublicTalentProfileResponseDto {
   @ApiProperty({ type: PublicTalentOwnerDto })
   user!: PublicTalentOwnerDto;
 }
+
+export class TalentSearchItemDto {
+  @ApiProperty({ example: "clx4talent0001abcd" })
+  id!: string;
+
+  @ApiProperty({ example: "jane-doe-a1b2c3" })
+  slug!: string;
+
+  @ApiPropertyOptional({ example: "Senior Backend Engineer", nullable: true })
+  headline!: string | null;
+
+  @ApiProperty({ enum: LEVELS, example: "SENIOR" })
+  level!: (typeof LEVELS)[number];
+
+  @ApiPropertyOptional({ example: "Vietnam", nullable: true })
+  country!: string | null;
+
+  @ApiPropertyOptional({ example: "Asia/Ho_Chi_Minh", nullable: true })
+  timezone!: string | null;
+
+  @ApiPropertyOptional({ example: 8, nullable: true })
+  yearsExperience!: number | null;
+
+  @ApiPropertyOptional({ example: 90000, nullable: true })
+  desiredSalaryMin!: number | null;
+
+  @ApiPropertyOptional({ example: 130000, nullable: true })
+  desiredSalaryMax!: number | null;
+
+  @ApiProperty({ example: "USD" })
+  currency!: string;
+
+  @ApiProperty({
+    enum: EMPLOYMENT_TYPES,
+    isArray: true,
+    example: ["FULL_TIME", "CONTRACT"],
+  })
+  employmentTypes!: (typeof EMPLOYMENT_TYPES)[number][];
+
+  @ApiProperty({
+    enum: TIMEZONE_OVERLAP_OPTIONS,
+    isArray: true,
+    example: ["SG_HOURS", "AU_HOURS"],
+  })
+  timezoneOverlap!: (typeof TIMEZONE_OVERLAP_OPTIONS)[number][];
+
+  @ApiPropertyOptional({
+    enum: NOTICE_PERIODS,
+    nullable: true,
+    example: "2 weeks",
+  })
+  noticePeriod!: (typeof NOTICE_PERIODS)[number] | null;
+
+  @ApiProperty({ format: "date-time", example: "2026-06-30T14:02:31.000Z" })
+  updatedAt!: string;
+
+  @ApiProperty({ type: PublicTalentOwnerDto })
+  user!: PublicTalentOwnerDto;
+
+  @ApiProperty({ type: [TalentSkillDto] })
+  skills!: Pick<TalentSkillDto, "skill">[];
+}
+
+export class TalentSearchPaginationDto {
+  @ApiProperty({ example: 1 })
+  page!: number;
+
+  @ApiProperty({ example: 20 })
+  limit!: number;
+
+  @ApiProperty({ example: 12 })
+  total!: number;
+
+  @ApiProperty({ example: 1 })
+  pages!: number;
+}
+
+export class TalentSearchResponseDto {
+  @ApiProperty({ type: [TalentSearchItemDto] })
+  talents!: TalentSearchItemDto[];
+
+  @ApiProperty({ type: TalentSearchPaginationDto })
+  pagination!: TalentSearchPaginationDto;
+}
+
+export class SubmitVerificationRequestDto {
+  @ApiProperty({ format: "email", example: "jane@example.com" })
+  email!: string;
+}
+
+export class ConfirmVerificationRequestDto {
+  @ApiProperty({ minLength: 1, example: "9f3c2a1b8e7d6f5a4c3b2a1908f7e6d5" })
+  token!: string;
+}
+
+export class MessageResponseDto {
+  @ApiProperty({ example: "Verification email sent" })
+  message!: string;
+}

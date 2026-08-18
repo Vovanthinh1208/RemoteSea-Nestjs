@@ -12,6 +12,7 @@ export const jobListItemSelect = {
   level: true,
   salaryMin: true,
   salaryMax: true,
+  currency: true,
   isRemote: true,
   timezone: true,
   country: true,
@@ -19,14 +20,18 @@ export const jobListItemSelect = {
   vnHireCount: true,
   publishedAt: true,
   createdAt: true,
-  employer: { select: { companyName: true, isVerified: true } },
+  // slug backs the company profile link on JobCard (GET /companies/:slug).
+  employer: { select: { companyName: true, isVerified: true, slug: true } },
   categories: {
     select: {
       category: { select: { id: true, name: true, slug: true, icon: true } },
     },
   },
   skills: {
-    select: { skill: { select: { id: true, name: true, slug: true } } },
+    select: {
+      isRequired: true,
+      skill: { select: { id: true, name: true, slug: true } },
+    },
   },
 } satisfies Prisma.JobSelect;
 

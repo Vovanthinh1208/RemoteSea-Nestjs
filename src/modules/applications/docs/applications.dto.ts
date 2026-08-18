@@ -63,6 +63,21 @@ class JobCategorySummaryDto {
   category!: { id: string; name: string; slug: string };
 }
 
+class ApplicationStatusEventDto {
+  @ApiProperty({ enum: APPLICATION_STATUS_VALUES, example: "PENDING" })
+  status!:
+    | "PENDING"
+    | "REVIEWING"
+    | "SHORTLISTED"
+    | "INTERVIEW"
+    | "OFFERED"
+    | "REJECTED"
+    | "WITHDRAWN";
+
+  @ApiProperty({ example: "2026-07-02T09:00:00.000Z" })
+  createdAt!: string;
+}
+
 // The embedded job is the same narrow "job card" shape GET /jobs returns per
 // list item (see jobListItemSelect) — key fields sketched here for /docs.
 class EmbeddedJobDto {
@@ -140,9 +155,39 @@ export class ApplicationResponseDto {
 
   @ApiProperty({ example: "2026-07-02T09:00:00.000Z" })
   updatedAt!: string;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: null,
+    description:
+      "First time the employer's applicant list included this row — see EmployerRepository.findApplicationsForJob",
+  })
+  viewedAt!: string | null;
+
+  @ApiProperty({
+    type: [ApplicationStatusEventDto],
+    description:
+      "Full status history, oldest first — always starts with the initial PENDING event at creation. This is Application Transparency's timeline.",
+  })
+  statusEvents!: ApplicationStatusEventDto[];
 }
 
 export class ApplicationWithJobResponseDto extends ApplicationResponseDto {
   @ApiProperty({ type: EmbeddedJobDto })
   job!: EmbeddedJobDto;
+}
+
+export class BacklogDispatchResponseDto {
+  @ApiProperty({
+    example: 14,
+    description: "Number of backlogged applications found this run",
+  })
+  processed!: number;
+
+  @ApiProperty({
+    example: 6,
+    description:
+      "Number of employers emailed a digest (grouped, not per-application)",
+  })
+  sent!: number;
 }

@@ -30,6 +30,22 @@ import {
   updateApplicationSchema,
   type UpdateApplicationDto,
 } from "./dto/update-application.dto";
+import {
+  bulkUpdateApplicationsSchema,
+  type BulkUpdateApplicationsDto,
+} from "./dto/bulk-update-applications.dto";
+import {
+  submitVerificationSchema,
+  type SubmitVerificationDto,
+} from "./dto/submit-verification.dto";
+import {
+  confirmVerificationSchema,
+  type ConfirmVerificationDto,
+} from "./dto/confirm-verification.dto";
+import {
+  sendMessageSchema,
+  type SendMessageDto,
+} from "@/modules/messages/dto/send-message.dto";
 import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
@@ -48,18 +64,25 @@ import {
   type ApplicationWithJobOwner,
 } from "./guards/application-ownership.guard";
 import {
+  ApiBulkUpdateApplications,
+  ApiConfirmVerification,
   ApiCreateEmployerProfile,
   ApiEmployerTag,
   ApiGetEmployerProfile,
   ApiListEmployerJobs,
   ApiListJobApplications,
+  ApiSubmitVerification,
   ApiUpdateApplication,
   ApiUpdateEmployerProfile,
 } from "./docs/employer.swagger";
+import {
+  ApiListMessages,
+  ApiSendMessage,
+} from "@/modules/messages/docs/messages.swagger";
+import { RATE_LIMITS as MESSAGE_RATE_LIMITS } from "@/modules/messages/constants";
 
 @ApiEmployerTag()
 @Controller("employer")
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class EmployerController {
   constructor(
     private readonly employerService: EmployerService,
@@ -74,6 +97,7 @@ export class EmployerController {
   // profile-yet users it exists for.
   @ApiCreateEmployerProfile()
   @Post("profile")
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @HttpCode(HttpStatus.CREATED)
   async createProfile(
     @CurrentUser() user: AuthenticatedUser,
@@ -90,6 +114,7 @@ export class EmployerController {
 
   @ApiGetEmployerProfile()
   @Get("profile")
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("EMPLOYER")
   async getProfile(@CurrentUser() user: AuthenticatedUser) {
     return this.employerService.getProfile(user.id);
@@ -97,6 +122,7 @@ export class EmployerController {
 
   @ApiUpdateEmployerProfile()
   @Patch("profile")
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("EMPLOYER")
   async updateProfile(
     @CurrentUser() user: AuthenticatedUser,
@@ -113,6 +139,7 @@ export class EmployerController {
 
   @ApiListEmployerJobs()
   @Get("jobs")
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("EMPLOYER")
   async listJobs(
     @CurrentUser() user: AuthenticatedUser,
@@ -124,8 +151,8 @@ export class EmployerController {
 
   @ApiListJobApplications()
   @Get("jobs/:id/applications")
+  @UseGuards(JwtAuthGuard, RolesGuard, EmployerJobOwnershipGuard)
   @Roles("EMPLOYER")
-  @UseGuards(EmployerJobOwnershipGuard)
   async listJobApplications(
     @CurrentResource() job: JobOwnerOnly,
     @Query(new ZodValidationPipe(listJobApplicationsSchema))
@@ -134,10 +161,32 @@ export class EmployerController {
     return this.employerService.listJobApplications(job.id, query);
   }
 
+  // Registered before "applications/:id" — Nest/Express match routes in
+  // declaration order, and "applications/bulk" would otherwise be swallowed
+  // by "applications/:id" with id="bulk". No ApplicationOwnershipGuard here
+  // (there's no single :id to load) — ownership is checked per-item inside
+  // EmployerService.bulkUpdateApplications.
+  @ApiBulkUpdateApplications()
+  @Patch("applications/bulk")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("EMPLOYER")
+  async bulkUpdateApplications(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(bulkUpdateApplicationsSchema))
+    body: BulkUpdateApplicationsDto,
+  ) {
+    this.rateLimitService.enforce(
+      `employer-bulk-update-applications:${user.id}`,
+      RATE_LIMITS.BULK_UPDATE_APPLICATIONS.limit,
+      RATE_LIMITS.BULK_UPDATE_APPLICATIONS.windowMs,
+    );
+    return this.employerService.bulkUpdateApplications(user.id, body);
+  }
+
   @ApiUpdateApplication()
   @Patch("applications/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
   @Roles("EMPLOYER")
-  @UseGuards(ApplicationOwnershipGuard)
   async updateApplication(
     @CurrentUser() user: AuthenticatedUser,
     @CurrentResource() application: ApplicationWithJobOwner,
@@ -150,5 +199,70 @@ export class EmployerController {
       RATE_LIMITS.UPDATE_APPLICATION.windowMs,
     );
     return this.employerService.updateApplication(application, body);
+  }
+
+  @ApiListMessages()
+  @Get("applications/:id/messages")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
+  @Roles("EMPLOYER")
+  listApplicationMessages(
+    @CurrentResource() application: ApplicationWithJobOwner,
+  ) {
+    return this.employerService.listApplicationMessages(application);
+  }
+
+  @ApiSendMessage()
+  @Post("applications/:id/messages")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
+  @Roles("EMPLOYER")
+  @HttpCode(HttpStatus.CREATED)
+  sendApplicationMessage(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentResource() application: ApplicationWithJobOwner,
+    @Body(new ZodValidationPipe(sendMessageSchema)) body: SendMessageDto,
+  ) {
+    this.rateLimitService.enforce(
+      `send-message:${user.id}`,
+      MESSAGE_RATE_LIMITS.SEND_MESSAGE.limit,
+      MESSAGE_RATE_LIMITS.SEND_MESSAGE.windowMs,
+    );
+    return this.employerService.sendApplicationMessage(
+      application,
+      user.id,
+      body,
+    );
+  }
+
+  @ApiSubmitVerification()
+  @Post("verification")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("EMPLOYER")
+  @HttpCode(HttpStatus.OK)
+  async submitVerification(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(submitVerificationSchema))
+    body: SubmitVerificationDto,
+  ) {
+    this.rateLimitService.enforce(
+      `employer-submit-verification:${user.id}`,
+      RATE_LIMITS.SUBMIT_VERIFICATION.limit,
+      RATE_LIMITS.SUBMIT_VERIFICATION.windowMs,
+    );
+    await this.employerService.submitVerification(user.id, body);
+    return { message: "Verification email sent" };
+  }
+
+  // Unauthenticated by design — the token in the body is itself the proof,
+  // same as POST /auth/reset-password. The link in the verification email
+  // must be clickable without an active session.
+  @ApiConfirmVerification()
+  @Post("verification/confirm")
+  @HttpCode(HttpStatus.OK)
+  async confirmVerification(
+    @Body(new ZodValidationPipe(confirmVerificationSchema))
+    body: ConfirmVerificationDto,
+  ) {
+    await this.employerService.confirmVerification(body);
+    return { message: "Company email verified" };
   }
 }

@@ -43,6 +43,27 @@ enum ApplicationStatus {
   WITHDRAWN
 }
 
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum JobReportReason {
+  SCAM
+  MISLEADING
+  ALREADY_FILLED
+  DISCRIMINATORY
+  DUPLICATE
+  OTHER
+}
+
+enum JobReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
 enum AlertFrequency {
   IMMEDIATE
   DAILY
@@ -111,6 +132,9 @@ model User {
   jobAlerts              JobAlert[]
   savedJobs              SavedJob[]
   notificationPreference NotificationPreference?
+  jobReports             JobReport[]
+  notifications          Notification[]
+  messages               Message[]
 
   @@map("users")
 }
@@ -134,6 +158,37 @@ model NotificationPreference {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notification_preferences")
+}
+
+enum NotificationType {
+  INVITATION_RECEIVED
+  APPLICATION_STATUS_CHANGED
+  JOB_REPORT_RESOLVED
+  MESSAGE_RECEIVED
+}
+
+// In-app notification feed (bell + /notifications page). Content is baked in
+// at creation time — same philosophy as EmailService.sendXxx hard-coding
+// subject/HTML at send time rather than computing it at read time — so
+// `type` is a lean classifier only (future per-type icon), never used to
+// derive title/body/link dynamically. Not gated by NotificationPreference:
+// that model governs the external email/push channel, this is a separate,
+// always-on in-app channel.
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String?          @db.Text
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("notifications")
 }
 
 model Account {
@@ -192,21 +247,21 @@ model VerificationToken {
 // ─── Talent ───────────────────────────────────────────────────────────────────
 
 model TalentProfile {
-  id               String           @id @default(cuid())
-  userId           String           @unique
-  slug             String           @unique
-  headline         String?
-  bio              String?          @db.Text
-  location         String?
-  country          String?
-  timezone         String?
-  yearsExperience  Int?
-  level            ExperienceLevel  @default(MID)
-  resumeUrl        String?
-  portfolioUrl     String?
-  githubUrl        String?
-  linkedinUrl      String?
-  isOpenToWork     Boolean          @default(true)
+  id                 String                   @id @default(cuid())
+  userId             String                   @unique
+  slug               String                   @unique
+  headline           String?
+  bio                String?                  @db.Text
+  location           String?
+  country            String?
+  timezone           String?
+  yearsExperience    Int?
+  level              ExperienceLevel          @default(MID)
+  resumeUrl          String?
+  portfolioUrl       String?
+  githubUrl          String?
+  linkedinUrl        String?
+  isOpenToWork       Boolean                  @default(true)
   // Settings > Privacy & data "Profile visibility". Distinct from
   // isOpenToWork (whether you're currently looking) — this is who can see
   // the profile at all. Defaults to PUBLIC (today's de facto behavior, so
@@ -214,29 +269,66 @@ model TalentProfile {
   // VERIFIED_EMPLOYERS is enforced in TalentService.getPublicProfile, which
   // 404s the (unauthenticated, or non-employer, or unverified-employer)
   // caller exactly as if the slug didn't exist.
-  visibility       TalentVisibility @default(PUBLIC)
-  desiredSalaryMin Int?
-  desiredSalaryMax Int?
-  currency         String           @default("USD")
+  visibility         TalentVisibility         @default(PUBLIC)
+  desiredSalaryMin   Int?
+  desiredSalaryMax   Int?
+  currency           String                   @default("USD")
   // Profile setup "About you" / "Job preferences" — decorative in the reference
   // design, but real, persisted fields here. Stored as plain strings/arrays
   // (not Prisma enums) validated against a closed set in talentProfileSchema,
   // matching the User.language/region/currencyDisplay convention.
-  primaryRole      String?
-  rightToWork      String?
-  employmentTypes  String[]         @default([])
-  timezoneOverlap  String[]         @default([])
-  noticePeriod     String?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  primaryRole        String?
+  rightToWork        String?
+  employmentTypes    String[]                 @default([])
+  timezoneOverlap    String[]                 @default([])
+  noticePeriod       String?
+  // Self-service email verification — same shape as EmployerProfile's
+  // isVerified/verificationEmail/verificationStatus, minus a domain-match
+  // requirement (a person has no company website to match against, so
+  // submitting is just proving control of the address). isVerified is the
+  // one flag any badge reads; verificationEmail/verificationStatus track
+  // the submission process and stay internal (never in publicProfileArgs).
+  isVerified         Boolean                  @default(false)
+  verifiedAt         DateTime?
+  verificationEmail  String?
+  verificationStatus TalentVerificationStatus @default(NOT_SUBMITTED)
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
 
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  skills            TalentSkill[]
-  applications      Application[]
-  workExperiences   WorkExperience[]
-  profileHighlights ProfileHighlight[]
+  user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills             TalentSkill[]
+  applications       Application[]
+  invitations        JobInvitation[]
+  workExperiences    WorkExperience[]
+  profileHighlights  ProfileHighlight[]
+  emailVerifications TalentEmailVerification[]
 
   @@map("talent_profiles")
+}
+
+enum TalentVerificationStatus {
+  NOT_SUBMITTED
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+// Mirrors EmployerEmailVerification's own-table reasoning exactly (see that
+// model's comment) — kept separate from VerificationToken (auth's
+// password-reset table) to avoid the same cross-purpose-collision risk.
+model TalentEmailVerification {
+  id         String    @id @default(cuid())
+  talentId   String
+  email      String
+  token      String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  talent TalentProfile @relation(fields: [talentId], references: [id], onDelete: Cascade)
+
+  @@index([talentId, createdAt])
+  @@map("talent_email_verifications")
 }
 
 enum ProfileHighlightType {
@@ -251,25 +343,25 @@ enum ProfileHighlightType {
 // the module's Zod schemas, not enforced by the DB). Capped at
 // MAX_HIGHLIGHTS_PER_TYPE entries per type per profile.
 model ProfileHighlight {
-  id       String               @id @default(cuid())
-  talentId String
-  type     ProfileHighlightType
+  id          String               @id @default(cuid())
+  talentId    String
+  type        ProfileHighlightType
   // PORTFOLIO: project title / EDUCATION: school name / LANGUAGE: language name
-  title    String
+  title       String
   // PORTFOLIO: role · duration / EDUCATION: degree · field / LANGUAGE: proficiency level
-  subtitle String?
+  subtitle    String?
   // PORTFOLIO: description — unused for EDUCATION/LANGUAGE
-  description String? @db.Text
+  description String?              @db.Text
   // PORTFOLIO: category tag (e.g. "Product · Production") — unused otherwise
-  tag       String?
+  tag         String?
   // PORTFOLIO: project link — unused otherwise
-  url       String?
+  url         String?
   // EDUCATION only — unused otherwise
-  startYear Int?
+  startYear   Int?
   // EDUCATION only; null = ongoing — unused otherwise
-  endYear   Int?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  endYear     Int?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   talent TalentProfile @relation(fields: [talentId], references: [id], onDelete: Cascade)
 
@@ -325,35 +417,73 @@ model TalentSkill {
 // ─── Employer ─────────────────────────────────────────────────────────────────
 
 model EmployerProfile {
-  id          String    @id @default(cuid())
-  userId      String    @unique
-  companyName String
-  slug        String    @unique
-  logoUrl     String?
-  websiteUrl  String?
-  description String?   @db.Text
-  industry    String?
-  size        String?
-  founded     Int?
-  hqCountry   String?
-  hqCity      String?
-  isVerified  Boolean   @default(false)
+  id                 String                     @id @default(cuid())
+  userId             String                     @unique
+  companyName        String
+  slug               String                     @unique
+  logoUrl            String?
+  websiteUrl         String?
+  description        String?                    @db.Text
+  industry           String?
+  size               String?
+  founded            Int?
+  hqCountry          String?
+  hqCity             String?
+  isVerified         Boolean                    @default(false)
   // Neither is derivable from updatedAt: a later profile edit (updateProfile)
   // moves updatedAt without touching verification status, and re-verifying
   // after a suspension would otherwise erase the original suspension time.
-  verifiedAt  DateTime?
-  suspendedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  verifiedAt         DateTime?
+  suspendedAt        DateTime?
+  // Self-service domain/email verification — a second, independent path to
+  // isVerified alongside the existing admin verify/suspend toggle (that
+  // field stays the one gate every badge/check reads; this just tracks the
+  // submission process that can also flip it true). verificationEmail is
+  // the last address submitted, kept even after success/failure for
+  // display ("verified via jane@acme.com").
+  verificationEmail  String?
+  verificationStatus EmployerVerificationStatus @default(NOT_SUBMITTED)
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
 
-  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  jobs Job[]
+  user               User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs               Job[]
+  invitations        JobInvitation[]
+  emailVerifications EmployerEmailVerification[]
 
   // Composite, not single-column: AdminRepository.findEmployers filters
   // isVerified and orders by createdAt desc — the plain isVerified index
   // only covered the filter half, forcing a separate sort.
   @@index([isVerified, createdAt])
   @@map("employer_profiles")
+}
+
+enum EmployerVerificationStatus {
+  NOT_SUBMITTED
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+// Deliberately its own table, not a reuse of VerificationToken — that
+// table's createVerificationToken unconditionally deletes every prior
+// token for an `identifier` (see auth.repository.ts), so sharing it across
+// a password-reset flow and this one for the same email address could
+// silently invalidate an unrelated in-flight reset. Same reasoning as
+// JobInvitation getting its own model instead of overloading Application.
+model EmployerEmailVerification {
+  id         String    @id @default(cuid())
+  employerId String
+  email      String
+  token      String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  employer EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
+
+  @@index([employerId, createdAt])
+  @@map("employer_email_verifications")
 }
 
 // ─── Jobs ─────────────────────────────────────────────────────────────────────
@@ -408,8 +538,10 @@ model Job {
   employer     EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Restrict)
   skills       JobSkill[]
   applications Application[]
+  invitations  JobInvitation[]
   categories   JobCategory[]
   savedBy      SavedJob[]
+  reports      JobReport[]
 
   @@index([status, publishedAt])
   @@index([status, isFeatured, publishedAt])
@@ -476,23 +608,134 @@ model JobSkill {
 // ─── Applications ─────────────────────────────────────────────────────────────
 
 model Application {
-  id          String            @id @default(cuid())
-  jobId       String
-  talentId    String
-  coverLetter String?           @db.Text
-  resumeUrl   String?
-  status      ApplicationStatus @default(PENDING)
-  notes       String?           @db.Text
-  appliedAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id                 String            @id @default(cuid())
+  jobId              String
+  talentId           String
+  coverLetter        String?           @db.Text
+  resumeUrl          String?
+  status             ApplicationStatus @default(PENDING)
+  notes              String?           @db.Text
+  appliedAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  // Application Transparency — set once, the first time this row appears in
+  // an employer's GET /employer/jobs/:id/applications response (see
+  // EmployerRepository.findApplicationsForJob). Distinct from `status`
+  // changing: an employer can see a candidate in the list without having
+  // acted on them yet.
+  viewedAt           DateTime?
+  // Backlog-reminder cron dedupe (ApplicationsService's cron/reminders) —
+  // null until the first reminder fires, then re-stamped each time so the
+  // same stuck application isn't re-emailed every run.
+  lastReminderSentAt DateTime?
 
-  job    Job           @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  talent TalentProfile @relation(fields: [talentId], references: [id], onDelete: Cascade)
+  job          Job                      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  talent       TalentProfile            @relation(fields: [talentId], references: [id], onDelete: Cascade)
+  statusEvents ApplicationStatusEvent[]
+  messages     Message[]
 
   @@unique([jobId, talentId])
   @@index([talentId, appliedAt])
   @@index([jobId, appliedAt])
+  // Backs the backlog-reminder cron's WHERE status IN (...) AND appliedAt < ...
+  @@index([status, appliedAt])
   @@map("applications")
+}
+
+// A single 1:1 thread per Application — the natural, already-authorized
+// boundary between one talent and one employer. No per-message readAt:
+// unread signaling is fully delegated to the Notification Center (a new
+// message creates a MESSAGE_RECEIVED Notification) instead of a second,
+// parallel unread system.
+model Message {
+  id            String   @id @default(cuid())
+  applicationId String
+  senderId      String
+  body          String   @db.Text
+  createdAt     DateTime @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  sender      User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+  // Without this, DELETE /users/me's cascade (UsersService.deleteAccount)
+  // has to full-scan `messages` to find this user's sent rows — messages
+  // is the highest-write-volume table in the schema (up to 30 inserts/hour
+  // per user, no cap on thread count), so this index matters more here than
+  // it would on a low-volume table.
+  @@index([senderId])
+  @@map("messages")
+}
+
+// One row per status an Application has ever been in (including the initial
+// PENDING at creation) — the talent-facing timeline (Application
+// Transparency) and the employer's avgFirstResponseHours SLA metric are both
+// computed by reading this log rather than inferring history from `status`
+// alone, which only ever holds the current value.
+model ApplicationStatusEvent {
+  id            String            @id @default(cuid())
+  applicationId String
+  status        ApplicationStatus
+  createdAt     DateTime          @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+  @@map("application_status_events")
+}
+
+// ─── Invitations ────────────────────────────────────────────────────────────
+// An employer inviting a candidate (from Talent Search) to apply to a
+// specific job. Deliberately its own model rather than a new Application
+// status — accepting one creates a real Application via the same path a
+// self-initiated apply uses, so the existing status pipeline (pending ->
+// reviewing -> ... -> offered), ApplicantsPanel, and match scoring never
+// need to know an invitation was involved. Cascade on all three relations
+// (unlike Application/Job.employer's Restrict) — an invitation has no
+// independent record-keeping value once its job/talent/employer is gone.
+model JobInvitation {
+  id          String           @id @default(cuid())
+  jobId       String
+  talentId    String
+  employerId  String
+  message     String?          @db.Text
+  status      InvitationStatus @default(PENDING)
+  respondedAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  job      Job             @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  talent   TalentProfile   @relation(fields: [talentId], references: [id], onDelete: Cascade)
+  employer EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, talentId])
+  @@index([talentId, status, createdAt])
+  @@map("job_invitations")
+}
+
+// A talent or employer flagging a listing as suspicious/scam. Deliberately
+// its own table, not a flag/count on Job — a report is a signal *about* a
+// job, not a moderation action taken *on* it, so Job.status is never touched
+// by this flow (same reasoning JobInvitation got its own model instead of
+// overloading Application). No DB-level uniqueness on (jobId, reporterId): a
+// true "one OPEN report per pair" constraint needs a partial unique index,
+// which isn't worth the hand-edited-migration complexity for this low-stakes
+// write — JobReportsService enforces it with a plain read-check instead.
+model JobReport {
+  id         String          @id @default(cuid())
+  jobId      String
+  reporterId String
+  reason     JobReportReason
+  details    String?         @db.Text
+  status     JobReportStatus @default(OPEN)
+  resolvedAt DateTime?
+  createdAt  DateTime        @default(now())
+
+  job      Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  reporter User @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([jobId])
+  @@map("job_reports")
 }
 
 // ─── Job Alerts ───────────────────────────────────────────────────────────────

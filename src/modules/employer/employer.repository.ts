@@ -7,8 +7,41 @@ import type {
   JobStatus,
 } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
+import {
+  jobListItemSelect,
+  type JobListItem,
+} from "@/common/types/job-list-item.type";
 
 const EMPLOYER_JOBS_LIST_CAP = 200;
+const COMPANY_PROFILE_JOBS_CAP = 50;
+
+// GET /companies/:slug is unauthenticated — explicit select so every public
+// field is a decision, not an accident (same reasoning as talent's
+// publicProfileArgs). verificationEmail/verificationStatus are deliberately
+// excluded — those are self-service-verification internals, not something
+// an employer asked to publish; isVerified/verifiedAt are the public-facing
+// signal that self-service verification (among other paths) can flip.
+const publicProfileSelect = {
+  id: true,
+  userId: true,
+  companyName: true,
+  slug: true,
+  logoUrl: true,
+  websiteUrl: true,
+  description: true,
+  industry: true,
+  size: true,
+  founded: true,
+  hqCountry: true,
+  hqCity: true,
+  isVerified: true,
+  verifiedAt: true,
+  createdAt: true,
+} satisfies Prisma.EmployerProfileSelect;
+
+export type PublicCompanyProfile = Prisma.EmployerProfileGetPayload<{
+  select: typeof publicProfileSelect;
+}>;
 
 const profileSelect = {
   id: true,
@@ -23,6 +56,8 @@ const profileSelect = {
   hqCountry: true,
   hqCity: true,
   isVerified: true,
+  verificationEmail: true,
+  verificationStatus: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.EmployerProfileSelect;
@@ -57,6 +92,45 @@ export class EmployerRepository {
     return this.prisma.employerProfile.findUnique({
       where: { slug },
       select: { id: true },
+    });
+  }
+
+  findPublicProfileBySlug(slug: string): Promise<PublicCompanyProfile | null> {
+    return this.prisma.employerProfile.findUnique({
+      where: { slug },
+      select: publicProfileSelect,
+    });
+  }
+
+  // vnHireCount is summed across every job regardless of status — it's a
+  // cumulative "we've hired N people in Vietnam through this company"
+  // track-record signal, not tied to which listings currently happen to be
+  // open.
+  async getPublicCompanyStats(
+    employerId: string,
+  ): Promise<{ activeJobCount: number; vnHireTotal: number }> {
+    const [activeJobCount, vnHireAgg] = await Promise.all([
+      this.prisma.job.count({ where: { employerId, status: "ACTIVE" } }),
+      this.prisma.job.aggregate({
+        where: { employerId },
+        _sum: { vnHireCount: true },
+      }),
+    ]);
+    return {
+      activeJobCount,
+      vnHireTotal: vnHireAgg._sum.vnHireCount ?? 0,
+    };
+  }
+
+  // Reuses jobListItemSelect (the exact shape JobCard already renders) so
+  // the company profile page can drop these straight into the same
+  // component, nested `employer` redundancy and all — no new frontend type.
+  findActiveJobsForCompany(employerId: string): Promise<JobListItem[]> {
+    return this.prisma.job.findMany({
+      where: { employerId, status: "ACTIVE" },
+      orderBy: [{ isFeatured: "desc" }, { publishedAt: "desc" }],
+      take: COMPANY_PROFILE_JOBS_CAP,
+      select: jobListItemSelect,
     });
   }
 
@@ -142,6 +216,80 @@ export class EmployerRepository {
     ]);
   }
 
+  // Narrower than findProfileWithJobCount — EmployerService.submitVerification
+  // only needs enough to validate the domain-match and address the email.
+  findProfileForVerification(userId: string) {
+    return this.prisma.employerProfile.findUnique({
+      where: { userId },
+      select: { id: true, companyName: true, websiteUrl: true },
+    });
+  }
+
+  // Deletes any prior unconsumed row for this employer first (an employer
+  // resubmitting with a new/different address should invalidate the old
+  // link, not leave two live tokens), then creates the fresh one and marks
+  // the profile PENDING — one transaction so a submit can't half-apply.
+  async createEmailVerification(
+    employerId: string,
+    email: string,
+    token: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.employerEmailVerification.deleteMany({
+        where: { employerId, consumedAt: null },
+      }),
+      this.prisma.employerEmailVerification.create({
+        data: { employerId, email, token, expiresAt },
+      }),
+      this.prisma.employerProfile.update({
+        where: { id: employerId },
+        data: { verificationEmail: email, verificationStatus: "PENDING" },
+      }),
+    ]);
+  }
+
+  findEmailVerificationByToken(token: string) {
+    return this.prisma.employerEmailVerification.findUnique({
+      where: { token },
+    });
+  }
+
+  markVerificationFailed(employerId: string): Promise<EmployerProfile> {
+    return this.prisma.employerProfile.update({
+      where: { id: employerId },
+      data: { verificationStatus: "FAILED" },
+    });
+  }
+
+  // Conditional updateMany (consumedAt: null), not a plain update — same
+  // single-use-under-a-race guarantee as EmployerRepository.updateApplication
+  // and AuthRepository.consumePasswordReset: two concurrent confirms of the
+  // same token can't both flip isVerified. Returns false if the row was
+  // already consumed (or never existed) by the time this runs.
+  async consumeEmailVerification(
+    verificationId: string,
+    employerId: string,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.employerEmailVerification.updateMany({
+        where: { id: verificationId, consumedAt: null },
+        data: { consumedAt: new Date() },
+      });
+      if (count === 0) return false;
+
+      await tx.employerProfile.update({
+        where: { id: employerId },
+        data: {
+          isVerified: true,
+          verifiedAt: new Date(),
+          verificationStatus: "VERIFIED",
+        },
+      });
+      return true;
+    });
+  }
+
   findJobsByEmployer(employerId: string, status?: JobStatus) {
     return this.prisma.job.findMany({
       where: { employerId, ...(status && { status }) },
@@ -163,6 +311,23 @@ export class EmployerRepository {
         publishedAt: true,
         createdAt: true,
         _count: { select: { applications: true } },
+        // Below: not rendered by the jobs list itself — carried so the
+        // frontend can score this job's applicants against it (see
+        // ApplicantsPanel's match badge) without a second fetch.
+        level: true,
+        salaryMin: true,
+        salaryMax: true,
+        currency: true,
+        jobType: true,
+        timezone: true,
+        country: true,
+        isRemote: true,
+        skills: {
+          select: {
+            isRequired: true,
+            skill: { select: { id: true } },
+          },
+        },
       },
     });
   }
@@ -171,28 +336,81 @@ export class EmployerRepository {
     totalApps: number;
     shortlisted: number;
     avgTimeToHireInDays: number;
+    avgFirstResponseHours: number;
   }> {
-    const [totalApps, shortlisted, avgRows] = await Promise.all([
-      this.prisma.application.count({ where: { job: { employerId } } }),
-      this.prisma.application.count({
-        where: { job: { employerId }, status: "SHORTLISTED" },
-      }),
-      // Averages appliedAt -> updatedAt in SQL instead of pulling every OFFERED
-      // application row (unbounded per employer) into app memory just to
-      // average two dates in JS.
-      this.prisma.$queryRaw<Array<{ avgDays: number | null }>>(Prisma.sql`
+    const [totalApps, shortlisted, avgRows, avgResponseRows] =
+      await Promise.all([
+        this.prisma.application.count({ where: { job: { employerId } } }),
+        this.prisma.application.count({
+          where: { job: { employerId }, status: "SHORTLISTED" },
+        }),
+        // Averages appliedAt -> updatedAt in SQL instead of pulling every OFFERED
+        // application row (unbounded per employer) into app memory just to
+        // average two dates in JS.
+        this.prisma.$queryRaw<Array<{ avgDays: number | null }>>(Prisma.sql`
         SELECT AVG(EXTRACT(EPOCH FROM (a."updatedAt" - a."appliedAt")) / 86400.0)::float AS "avgDays"
         FROM applications a
         JOIN jobs j ON j.id = a."jobId"
         WHERE j."employerId" = ${employerId} AND a.status = 'OFFERED'
       `),
-    ]);
+        // Application Transparency's SLA metric: time from appliedAt to the
+        // first ApplicationStatusEvent that isn't the initial PENDING one —
+        // i.e. the first real employer action, regardless of which status it
+        // moved to. Only over applications that have such an event (an
+        // untouched PENDING application has no "response" to average yet).
+        this.prisma.$queryRaw<Array<{ avgHours: number | null }>>(Prisma.sql`
+        SELECT AVG(EXTRACT(EPOCH FROM (first_event."createdAt" - a."appliedAt")) / 3600.0)::float AS "avgHours"
+        FROM applications a
+        JOIN jobs j ON j.id = a."jobId"
+        JOIN LATERAL (
+          SELECT MIN(e."createdAt") AS "createdAt"
+          FROM application_status_events e
+          WHERE e."applicationId" = a.id AND e.status != 'PENDING'
+        ) first_event ON first_event."createdAt" IS NOT NULL
+        WHERE j."employerId" = ${employerId}
+      `),
+      ]);
 
     const avgDays = avgRows[0]?.avgDays ?? null;
+    const avgHours = avgResponseRows[0]?.avgHours ?? null;
     return {
       totalApps,
       shortlisted,
       avgTimeToHireInDays: avgDays === null ? 0 : Math.round(avgDays * 10) / 10,
+      avgFirstResponseHours:
+        avgHours === null ? 0 : Math.round(avgHours * 10) / 10,
+    };
+  }
+
+  // Public-facing counterpart to getEmployerJobStats's avgFirstResponseHours —
+  // same "first non-PENDING ApplicationStatusEvent" definition of "response,"
+  // but also returns the sample count so the caller can gate on a minimum
+  // before showing a number nobody asked this employer to publish. Unlike
+  // the private version, does NOT collapse "no data" to 0 — respondedCount
+  // is the only signal for that, avgHours stays null.
+  async getPublicResponseStats(
+    employerId: string,
+  ): Promise<{ avgHours: number | null; respondedCount: number }> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ avgHours: number | null; respondedCount: number }>
+    >(Prisma.sql`
+      SELECT
+        COUNT(*)::int AS "respondedCount",
+        AVG(EXTRACT(EPOCH FROM (first_event."createdAt" - a."appliedAt")) / 3600.0)::float AS "avgHours"
+      FROM applications a
+      JOIN jobs j ON j.id = a."jobId"
+      JOIN LATERAL (
+        SELECT MIN(e."createdAt") AS "createdAt"
+        FROM application_status_events e
+        WHERE e."applicationId" = a.id AND e.status != 'PENDING'
+      ) first_event ON first_event."createdAt" IS NOT NULL
+      WHERE j."employerId" = ${employerId}
+    `);
+    const row = rows[0];
+    return {
+      avgHours:
+        row?.avgHours == null ? null : Math.round(row.avgHours * 10) / 10,
+      respondedCount: row?.respondedCount ?? 0,
     };
   }
 
@@ -223,6 +441,12 @@ export class EmployerRepository {
           id: true,
           status: true,
           appliedAt: true,
+          viewedAt: true,
+          // Only real transitions bump updatedAt (see updateApplication's
+          // notes-only guard) — this is "time since entering the current
+          // status," the same measure the backlog-reminder cron uses for
+          // REVIEWING, so ApplicantsPanel's indicator can match it exactly.
+          updatedAt: true,
           coverLetter: true,
           talent: {
             select: {
@@ -232,12 +456,54 @@ export class EmployerRepository {
               level: true,
               user: { select: { name: true } },
               skills: { include: { skill: true } },
+              // Below: same "not rendered directly, feeds the frontend's
+              // match-score calculation against the job" rationale as the
+              // job fields added to findJobsByEmployer's select above —
+              // already surfaced to anyone viewing this talent's public
+              // profile (see talent/interfaces.ts's publicProfileArgs).
+              yearsExperience: true,
+              desiredSalaryMin: true,
+              desiredSalaryMax: true,
+              currency: true,
+              timezone: true,
+              country: true,
+              employmentTypes: true,
+              timezoneOverlap: true,
+              rightToWork: true,
+              // noticePeriod feeds the same match-score calculation as the
+              // block above (see match.util.ts's scoreAvailability).
+              // isOpenToWork doesn't — it's read only to decide whether
+              // ApplicantsPanel's AvailabilityBadge renders at all (an
+              // applicant can have since turned it off after applying).
+              noticePeriod: true,
+              isOpenToWork: true,
             },
           },
         },
       }),
       this.prisma.application.count({ where }),
     ]);
+
+    // Application Transparency: this list view IS the "employer looked at
+    // it" signal (see the plan's confirmed default — no separate detail
+    // page exists to hang a more granular action off). Stamped once; the
+    // IS-NULL-implied filter below makes repeat views a no-op. The
+    // in-memory patch means this same response already reflects the
+    // stamp instead of the caller needing a second fetch to see it.
+    const unviewedIds = applications
+      .filter((a) => a.viewedAt === null)
+      .map((a) => a.id);
+    if (unviewedIds.length > 0) {
+      const now = new Date();
+      await this.prisma.application.updateMany({
+        where: { id: { in: unviewedIds } },
+        data: { viewedAt: now },
+      });
+      for (const a of applications) {
+        if (unviewedIds.includes(a.id)) a.viewedAt = now;
+      }
+    }
+
     return { applications, total };
   }
 
@@ -247,7 +513,15 @@ export class EmployerRepository {
       select: {
         id: true,
         status: true,
-        job: { select: { employer: { select: { userId: true } } } },
+        talent: { select: { userId: true, user: { select: { name: true } } } },
+        job: {
+          select: {
+            title: true,
+            employer: {
+              select: { userId: true, companyName: true },
+            },
+          },
+        },
       },
     });
   }
@@ -255,18 +529,78 @@ export class EmployerRepository {
   // Only writes if status still matches what the caller last read, so two
   // concurrent PATCHes against the same application can't silently overwrite
   // one another (last-write-wins). Returns null if the row moved underneath us.
+  // Interactive transaction (not the array form) because the
+  // ApplicationStatusEvent write below is conditional on the updateMany
+  // actually having matched — a no-op status-transition attempt shouldn't
+  // add a spurious event to Application Transparency's timeline.
   async updateApplication(
     id: string,
     expectedStatus: ApplicationStatus,
     status: ApplicationStatus,
     notes: string | undefined,
   ): Promise<Application | null> {
-    const { count } = await this.prisma.application.updateMany({
-      where: { id, status: expectedStatus },
-      data: { status, ...(notes !== undefined && { notes }) },
-    });
-    if (count === 0) return null;
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.application.updateMany({
+        where: { id, status: expectedStatus },
+        data: { status, ...(notes !== undefined && { notes }) },
+      });
+      if (count === 0) return null;
 
-    return this.prisma.application.findUnique({ where: { id } });
+      // A notes-only save (status === expectedStatus, e.g. no real
+      // transition) must not log a spurious duplicate event — the timeline
+      // represents transitions, not every write to the row.
+      if (status !== expectedStatus) {
+        await tx.applicationStatusEvent.create({
+          data: { applicationId: id, status },
+        });
+      }
+      return tx.application.findUnique({ where: { id } });
+    });
+  }
+
+  // Same select shape as findApplicationWithJobOwner — this fresh read backs
+  // both the ownership check and the CAS condition below, since a bulk
+  // request has no per-item guard doing that read for it.
+  findApplicationsForBulkUpdate(ids: string[]) {
+    return this.prisma.application.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        status: true,
+        talent: { select: { userId: true } },
+        job: {
+          select: {
+            title: true,
+            employer: { select: { userId: true } },
+          },
+        },
+      },
+    });
+  }
+
+  // One transaction, one conditional updateMany per item — a stale row
+  // (status moved since the fresh read above) just returns count 0 for that
+  // item and the loop continues; it doesn't roll back the others. Returns
+  // the ids that actually updated, same partial-success shape callers of
+  // EmployerService.bulkUpdateApplications expect.
+  async bulkUpdateApplicationStatus(
+    items: { id: string; expectedStatus: ApplicationStatus }[],
+    status: ApplicationStatus,
+  ): Promise<string[]> {
+    return this.prisma.$transaction(async (tx) => {
+      const updatedIds: string[] = [];
+      for (const item of items) {
+        const { count } = await tx.application.updateMany({
+          where: { id: item.id, status: item.expectedStatus },
+          data: { status },
+        });
+        if (count === 0) continue;
+        await tx.applicationStatusEvent.create({
+          data: { applicationId: item.id, status },
+        });
+        updatedIds.push(item.id);
+      }
+      return updatedIds;
+    });
   }
 }

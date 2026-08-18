@@ -13,6 +13,7 @@ import {
   ForbiddenApiResponse,
   InternalServerErrorApiResponse,
   UnauthorizedApiResponse,
+  rateLimitResponse,
 } from "@/core/swagger/common.responses";
 import {
   JOB_STATUS_VALUES,
@@ -20,36 +21,52 @@ import {
 } from "@/common/constants/enum-values.constants";
 import {
   ApplicationResponseDto,
+  BulkUpdateApplicationsRequestDto,
+  BulkUpdateApplicationsResponseDto,
+  ConfirmVerificationRequestDto,
   CreateEmployerProfileRequestDto,
   CreateEmployerProfileResponseDto,
   EmployerProfileWithStatsResponseDto,
   EmployerProfileDto,
   ListEmployerJobsResponseDto,
   ListJobApplicationsResponseDto,
+  MessageResponseDto,
+  PublicCompanyProfileDto,
+  SubmitVerificationRequestDto,
   UpdateApplicationRequestDto,
   UpdateEmployerProfileRequestDto,
 } from "./employer.dto";
 import {
   ApplicationResponseExample,
+  BulkUpdateApplicationsRequestExample,
+  BulkUpdateApplicationsResponseExample,
+  ConfirmVerificationRequestExample,
+  ConfirmVerificationResponseExample,
   CreateEmployerProfileRequestExample,
   CreateEmployerProfileResponseExample,
   EmployerProfileResponseExample,
   EmployerProfileWithStatsResponseExample,
   ListEmployerJobsResponseExample,
   ListJobApplicationsResponseExample,
+  PublicCompanyProfileResponseExample,
+  SubmitVerificationRequestExample,
+  SubmitVerificationResponseExample,
   UpdateApplicationRequestExample,
   UpdateEmployerProfileRequestExample,
 } from "./employer.examples";
 import {
   ApplicationConflictResponse,
   ApplicationNotFoundResponse,
+  CompanyNotFoundResponse,
   EmployerProfileAlreadyExistsResponse,
   EmployerProfileNotFoundResponse,
   EmployerProfileRequiredResponse,
   IllegalTransitionResponse,
+  InvalidOrExpiredVerificationTokenResponse,
   JobNotFoundResponse,
   NotOwningEmployerResponse,
   ValidationErrorResponse,
+  VerificationRejectedResponse,
 } from "./employer.responses";
 
 export const ApiEmployerTag = () => applyDecorators(ApiTags("Employer"));
@@ -179,6 +196,30 @@ export const ApiListJobApplications = () =>
     InternalServerErrorApiResponse,
   );
 
+export const ApiBulkUpdateApplications = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Update the status of multiple applications at once",
+      description:
+        "Applies one target status to a batch of the caller's own applications (up to 50 ids), e.g. bulk-rejecting a pile of candidates. Partial success by design — one stale or invalid item never blocks the rest of the batch. Each id independently goes through the same ALLOWED_TRANSITIONS check and ownership check as PATCH /employer/applications/:id; failures are reported per id in the response instead of failing the whole call. An id that doesn't exist or belongs to a different employer's job reports NOT_FOUND (not 403) — same 'don't confirm another employer's application exists' reasoning as the single-item route.",
+    }),
+    ApiBody({
+      type: BulkUpdateApplicationsRequestDto,
+      examples: { default: { value: BulkUpdateApplicationsRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "Per-id result of the batch",
+      type: BulkUpdateApplicationsResponseDto,
+      schema: { example: BulkUpdateApplicationsResponseExample },
+    }),
+    ValidationErrorResponse,
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
+    rateLimitResponse("10/minute"),
+    InternalServerErrorApiResponse,
+  );
+
 export const ApiUpdateApplication = () =>
   applyDecorators(
     ApiBearerAuth("bearer"),
@@ -215,5 +256,75 @@ export const ApiUpdateApplication = () =>
     NotOwningEmployerResponse,
     ApplicationNotFoundResponse,
     ApplicationConflictResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiSubmitVerification = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Submit company email verification",
+      description:
+        "Sends a confirmation link to the given email (TTL 24h) if its domain matches the company's websiteUrl. Requires the EMPLOYER role and a websiteUrl already on file. Resubmitting invalidates any prior unconsumed link for this employer.",
+    }),
+    ApiBody({
+      type: SubmitVerificationRequestDto,
+      examples: { default: { value: SubmitVerificationRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "Verification email sent",
+      type: MessageResponseDto,
+      schema: { example: SubmitVerificationResponseExample },
+    }),
+    ValidationErrorResponse,
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
+    EmployerProfileNotFoundResponse,
+    VerificationRejectedResponse,
+    rateLimitResponse("5 req/60s per employer"),
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiConfirmVerification = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "Confirm company email verification",
+      description:
+        "Consumes a verification token and, on success, sets EmployerProfile.isVerified true. Unauthenticated — the token itself is the proof, same as POST /auth/reset-password.",
+    }),
+    ApiBody({
+      type: ConfirmVerificationRequestDto,
+      examples: { default: { value: ConfirmVerificationRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "Company email verified",
+      type: MessageResponseDto,
+      schema: { example: ConfirmVerificationResponseExample },
+    }),
+    ValidationErrorResponse,
+    InvalidOrExpiredVerificationTokenResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiCompaniesTag = () => applyDecorators(ApiTags("Companies"));
+
+export const ApiGetCompanyProfile = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "Get a company's public profile",
+      description:
+        "Fetches a company's public profile by slug — company info, active job count, cumulative vnHireTotal, the same sample-gated avgFirstResponseHours as GET /jobs/:id, and up to 50 currently ACTIVE jobs. No authentication required, no visibility gate (every company profile is public).",
+    }),
+    ApiParam({
+      name: "slug",
+      description: "EmployerProfile slug",
+      example: "remotesea-ltd",
+    }),
+    ApiOkResponse({
+      description: "Company profile",
+      type: PublicCompanyProfileDto,
+      schema: { example: PublicCompanyProfileResponseExample },
+    }),
+    CompanyNotFoundResponse,
     InternalServerErrorApiResponse,
   );

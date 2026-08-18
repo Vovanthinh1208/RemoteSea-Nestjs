@@ -15,3 +15,8 @@ export const ProfileNotFoundResponse = ApiNotFoundResponse({
   description: "The user has no TalentProfile",
   schema: { example: ProfileNotFoundExample },
 });
+
+export const InvalidOrExpiredVerificationTokenResponse = ApiBadRequestResponse({
+  description: "Token doesn't exist, was already used, or has expired",
+  schema: { example: { error: "Invalid or expired token" } },
+});

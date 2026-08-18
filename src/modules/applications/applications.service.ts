@@ -19,12 +19,21 @@ import type { ApplicationWithJob, OwnApplication } from "./interfaces";
 import type { JobWithEmployerEmail } from "@/common/types/job-with-employer-email.type";
 import {
   buildApplicationStatusCounts,
+  groupBackloggedByEmployer,
   type ApplicationStatusCounts,
 } from "./applications.util";
+import { SEND_CONCURRENCY } from "./constants";
+
+export type BacklogDispatchResult = { processed: number; sent: number };
 
 @Injectable()
 export class ApplicationsService {
   private readonly logger = new Logger(ApplicationsService.name);
+
+  // Same reasoning as AlertsService.dispatchInProgress — guards against two
+  // overlapping runs on this instance re-querying/re-emailing the same
+  // backlog; process-local only, not a cross-replica lock.
+  private dispatchInProgress = false;
 
   constructor(
     private readonly applicationsRepository: ApplicationsRepository,
@@ -152,5 +161,55 @@ export class ApplicationsService {
     );
 
     return application;
+  }
+
+  /** Employer Response SLA — GET /applications/cron/reminders (external
+   * scheduler, CronSecretGuard). Mirrors AlertsService.dispatchCron's shape:
+   * re-entrancy guard, bounded-concurrency sends, unconditional summary log. */
+  async dispatchBacklogReminders(): Promise<BacklogDispatchResult> {
+    if (this.dispatchInProgress) {
+      this.logger.warn(
+        "Skipped dispatchBacklogReminders: a previous run on this instance is still in progress.",
+      );
+      return { processed: 0, sent: 0 };
+    }
+
+    this.dispatchInProgress = true;
+    const start = Date.now();
+    try {
+      const backlogged = await this.applicationsRepository.findBacklogged();
+      const groups = groupBackloggedByEmployer(backlogged, new Date());
+
+      let sent = 0;
+      for (let i = 0; i < groups.length; i += SEND_CONCURRENCY) {
+        const chunk = groups.slice(i, i + SEND_CONCURRENCY);
+        await Promise.all(
+          chunk.map(async (group) => {
+            try {
+              await this.emailService.sendBacklogReminderEmail(
+                group.email,
+                group.items,
+              );
+              await this.applicationsRepository.markRemindersSent(
+                group.applicationIds,
+              );
+              sent += 1;
+            } catch (error) {
+              this.logger.error(
+                `Failed to send backlog reminder to employer ${group.employerId}`,
+                error instanceof Error ? error.stack : error,
+              );
+            }
+          }),
+        );
+      }
+
+      this.logger.log(
+        `dispatchBacklogReminders finished: processed ${backlogged.length} application(s) across ${groups.length} employer(s), sent ${sent} email(s) in ${Date.now() - start}ms`,
+      );
+      return { processed: backlogged.length, sent };
+    } finally {
+      this.dispatchInProgress = false;
+    }
   }
 }

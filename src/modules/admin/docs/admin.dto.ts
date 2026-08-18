@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   JOB_STATUS_VALUES,
+  JOB_REPORT_REASON_VALUES,
+  JOB_REPORT_STATUS_VALUES,
   PLAN_TYPE_VALUES,
 } from "@/common/constants/enum-values.constants";
 
@@ -312,4 +314,111 @@ export class RevenueResponseDto {
 
   @ApiProperty({ type: RevenueTotalsDto })
   totals!: RevenueTotalsDto;
+}
+
+export class ListReportsQueryDto {
+  @ApiPropertyOptional({
+    enum: JOB_REPORT_STATUS_VALUES,
+    default: "OPEN",
+    example: "OPEN",
+  })
+  status?: "OPEN" | "RESOLVED" | "DISMISSED";
+
+  @ApiPropertyOptional({ minimum: 1, default: 1, example: 1 })
+  page?: number;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 50, default: 20, example: 20 })
+  limit?: number;
+}
+
+class ReportJobEmployerDto {
+  @ApiProperty({ example: "Acme Corp" })
+  companyName!: string;
+}
+
+class ReportJobSummaryDto {
+  @ApiProperty({ example: "cjob1a2b0000ug0h9x1n1a2" })
+  id!: string;
+
+  @ApiProperty({ example: "Senior Backend Engineer" })
+  title!: string;
+
+  @ApiProperty({ example: "senior-backend-engineer" })
+  slug!: string;
+
+  @ApiProperty({ enum: JOB_STATUS_VALUES, example: "ACTIVE" })
+  status!: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED";
+
+  @ApiProperty({ type: ReportJobEmployerDto })
+  employer!: ReportJobEmployerDto;
+}
+
+class ReportReporterDto {
+  @ApiProperty({ example: "clx1tal0000ug0h9x1n1a2" })
+  id!: string;
+
+  @ApiProperty({ example: "jane@example.com" })
+  email!: string;
+
+  @ApiPropertyOptional({ nullable: true, example: "Jane Nguyen" })
+  name!: string | null;
+}
+
+export class JobReportListItemDto {
+  @ApiProperty({ example: "crep1a2b0000ug0h9x1n1a2" })
+  id!: string;
+
+  @ApiProperty({ enum: JOB_REPORT_REASON_VALUES, example: "SCAM" })
+  reason!:
+    | "SCAM"
+    | "MISLEADING"
+    | "ALREADY_FILLED"
+    | "DISCRIMINATORY"
+    | "DUPLICATE"
+    | "OTHER";
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: "Asked me to pay $200 for a 'starter laptop'.",
+  })
+  details!: string | null;
+
+  @ApiProperty({ enum: JOB_REPORT_STATUS_VALUES, example: "OPEN" })
+  status!: "OPEN" | "RESOLVED" | "DISMISSED";
+
+  @ApiProperty({ example: "2026-08-16T09:00:00.000Z" })
+  createdAt!: string;
+
+  @ApiPropertyOptional({ nullable: true, example: null })
+  resolvedAt!: string | null;
+
+  @ApiProperty({ type: ReportJobSummaryDto })
+  job!: ReportJobSummaryDto;
+
+  @ApiProperty({ type: ReportReporterDto })
+  reporter!: ReportReporterDto;
+}
+
+export class ListReportsResponseDto {
+  @ApiProperty({ type: [JobReportListItemDto] })
+  reports!: JobReportListItemDto[];
+
+  @ApiProperty({ type: PaginationDto })
+  pagination!: PaginationDto;
+}
+
+export class ResolveReportRequestDto {
+  @ApiProperty({ enum: ["resolve", "dismiss"], example: "resolve" })
+  action!: "resolve" | "dismiss";
+}
+
+export class ResolveReportResponseDto {
+  @ApiProperty({ example: "crep1a2b0000ug0h9x1n1a2" })
+  id!: string;
+
+  @ApiProperty({ enum: ["RESOLVED", "DISMISSED"], example: "RESOLVED" })
+  status!: "RESOLVED" | "DISMISSED";
+
+  @ApiProperty({ example: "2026-08-16T10:00:00.000Z" })
+  resolvedAt!: string;
 }

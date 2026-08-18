@@ -159,7 +159,7 @@ export const ApiGetJobById = () =>
     ApiOperation({
       summary: "Get a job by id",
       description:
-        "Fetches a single job — only if `status: ACTIVE` (drafts/pending/closed/rejected 404, even for the owner). Fires an async, best-effort viewCount increment. No authentication required.",
+        "Fetches a single job — only if `status: ACTIVE` (drafts/pending/closed/rejected 404, even for the owner). Fires an async, best-effort viewCount increment. `employer.avgFirstResponseHours` is a cached (5min), sample-gated aggregate — null until the employer has at least 3 responded applications on record. No authentication required.",
     }),
     ApiParam({
       name: "id",

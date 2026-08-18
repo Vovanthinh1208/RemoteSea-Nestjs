@@ -61,7 +61,12 @@ export const ListEmployerJobsResponseExample = {
       _count: { applications: 12 },
     },
   ],
-  stats: { totalApps: 27, shortlisted: 5, avgTimeToHireInDays: 6.4 },
+  stats: {
+    totalApps: 27,
+    shortlisted: 5,
+    avgTimeToHireInDays: 6.4,
+    avgFirstResponseHours: 18.2,
+  },
 };
 
 export const ListJobApplicationsResponseExample = {
@@ -70,6 +75,8 @@ export const ListJobApplicationsResponseExample = {
       id: "clapp1a2b3c4d5e6f7g8h9i0",
       status: "REVIEWING",
       appliedAt: "2026-06-10T12:00:00.000Z",
+      viewedAt: "2026-06-11T08:00:00.000Z",
+      updatedAt: "2026-06-11T09:15:00.000Z",
       coverLetter: "I would love to join your team...",
       talent: {
         id: "cltal1a2b3c4d5e6f7g8h9i0",
@@ -101,6 +108,16 @@ export const ApplicationResponseExample = {
   updatedAt: "2026-06-15T09:30:00.000Z",
 };
 
+export const BulkUpdateApplicationsRequestExample = {
+  ids: ["clapp1a2b3c4d5e6f7g8h9i0", "clapp2a2b3c4d5e6f7g8h9i1"],
+  status: "REJECTED",
+};
+
+export const BulkUpdateApplicationsResponseExample = {
+  updated: ["clapp1a2b3c4d5e6f7g8h9i0"],
+  failed: [{ id: "clapp2a2b3c4d5e6f7g8h9i1", reason: "INVALID_TRANSITION" }],
+};
+
 export const EmployerValidationErrorExample = {
   error: {
     formErrors: [],
@@ -109,3 +126,54 @@ export const EmployerValidationErrorExample = {
     },
   },
 };
+
+export const SubmitVerificationRequestExample = { email: "jane@acme.com" };
+
+export const SubmitVerificationResponseExample = {
+  message: "Verification email sent",
+};
+
+export const ConfirmVerificationRequestExample = {
+  token: "9f3c2a1b8e7d6f5a4c3b2a1908f7e6d5c4b3a2918f7e6d5c4b3a2918f7e6d5c4",
+};
+
+export const ConfirmVerificationResponseExample = {
+  message: "Company email verified",
+};
+
+export const PublicCompanyProfileResponseExample = {
+  id: "clx1a2b3c4d5e6f7g8h9i0j1",
+  userId: "clxuser1a2b3c4d5e6f7g8h9",
+  companyName: "Saigon Cloudworks",
+  slug: "saigon-cloudworks-pSqMpG",
+  logoUrl: null,
+  websiteUrl: "https://saigoncloudworks.dev",
+  description: "We build remote-friendly products for teams across SEA.",
+  industry: "Technology",
+  size: "11-50",
+  founded: 2019,
+  hqCountry: "Malaysia",
+  hqCity: null,
+  isVerified: true,
+  verifiedAt: "2026-05-01T09:00:00.000Z",
+  createdAt: "2026-01-05T09:00:00.000Z",
+  activeJobCount: 3,
+  vnHireTotal: 12,
+  avgFirstResponseHours: 18.5,
+  jobs: [
+    {
+      id: "cjob1a2b0000ug0h9x1n1a2",
+      title: "Senior Backend Engineer",
+      jobType: "FULL_TIME",
+      level: "SENIOR",
+      salaryMin: 3000,
+      salaryMax: 5000,
+      currency: "USD",
+      isRemote: true,
+      isFeatured: false,
+      publishedAt: "2026-07-11T09:26:19.006Z",
+    },
+  ],
+};
+
+export const CompanyNotFoundExample = { error: "Company not found" };

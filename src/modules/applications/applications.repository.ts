@@ -7,11 +7,18 @@ import type {
 import { PrismaService } from "@/core/database/prisma.service";
 import { MEMBERSHIP_SET_CAP } from "@/common/constants/membership-set.constants";
 import {
+  backloggedApplicationSelect,
   ownApplicationSelect,
   type ApplicationWithJob,
+  type BackloggedApplication,
   type CreateApplicationInput,
   type OwnApplication,
 } from "./interfaces";
+import {
+  BACKLOG_MAX_PER_RUN,
+  BACKLOG_REMINDER_COOLDOWN_MS,
+  BACKLOG_THRESHOLD_MS,
+} from "./constants";
 import { jobListItemSelect } from "@/common/types/job-list-item.type";
 import {
   jobWithEmployerEmailInclude,
@@ -103,25 +110,80 @@ export class ApplicationsRepository {
   async createAndIncrementApplyCount(
     input: CreateApplicationInput,
   ): Promise<{ application: OwnApplication; job: JobWithEmployerEmail }> {
-    const [application, job] = await this.prisma.$transaction([
-      this.prisma.application.create({
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.application.create({
         data: {
           jobId: input.jobId,
           talentId: input.talentId,
           coverLetter: input.coverLetter,
           resumeUrl: input.resumeUrl,
         },
+        select: { id: true },
+      });
+      // Application Transparency's timeline starts here — every application
+      // gets its initial PENDING event at creation, not just on later
+      // transitions (see ApplicationStatusEvent's schema comment). Written
+      // before the re-select below so the returned `statusEvents` already
+      // includes it, instead of reflecting the pre-event snapshot.
+      await tx.applicationStatusEvent.create({
+        data: { applicationId: created.id, status: "PENDING" },
+      });
+      const [application, job] = await Promise.all([
         // ownApplicationSelect: the created row goes straight back to the
         // applicant in the POST /applications response — same talent-facing
         // shape as GET /applications (no employer `notes`).
-        select: ownApplicationSelect,
-      }),
-      this.prisma.job.update({
-        where: { id: input.jobId },
-        data: { applyCount: { increment: 1 } },
-        include: jobWithEmployerEmailInclude,
-      }),
-    ]);
-    return { application, job };
+        tx.application.findUniqueOrThrow({
+          where: { id: created.id },
+          select: ownApplicationSelect,
+        }),
+        tx.job.update({
+          where: { id: input.jobId },
+          data: { applyCount: { increment: 1 } },
+          include: jobWithEmployerEmailInclude,
+        }),
+      ]);
+      return { application, job };
+    });
+  }
+
+  /** Employer Response SLA — applications stuck past their stage's threshold
+   * (see BACKLOG_THRESHOLD_MS) and not reminded within the cooldown window.
+   * PENDING is measured from appliedAt (never touched at all); REVIEWING
+   * from updatedAt (time since it entered that stage — updatedAt only moves
+   * on a real transition, see EmployerRepository.updateApplication). */
+  findBacklogged(): Promise<BackloggedApplication[]> {
+    const now = Date.now();
+    const pendingCutoff = new Date(now - BACKLOG_THRESHOLD_MS.PENDING);
+    const reviewingCutoff = new Date(now - BACKLOG_THRESHOLD_MS.REVIEWING);
+    const cooldownCutoff = new Date(now - BACKLOG_REMINDER_COOLDOWN_MS);
+
+    return this.prisma.application.findMany({
+      where: {
+        AND: [
+          {
+            OR: [
+              { status: "PENDING", appliedAt: { lt: pendingCutoff } },
+              { status: "REVIEWING", updatedAt: { lt: reviewingCutoff } },
+            ],
+          },
+          {
+            OR: [
+              { lastReminderSentAt: null },
+              { lastReminderSentAt: { lt: cooldownCutoff } },
+            ],
+          },
+        ],
+      },
+      take: BACKLOG_MAX_PER_RUN,
+      select: backloggedApplicationSelect,
+    });
+  }
+
+  async markRemindersSent(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await this.prisma.application.updateMany({
+      where: { id: { in: ids } },
+      data: { lastReminderSentAt: new Date() },
+    });
   }
 }
