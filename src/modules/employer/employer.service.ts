@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CACHE_MANAGER, type Cache } from "@nestjs/cache-manager";
-import { Prisma } from "@prisma/client";
+import { Prisma, type ApplicationStatus } from "@prisma/client";
 import * as crypto from "crypto";
 import {
   EmployerRepository,
@@ -18,6 +18,7 @@ import type { UpdateEmployerProfileDto } from "./dto/update-employer-profile.dto
 import type { ListEmployerJobsDto } from "./dto/list-employer-jobs.dto";
 import type { ListJobApplicationsDto } from "./dto/list-job-applications.dto";
 import type { UpdateApplicationDto } from "./dto/update-application.dto";
+import type { BulkUpdateApplicationsDto } from "./dto/bulk-update-applications.dto";
 import type { SubmitVerificationDto } from "./dto/submit-verification.dto";
 import type { ConfirmVerificationDto } from "./dto/confirm-verification.dto";
 import { domainMatches } from "./verification.util";
@@ -391,6 +392,84 @@ export class EmployerService {
     }
 
     return updated;
+  }
+
+  async bulkUpdateApplications(
+    callerId: string,
+    dto: BulkUpdateApplicationsDto,
+  ): Promise<{
+    updated: string[];
+    failed: {
+      id: string;
+      reason: "NOT_FOUND" | "INVALID_TRANSITION" | "STALE";
+    }[];
+  }> {
+    const found = await this.employerRepository.findApplicationsForBulkUpdate(
+      dto.ids,
+    );
+    const byId = new Map(found.map((a) => [a.id, a]));
+
+    const failed: {
+      id: string;
+      reason: "NOT_FOUND" | "INVALID_TRANSITION" | "STALE";
+    }[] = [];
+    const validItems: {
+      id: string;
+      expectedStatus: ApplicationStatus;
+      talentUserId: string;
+      jobTitle: string;
+    }[] = [];
+
+    for (const id of dto.ids) {
+      const application = byId.get(id);
+      // Not found and not-owned collapse to the same NOT_FOUND reason —
+      // same "don't confirm another employer's application exists" logic
+      // as notFoundOnMismatch elsewhere.
+      if (!application || application.job.employer.userId !== callerId) {
+        failed.push({ id, reason: "NOT_FOUND" });
+        continue;
+      }
+      if (!ALLOWED_TRANSITIONS[application.status].includes(dto.status)) {
+        failed.push({ id, reason: "INVALID_TRANSITION" });
+        continue;
+      }
+      validItems.push({
+        id,
+        expectedStatus: application.status,
+        talentUserId: application.talent.userId,
+        jobTitle: application.job.title,
+      });
+    }
+
+    const updatedIds =
+      await this.employerRepository.bulkUpdateApplicationStatus(
+        validItems.map(({ id, expectedStatus }) => ({ id, expectedStatus })),
+        dto.status,
+      );
+    const updatedSet = new Set(updatedIds);
+
+    for (const item of validItems) {
+      if (!updatedSet.has(item.id)) {
+        // Lost the CAS race between the fresh read above and the
+        // transactional write — someone else (most likely the talent,
+        // withdrawing) changed this row in between.
+        failed.push({ id: item.id, reason: "STALE" });
+        continue;
+      }
+      runInBackground(
+        this.notificationsService.create({
+          userId: item.talentUserId,
+          type: "APPLICATION_STATUS_CHANGED",
+          title: "Your application status changed",
+          body: `Your application for ${item.jobTitle} is now ${APPLICATION_STATUS_LABELS[dto.status]}.`,
+          link: "/talent",
+        }),
+        this.logger,
+        `Failed to create application-status notification for application ${item.id}`,
+      );
+    }
+
+    return { updated: updatedIds, failed };
   }
 
   listApplicationMessages(application: ApplicationWithJobOwner) {

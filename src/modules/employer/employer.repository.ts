@@ -557,4 +557,50 @@ export class EmployerRepository {
       return tx.application.findUnique({ where: { id } });
     });
   }
+
+  // Same select shape as findApplicationWithJobOwner — this fresh read backs
+  // both the ownership check and the CAS condition below, since a bulk
+  // request has no per-item guard doing that read for it.
+  findApplicationsForBulkUpdate(ids: string[]) {
+    return this.prisma.application.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        status: true,
+        talent: { select: { userId: true } },
+        job: {
+          select: {
+            title: true,
+            employer: { select: { userId: true } },
+          },
+        },
+      },
+    });
+  }
+
+  // One transaction, one conditional updateMany per item — a stale row
+  // (status moved since the fresh read above) just returns count 0 for that
+  // item and the loop continues; it doesn't roll back the others. Returns
+  // the ids that actually updated, same partial-success shape callers of
+  // EmployerService.bulkUpdateApplications expect.
+  async bulkUpdateApplicationStatus(
+    items: { id: string; expectedStatus: ApplicationStatus }[],
+    status: ApplicationStatus,
+  ): Promise<string[]> {
+    return this.prisma.$transaction(async (tx) => {
+      const updatedIds: string[] = [];
+      for (const item of items) {
+        const { count } = await tx.application.updateMany({
+          where: { id: item.id, status: item.expectedStatus },
+          data: { status },
+        });
+        if (count === 0) continue;
+        await tx.applicationStatusEvent.create({
+          data: { applicationId: item.id, status },
+        });
+        updatedIds.push(item.id);
+      }
+      return updatedIds;
+    });
+  }
 }

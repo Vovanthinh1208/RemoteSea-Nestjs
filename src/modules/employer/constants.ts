@@ -5,7 +5,16 @@ export const RATE_LIMITS = {
   UPDATE_PROFILE: { limit: 20, windowMs: 60_000 },
   UPDATE_APPLICATION: { limit: 30, windowMs: 60_000 },
   SUBMIT_VERIFICATION: { limit: 5, windowMs: 60_000 },
+  // Call-count based, like every limit above — a bulk call can carry many
+  // items, so 10/min comfortably covers clearing out a backlog in a few
+  // clicks while still bounding abuse.
+  BULK_UPDATE_APPLICATIONS: { limit: 10, windowMs: 60_000 },
 } as const;
+
+// Defensive cap on a single bulk request — the current UI (the 8-item
+// "Recent applicants" widget) never sends more than 8, but the endpoint is
+// built generic enough to outlive that widget.
+export const BULK_UPDATE_MAX_ITEMS = 50;
 
 // Longer than the password-reset token's 1h window (auth/constants.ts) — a
 // company inbox is checked less reflexively than a personal one.

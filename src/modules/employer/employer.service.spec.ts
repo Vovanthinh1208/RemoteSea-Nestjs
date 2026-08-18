@@ -125,6 +125,129 @@ describe("EmployerService.updateApplication", () => {
   });
 });
 
+describe("EmployerService.bulkUpdateApplications", () => {
+  it("reports NOT_FOUND for an id that doesn't exist or isn't the caller's own", async () => {
+    const { service, notificationsService } = makeService({
+      findApplicationsForBulkUpdate: jest.fn().mockResolvedValue([
+        {
+          id: "app-2",
+          status: "PENDING",
+          talent: { userId: "talent-user-2" },
+          job: { title: "Frontend Dev", employer: { userId: "someone-else" } },
+        },
+      ]),
+      bulkUpdateApplicationStatus: jest.fn().mockResolvedValue([]),
+    });
+
+    const result = await service.bulkUpdateApplications("owner-1", {
+      ids: ["app-1", "app-2"],
+      status: "REJECTED",
+    });
+
+    expect(result.updated).toEqual([]);
+    expect(result.failed).toEqual([
+      { id: "app-1", reason: "NOT_FOUND" },
+      { id: "app-2", reason: "NOT_FOUND" },
+    ]);
+    expect(notificationsService.create).not.toHaveBeenCalled();
+  });
+
+  it("reports INVALID_TRANSITION for an id that can't reach the target status", async () => {
+    const { service } = makeService({
+      findApplicationsForBulkUpdate: jest.fn().mockResolvedValue([
+        {
+          id: "app-1",
+          status: "REJECTED",
+          talent: { userId: "talent-user-1" },
+          job: { title: "Backend Dev", employer: { userId: "owner-1" } },
+        },
+      ]),
+      bulkUpdateApplicationStatus: jest.fn().mockResolvedValue([]),
+    });
+
+    const result = await service.bulkUpdateApplications("owner-1", {
+      ids: ["app-1"],
+      status: "REJECTED",
+    });
+
+    expect(result.failed).toEqual([
+      { id: "app-1", reason: "INVALID_TRANSITION" },
+    ]);
+  });
+
+  it("reports STALE when the row moved between the fresh read and the write", async () => {
+    const bulkUpdateApplicationStatus = jest.fn().mockResolvedValue([]);
+    const { service } = makeService({
+      findApplicationsForBulkUpdate: jest.fn().mockResolvedValue([
+        {
+          id: "app-1",
+          status: "PENDING",
+          talent: { userId: "talent-user-1" },
+          job: { title: "Backend Dev", employer: { userId: "owner-1" } },
+        },
+      ]),
+      bulkUpdateApplicationStatus,
+    });
+
+    const result = await service.bulkUpdateApplications("owner-1", {
+      ids: ["app-1"],
+      status: "REJECTED",
+    });
+
+    expect(bulkUpdateApplicationStatus).toHaveBeenCalledWith(
+      [{ id: "app-1", expectedStatus: "PENDING" }],
+      "REJECTED",
+    );
+    expect(result.failed).toEqual([{ id: "app-1", reason: "STALE" }]);
+  });
+
+  it("splits a mixed batch correctly and notifies only the successfully-updated talents", async () => {
+    const { service, notificationsService } = makeService({
+      findApplicationsForBulkUpdate: jest.fn().mockResolvedValue([
+        {
+          id: "app-1",
+          status: "PENDING",
+          talent: { userId: "talent-user-1" },
+          job: { title: "Backend Dev", employer: { userId: "owner-1" } },
+        },
+        {
+          id: "app-2",
+          status: "REVIEWING",
+          talent: { userId: "talent-user-2" },
+          job: { title: "Frontend Dev", employer: { userId: "owner-1" } },
+        },
+        {
+          id: "app-3",
+          status: "REJECTED",
+          talent: { userId: "talent-user-3" },
+          job: { title: "Design Lead", employer: { userId: "owner-1" } },
+        },
+      ]),
+      bulkUpdateApplicationStatus: jest
+        .fn()
+        .mockResolvedValue(["app-1", "app-2"]),
+    });
+
+    const result = await service.bulkUpdateApplications("owner-1", {
+      ids: ["app-1", "app-2", "app-3", "app-4"],
+      status: "REJECTED",
+    });
+
+    expect(result.updated).toEqual(["app-1", "app-2"]);
+    expect(result.failed).toEqual([
+      { id: "app-3", reason: "INVALID_TRANSITION" },
+      { id: "app-4", reason: "NOT_FOUND" },
+    ]);
+    expect(notificationsService.create).toHaveBeenCalledTimes(2);
+    expect(notificationsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "talent-user-1" }),
+    );
+    expect(notificationsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "talent-user-2" }),
+    );
+  });
+});
+
 describe("EmployerService.submitVerification", () => {
   const profile = {
     id: "emp-1",

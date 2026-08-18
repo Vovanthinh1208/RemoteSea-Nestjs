@@ -362,6 +362,43 @@ export class ApplicationResponseDto {
   updatedAt!: string;
 }
 
+const BULK_UPDATE_FAILURE_REASONS = [
+  "NOT_FOUND",
+  "INVALID_TRANSITION",
+  "STALE",
+] as const;
+
+export class BulkUpdateApplicationsRequestDto {
+  @ApiProperty({
+    type: [String],
+    maxItems: 50,
+    example: ["clapp1a2b3c4d5e6f7g8h9i0", "clapp2a2b3c4d5e6f7g8h9i1"],
+  })
+  ids!: string[];
+
+  @ApiProperty({ enum: APPLICATION_STATUS_VALUES, example: "REJECTED" })
+  status!: (typeof APPLICATION_STATUS_VALUES)[number];
+}
+
+class BulkUpdateFailureDto {
+  @ApiProperty({ example: "clapp2a2b3c4d5e6f7g8h9i1" })
+  id!: string;
+
+  @ApiProperty({
+    enum: BULK_UPDATE_FAILURE_REASONS,
+    example: "INVALID_TRANSITION",
+  })
+  reason!: (typeof BULK_UPDATE_FAILURE_REASONS)[number];
+}
+
+export class BulkUpdateApplicationsResponseDto {
+  @ApiProperty({ type: [String], example: ["clapp1a2b3c4d5e6f7g8h9i0"] })
+  updated!: string[];
+
+  @ApiProperty({ type: [BulkUpdateFailureDto] })
+  failed!: BulkUpdateFailureDto[];
+}
+
 export class SubmitVerificationRequestDto {
   @ApiProperty({ format: "email", example: "jane@acme.com" })
   email!: string;

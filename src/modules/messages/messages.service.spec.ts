@@ -90,13 +90,11 @@ describe("MessagesService.send", () => {
 
   it("truncates a long message body for the notification preview", async () => {
     const longBody = "a".repeat(150);
-    const create = jest
-      .fn()
-      .mockResolvedValue({
-        id: "m3",
-        senderId: "talent-user-1",
-        body: longBody,
-      });
+    const create = jest.fn().mockResolvedValue({
+      id: "m3",
+      senderId: "talent-user-1",
+      body: longBody,
+    });
     const { service } = makeService({ create });
 
     await service.send(parties, "talent-user-1", { body: longBody });

@@ -31,6 +31,10 @@ import {
   type UpdateApplicationDto,
 } from "./dto/update-application.dto";
 import {
+  bulkUpdateApplicationsSchema,
+  type BulkUpdateApplicationsDto,
+} from "./dto/bulk-update-applications.dto";
+import {
   submitVerificationSchema,
   type SubmitVerificationDto,
 } from "./dto/submit-verification.dto";
@@ -60,6 +64,7 @@ import {
   type ApplicationWithJobOwner,
 } from "./guards/application-ownership.guard";
 import {
+  ApiBulkUpdateApplications,
   ApiConfirmVerification,
   ApiCreateEmployerProfile,
   ApiEmployerTag,
@@ -154,6 +159,28 @@ export class EmployerController {
     query: ListJobApplicationsDto,
   ) {
     return this.employerService.listJobApplications(job.id, query);
+  }
+
+  // Registered before "applications/:id" — Nest/Express match routes in
+  // declaration order, and "applications/bulk" would otherwise be swallowed
+  // by "applications/:id" with id="bulk". No ApplicationOwnershipGuard here
+  // (there's no single :id to load) — ownership is checked per-item inside
+  // EmployerService.bulkUpdateApplications.
+  @ApiBulkUpdateApplications()
+  @Patch("applications/bulk")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("EMPLOYER")
+  async bulkUpdateApplications(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(bulkUpdateApplicationsSchema))
+    body: BulkUpdateApplicationsDto,
+  ) {
+    this.rateLimitService.enforce(
+      `employer-bulk-update-applications:${user.id}`,
+      RATE_LIMITS.BULK_UPDATE_APPLICATIONS.limit,
+      RATE_LIMITS.BULK_UPDATE_APPLICATIONS.windowMs,
+    );
+    return this.employerService.bulkUpdateApplications(user.id, body);
   }
 
   @ApiUpdateApplication()

@@ -108,6 +108,16 @@ export const ApplicationResponseExample = {
   updatedAt: "2026-06-15T09:30:00.000Z",
 };
 
+export const BulkUpdateApplicationsRequestExample = {
+  ids: ["clapp1a2b3c4d5e6f7g8h9i0", "clapp2a2b3c4d5e6f7g8h9i1"],
+  status: "REJECTED",
+};
+
+export const BulkUpdateApplicationsResponseExample = {
+  updated: ["clapp1a2b3c4d5e6f7g8h9i0"],
+  failed: [{ id: "clapp2a2b3c4d5e6f7g8h9i1", reason: "INVALID_TRANSITION" }],
+};
+
 export const EmployerValidationErrorExample = {
   error: {
     formErrors: [],
