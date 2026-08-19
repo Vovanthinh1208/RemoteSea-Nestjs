@@ -19,6 +19,10 @@ import {
 import { listJobsSchema, type ListJobsDto } from "./dto/list-jobs.dto";
 import { reviewJobSchema, type ReviewJobDto } from "./dto/review-job.dto";
 import {
+  listAuditLogSchema,
+  type ListAuditLogDto,
+} from "./dto/list-audit-log.dto";
+import {
   listJobReportsSchema,
   type ListJobReportsDto,
 } from "@/modules/job-reports/dto/list-job-reports.dto";
@@ -35,6 +39,7 @@ import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.i
 import {
   ApiAdminTag,
   ApiGetRevenue,
+  ApiListAuditLog,
   ApiListEmployers,
   ApiListJobs,
   ApiListReports,
@@ -65,7 +70,7 @@ export class AdminController {
     @Body(new ZodValidationPipe(updateEmployerSchema)) body: UpdateEmployerDto,
     @CurrentUser() admin: AuthenticatedUser,
   ) {
-    return this.adminService.updateEmployer(id, body, admin.id);
+    return this.adminService.updateEmployer(id, body, admin);
   }
 
   @ApiListJobs()
@@ -83,7 +88,7 @@ export class AdminController {
     @Body(new ZodValidationPipe(reviewJobSchema)) body: ReviewJobDto,
     @CurrentUser() admin: AuthenticatedUser,
   ) {
-    return this.adminService.reviewJob(id, body, admin.id);
+    return this.adminService.reviewJob(id, body, admin);
   }
 
   @ApiGetRevenue()
@@ -109,6 +114,14 @@ export class AdminController {
     body: ResolveJobReportDto,
     @CurrentUser() admin: AuthenticatedUser,
   ) {
-    return this.adminService.resolveReport(id, body, admin.id);
+    return this.adminService.resolveReport(id, body, admin);
+  }
+
+  @ApiListAuditLog()
+  @Get("audit-log")
+  async listAuditLog(
+    @Query(new ZodValidationPipe(listAuditLogSchema)) query: ListAuditLogDto,
+  ) {
+    return this.adminService.listAuditLog(query);
   }
 }

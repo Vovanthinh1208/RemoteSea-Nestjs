@@ -498,6 +498,13 @@ const expectations: ControllerExpectation[] = [
         guards: ["JwtAuthGuard", "RolesGuard"],
         roles: ["ADMIN"],
       },
+      {
+        method: "listAuditLog",
+        httpMethod: "GET",
+        path: "audit-log",
+        guards: ["JwtAuthGuard", "RolesGuard"],
+        roles: ["ADMIN"],
+      },
     ],
   },
   {

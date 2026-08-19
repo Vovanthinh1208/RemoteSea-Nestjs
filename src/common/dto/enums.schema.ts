@@ -8,6 +8,7 @@ import {
   ALERT_FREQUENCY_VALUES,
   JOB_REPORT_REASON_VALUES,
   JOB_REPORT_STATUS_VALUES,
+  ADMIN_AUDIT_TARGET_TYPE_VALUES,
 } from "@/common/constants/enum-values.constants";
 
 export const jobTypeSchema = z.enum(JOB_TYPE_VALUES);
@@ -18,3 +19,6 @@ export const planTypeSchema = z.enum(PLAN_TYPE_VALUES);
 export const alertFrequencySchema = z.enum(ALERT_FREQUENCY_VALUES);
 export const jobReportReasonSchema = z.enum(JOB_REPORT_REASON_VALUES);
 export const jobReportStatusSchema = z.enum(JOB_REPORT_STATUS_VALUES);
+export const adminAuditTargetTypeSchema = z.enum(
+  ADMIN_AUDIT_TARGET_TYPE_VALUES,
+);

@@ -4,6 +4,7 @@ import {
   JOB_REPORT_REASON_VALUES,
   JOB_REPORT_STATUS_VALUES,
   PLAN_TYPE_VALUES,
+  ADMIN_AUDIT_TARGET_TYPE_VALUES,
 } from "@/common/constants/enum-values.constants";
 
 /**
@@ -421,4 +422,64 @@ export class ResolveReportResponseDto {
 
   @ApiProperty({ example: "2026-08-16T10:00:00.000Z" })
   resolvedAt!: string;
+}
+
+const ADMIN_AUDIT_ACTION_VALUES = [
+  "EMPLOYER_VERIFIED",
+  "EMPLOYER_SUSPENDED",
+  "JOB_APPROVED",
+  "JOB_REJECTED",
+  "JOB_REPORT_RESOLVED",
+  "JOB_REPORT_DISMISSED",
+] as const;
+
+export class AuditLogEntryDto {
+  @ApiProperty({ example: "caud1a2b0000ug0h9x1n1a2" })
+  id!: string;
+
+  @ApiProperty({ example: "cadm1a2b0000ug0h9x1n1a2" })
+  adminId!: string;
+
+  @ApiProperty({
+    example: "admin@remotesea.io",
+    description:
+      "Snapshotted at write time — survives the admin account later changing email or being deleted",
+  })
+  adminEmail!: string;
+
+  @ApiProperty({ enum: ADMIN_AUDIT_ACTION_VALUES, example: "JOB_APPROVED" })
+  action!: (typeof ADMIN_AUDIT_ACTION_VALUES)[number];
+
+  @ApiProperty({ enum: ADMIN_AUDIT_TARGET_TYPE_VALUES, example: "JOB" })
+  targetType!: (typeof ADMIN_AUDIT_TARGET_TYPE_VALUES)[number];
+
+  @ApiProperty({ example: "cjob1a2b0000ug0h9x1n1a2" })
+  targetId!: string;
+
+  @ApiProperty({
+    example: "Senior Backend Engineer",
+    description:
+      "Snapshotted at write time — the job title or company name at the moment of the action",
+  })
+  targetLabel!: string;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: { status: "PENDING_REVIEW" },
+  })
+  before!: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({ nullable: true, example: { status: "ACTIVE" } })
+  after!: Record<string, unknown> | null;
+
+  @ApiProperty({ example: "2026-08-19T09:00:00.000Z" })
+  createdAt!: string;
+}
+
+export class ListAuditLogResponseDto {
+  @ApiProperty({ type: [AuditLogEntryDto] })
+  entries!: AuditLogEntryDto[];
+
+  @ApiProperty({ type: PaginationDto })
+  pagination!: PaginationDto;
 }

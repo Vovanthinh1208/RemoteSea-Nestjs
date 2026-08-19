@@ -14,10 +14,12 @@ import {
   UnauthorizedApiResponse,
 } from "@/core/swagger/common.responses";
 import {
+  ADMIN_AUDIT_TARGET_TYPE_VALUES,
   JOB_REPORT_STATUS_VALUES,
   JOB_STATUS_VALUES,
 } from "@/common/constants/enum-values.constants";
 import {
+  ListAuditLogResponseDto,
   ListEmployersResponseDto,
   ListJobsResponseDto,
   ListReportsResponseDto,
@@ -30,6 +32,7 @@ import {
   UpdateEmployerResponseDto,
 } from "./admin.dto";
 import {
+  ListAuditLogResponseExample,
   ListEmployersResponseExample,
   ListJobsResponseExample,
   ListReportsResponseExample,
@@ -224,5 +227,36 @@ export const ApiResolveReport = () =>
     ForbiddenApiResponse,
     ReportNotFoundResponse,
     ReportAlreadyResolvedResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiListAuditLog = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "List admin moderation actions",
+      description:
+        "Newest-first, paginated record of every employer verify/suspend, job approve/reject, and report resolve/dismiss — who, what, when, and the before/after state. Filter by targetType+targetId to see the full history for one employer/job/report. Requires ADMIN role.",
+    }),
+    ApiQuery({
+      name: "targetType",
+      required: false,
+      enum: ADMIN_AUDIT_TARGET_TYPE_VALUES,
+    }),
+    ApiQuery({
+      name: "targetId",
+      required: false,
+      type: String,
+      description: "Only meaningful alongside targetType",
+    }),
+    ApiQuery({ name: "page", required: false, type: Number, example: 1 }),
+    ApiQuery({ name: "limit", required: false, type: Number, example: 20 }),
+    ApiOkResponse({
+      description: "Paginated audit log, newest first",
+      type: ListAuditLogResponseDto,
+      schema: { example: ListAuditLogResponseExample },
+    }),
+    ValidationErrorResponse,
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
     InternalServerErrorApiResponse,
   );

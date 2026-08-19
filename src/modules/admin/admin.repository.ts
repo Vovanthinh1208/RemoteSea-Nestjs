@@ -64,10 +64,15 @@ export class AdminRepository {
     ]);
   }
 
-  findEmployerById(id: string): Promise<Pick<EmployerProfile, "id"> | null> {
+  findEmployerById(
+    id: string,
+  ): Promise<Pick<
+    EmployerProfile,
+    "id" | "companyName" | "isVerified"
+  > | null> {
     return this.prisma.employerProfile.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, companyName: true, isVerified: true },
     });
   }
 

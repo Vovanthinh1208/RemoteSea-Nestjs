@@ -822,3 +822,46 @@ model AlertCategory {
   @@id([alertId, categoryId])
   @@map("alert_categories")
 }
+
+enum AdminAuditAction {
+  EMPLOYER_VERIFIED
+  EMPLOYER_SUSPENDED
+  JOB_APPROVED
+  JOB_REJECTED
+  JOB_REPORT_RESOLVED
+  JOB_REPORT_DISMISSED
+}
+
+enum AdminAuditTargetType {
+  EMPLOYER
+  JOB
+  JOB_REPORT
+}
+
+// Durable record of every admin moderation action (who / what / when /
+// target / before / after) — closes the gap where these decisions were
+// previously only Logger.log'd (see AdminService/JobReportsService's prior
+// comments), with nothing to show during a dispute beyond app logs.
+// Deliberately NOT a Prisma relation to User: an audit record has to survive
+// the actor's account being renamed or deleted, so adminEmail is a snapshot
+// taken at write time, not a live join — same reasoning as targetLabel.
+model AdminAuditLog {
+  id          String               @id @default(cuid())
+  adminId     String
+  adminEmail  String
+  action      AdminAuditAction
+  targetType  AdminAuditTargetType
+  targetId    String
+  targetLabel String
+  before      Json?
+  after       Json?
+  createdAt   DateTime             @default(now())
+
+  // Backs "history for this job/employer/report" (targetType+targetId) and
+  // "everything admin X has done" (adminId) — both real read patterns for a
+  // moderation audit trail, plus the plain reverse-chronological feed.
+  @@index([targetType, targetId, createdAt])
+  @@index([adminId, createdAt])
+  @@index([createdAt])
+  @@map("admin_audit_log")
+}
