@@ -42,6 +42,7 @@ import {
   ApiConfirmVerification,
   ApiGetActivity,
   ApiGetOwnProfile,
+  ApiGetProfileViewAnalytics,
   ApiGetPublicProfile,
   ApiSearchTalent,
   ApiSubmitVerification,
@@ -86,6 +87,15 @@ export class TalentController {
   async getActivity(@CurrentUser() user: AuthenticatedUser) {
     const activity = await this.talentService.getActivity(user.id);
     return { activity };
+  }
+
+  // No :userId param — analytics only ever answers "my own", resolved from
+  // the authenticated caller, so there's no target id for anyone to swap in.
+  @ApiGetProfileViewAnalytics()
+  @Get("me/profile-views")
+  @UseGuards(JwtAuthGuard)
+  getProfileViewAnalytics(@CurrentUser() user: AuthenticatedUser) {
+    return this.talentService.getProfileViewAnalytics(user.id);
   }
 
   @ApiSubmitVerification()

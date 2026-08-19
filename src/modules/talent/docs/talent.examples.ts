@@ -205,3 +205,8 @@ export const ListActivityResponseExample = {
     },
   ],
 };
+
+export const ProfileViewAnalyticsExample = {
+  totalViews: 128,
+  uniqueViewers: 47,
+};

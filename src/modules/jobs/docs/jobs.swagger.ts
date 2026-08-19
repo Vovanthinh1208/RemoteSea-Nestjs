@@ -181,7 +181,7 @@ export const ApiUpdateJob = () =>
     ApiOperation({
       summary: "Update a job",
       description:
-        "Updates a job. Cannot change categoryIds/skillIds here. This route requires only a valid JWT — there is NO @Roles() guard; role/ownership logic lives in the service: ADMIN bypasses all checks, otherwise the caller must own the job (`job.employer.userId === user.id`) AND the job must be DRAFT or REJECTED.",
+        "Updates a job. Cannot change categoryIds/skillIds here. This route requires only a valid JWT — there is NO @Roles() guard; company membership/role is enforced by JobOwnershipGuard (ADMIN bypasses it entirely), and the job must additionally be DRAFT or REJECTED (checked in the service, not the guard).",
     }),
     ApiParam({
       name: "id",

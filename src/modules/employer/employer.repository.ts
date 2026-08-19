@@ -11,6 +11,7 @@ import {
   jobListItemSelect,
   type JobListItem,
 } from "@/common/types/job-list-item.type";
+import { notExpiredCondition } from "@/modules/jobs/job-search.util";
 
 const EMPLOYER_JOBS_LIST_CAP = 200;
 const COMPANY_PROFILE_JOBS_CAP = 50;
@@ -88,6 +89,20 @@ export class EmployerRepository {
     });
   }
 
+  // Multi-seat twin of findProfileByUserId — a team member's caller-facing
+  // "my company" resolves through CompanyMember.employerId
+  // (CompanyMembershipService.resolveMembership), not EmployerProfile.userId,
+  // since only the company's original creator has a row keyed on their own
+  // userId.
+  findProfileByCompanyId(
+    employerId: string,
+  ): Promise<{ id: string; logoUrl: string | null } | null> {
+    return this.prisma.employerProfile.findUnique({
+      where: { id: employerId },
+      select: { id: true, logoUrl: true },
+    });
+  }
+
   findProfileBySlug(slug: string): Promise<{ id: string } | null> {
     return this.prisma.employerProfile.findUnique({
       where: { slug },
@@ -110,7 +125,9 @@ export class EmployerRepository {
     employerId: string,
   ): Promise<{ activeJobCount: number; vnHireTotal: number }> {
     const [activeJobCount, vnHireAgg] = await Promise.all([
-      this.prisma.job.count({ where: { employerId, status: "ACTIVE" } }),
+      this.prisma.job.count({
+        where: { employerId, status: "ACTIVE", ...notExpiredCondition() },
+      }),
       this.prisma.job.aggregate({
         where: { employerId },
         _sum: { vnHireCount: true },
@@ -127,7 +144,7 @@ export class EmployerRepository {
   // component, nested `employer` redundancy and all — no new frontend type.
   findActiveJobsForCompany(employerId: string): Promise<JobListItem[]> {
     return this.prisma.job.findMany({
-      where: { employerId, status: "ACTIVE" },
+      where: { employerId, status: "ACTIVE", ...notExpiredCondition() },
       orderBy: [{ isFeatured: "desc" }, { publishedAt: "desc" }],
       take: COMPANY_PROFILE_JOBS_CAP,
       select: jobListItemSelect,
@@ -152,17 +169,29 @@ export class EmployerRepository {
         where: { id: userId },
         data: { role: "EMPLOYER" },
       }),
+      // Multi-seat: the creator's own OWNER seat, via the same nested-create
+      // (still one atomic statement, no interactive transaction needed) —
+      // every authorization check from here on reads CompanyMember, not
+      // EmployerProfile.userId, so this row is what actually makes the
+      // creator able to use their own company.
       this.prisma.employerProfile.create({
-        data: { ...data, userId, slug },
+        data: {
+          ...data,
+          userId,
+          slug,
+          members: { create: { userId, role: "OWNER" } },
+        },
         select: { id: true, slug: true, companyName: true },
       }),
     ]);
     return profile;
   }
 
-  findProfileWithJobCount(userId: string): Promise<ProfileWithJobCount | null> {
+  findProfileWithJobCount(
+    employerId: string,
+  ): Promise<ProfileWithJobCount | null> {
     return this.prisma.employerProfile.findUnique({
-      where: { userId },
+      where: { id: employerId },
       select: profileWithJobCountSelect,
     });
   }
@@ -170,9 +199,9 @@ export class EmployerRepository {
   // A single aggregate instead of loading every job row's per-job application
   // count into memory just to sum them (the previous approach, and also
   // unbounded — unlike findJobsByEmployer it had no cap on job count either).
-  countApplicationsForOwner(userId: string): Promise<number> {
+  countApplicationsForOwner(employerId: string): Promise<number> {
     return this.prisma.application.count({
-      where: { job: { employer: { userId } } },
+      where: { job: { employerId } },
     });
   }
 
@@ -218,9 +247,9 @@ export class EmployerRepository {
 
   // Narrower than findProfileWithJobCount — EmployerService.submitVerification
   // only needs enough to validate the domain-match and address the email.
-  findProfileForVerification(userId: string) {
+  findProfileForVerification(employerId: string) {
     return this.prisma.employerProfile.findUnique({
-      where: { userId },
+      where: { id: employerId },
       select: { id: true, companyName: true, websiteUrl: true },
     });
   }
@@ -417,7 +446,7 @@ export class EmployerRepository {
   findJobWithEmployerOwner(id: string) {
     return this.prisma.job.findUnique({
       where: { id },
-      select: { id: true, employer: { select: { userId: true } } },
+      select: { id: true, employerId: true },
     });
   }
 
@@ -520,14 +549,21 @@ export class EmployerRepository {
             user: { select: { name: true, email: true } },
           },
         },
+        // employerId (scalar) is what the multi-seat guards resolve company
+        // membership against; the nested employer{userId,companyName} object
+        // is kept as-is because messages/interviews services structurally
+        // depend on this exact shape matching ApplicationParties (see
+        // common/interfaces/application-parties.interface.ts's comment).
         job: {
           select: {
             title: true,
+            employerId: true,
             employer: {
               select: { userId: true, companyName: true },
             },
           },
         },
+        interview: { select: { interviewerId: true } },
       },
     });
   }
@@ -582,7 +618,7 @@ export class EmployerRepository {
         job: {
           select: {
             title: true,
-            employer: { select: { userId: true } },
+            employerId: true,
           },
         },
       },

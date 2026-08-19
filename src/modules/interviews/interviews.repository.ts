@@ -3,9 +3,12 @@ import { PrismaService } from "@/core/database/prisma.service";
 import { applicationPartiesSelect } from "@/common/interfaces/application-parties.interface";
 import {
   interviewSelect,
+  upcomingInterviewSelect,
   type InterviewRecord,
+  type UpcomingInterviewRow,
   type UpsertInterviewInput,
 } from "./interfaces";
+import type { InterviewEligibilityShape } from "./interview-eligibility.util";
 
 @Injectable()
 export class InterviewsRepository {
@@ -18,6 +21,20 @@ export class InterviewsRepository {
     });
   }
 
+  // Narrow eligibility-only select, backing InterviewsService.isComplete —
+  // callers that only need "has this interview happened" (ReviewsService via
+  // its own bundled select, ScorecardsService via this one) shouldn't have
+  // to pull the full interviewSelect shape (proposedSlots, meetingUrl,
+  // interviewer, ...).
+  findEligibilityByApplicationId(
+    applicationId: string,
+  ): Promise<InterviewEligibilityShape> {
+    return this.prisma.interview.findUnique({
+      where: { applicationId },
+      select: { status: true, confirmedSlot: true },
+    });
+  }
+
   // Single-actor action (only the owning employer ever calls this — no
   // concurrent other-party race the way confirmSlot below has), so a plain
   // upsert is enough; InterviewsService checks the "not already CONFIRMED"
@@ -27,6 +44,7 @@ export class InterviewsRepository {
       durationMinutes: input.durationMinutes,
       proposedSlots: input.proposedSlots,
       meetingUrl: input.meetingUrl,
+      interviewerId: input.interviewerId,
     };
     return this.prisma.interview.upsert({
       where: { applicationId: input.applicationId },
@@ -49,6 +67,27 @@ export class InterviewsRepository {
     });
     if (count === 0) return null;
     return this.findByApplicationId(applicationId);
+  }
+
+  // Company-wide agenda (GET /employer/interviews/upcoming) — the one place
+  // interviews are read across every application at a company instead of
+  // for a single one. interviewerId narrows to "my interviews" for an
+  // INTERVIEWER-role viewer (see InterviewsService.listUpcomingForCompany);
+  // omitted, every other role sees the full agenda.
+  findUpcomingForCompany(
+    employerId: string,
+    interviewerId: string | undefined,
+  ): Promise<UpcomingInterviewRow[]> {
+    return this.prisma.interview.findMany({
+      where: {
+        status: "CONFIRMED",
+        confirmedSlot: { gte: new Date() },
+        application: { job: { employerId } },
+        ...(interviewerId ? { interviewerId } : {}),
+      },
+      orderBy: { confirmedSlot: "asc" },
+      select: upcomingInterviewSelect,
+    });
   }
 
   /** Self-contained narrow query (not a cross-import of ApplicationsRepository)

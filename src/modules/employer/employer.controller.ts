@@ -50,6 +50,10 @@ import {
   proposeInterviewSchema,
   type ProposeInterviewDto,
 } from "@/modules/interviews/dto/propose-interview.dto";
+import {
+  createScorecardSchema,
+  type CreateScorecardDto,
+} from "@/modules/scorecards/dto/create-scorecard.dto";
 import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
@@ -67,6 +71,7 @@ import {
   ApplicationOwnershipGuard,
   type ApplicationWithJobOwner,
 } from "./guards/application-ownership.guard";
+import { ApplicationAccessGuard } from "./guards/application-access.guard";
 import {
   ApiBulkUpdateApplications,
   ApiConfirmVerification,
@@ -86,9 +91,15 @@ import {
 import { RATE_LIMITS as MESSAGE_RATE_LIMITS } from "@/modules/messages/constants";
 import {
   ApiGetInterview,
+  ApiListUpcomingInterviews,
   ApiProposeInterview,
 } from "@/modules/interviews/docs/interviews.swagger";
 import { RATE_LIMITS as INTERVIEW_RATE_LIMITS } from "@/modules/interviews/constants";
+import {
+  ApiCreateScorecard,
+  ApiListScorecards,
+} from "@/modules/scorecards/docs/scorecards.swagger";
+import { RATE_LIMITS as SCORECARD_RATE_LIMITS } from "@/modules/scorecards/constants";
 
 @ApiEmployerTag()
 @Controller("employer")
@@ -212,7 +223,7 @@ export class EmployerController {
 
   @ApiListMessages()
   @Get("applications/:id/messages")
-  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
   @Roles("EMPLOYER")
   listApplicationMessages(
     @CurrentResource() application: ApplicationWithJobOwner,
@@ -222,7 +233,7 @@ export class EmployerController {
 
   @ApiSendMessage()
   @Post("applications/:id/messages")
-  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
   @Roles("EMPLOYER")
   @HttpCode(HttpStatus.CREATED)
   sendApplicationMessage(
@@ -244,7 +255,7 @@ export class EmployerController {
 
   @ApiGetInterview()
   @Get("applications/:id/interview")
-  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
   @Roles("EMPLOYER")
   getApplicationInterview(
     @CurrentResource() application: ApplicationWithJobOwner,
@@ -269,6 +280,60 @@ export class EmployerController {
       INTERVIEW_RATE_LIMITS.PROPOSE_INTERVIEW.windowMs,
     );
     return this.employerService.proposeInterview(application, body);
+  }
+
+  // Registered before "applications/:id" for the same reason as
+  // "applications/bulk" above — distinct literal first segment
+  // ("interviews" vs "applications"), so it can't actually collide, but
+  // keeping every static route ahead of the dynamic ones is the established
+  // convention in this controller. Company-wide (no ApplicationOwnershipGuard/
+  // ApplicationAccessGuard — there's no single :id resource here), open to
+  // any seat via ALL_COMPANY_ROLES; EmployerService narrows the response to
+  // "mine" for an INTERVIEWER-role caller.
+  @ApiListUpcomingInterviews()
+  @Get("interviews/upcoming")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("EMPLOYER")
+  listUpcomingInterviews(@CurrentUser() user: AuthenticatedUser) {
+    return this.employerService.listUpcomingInterviews(user.id);
+  }
+
+  // ApplicationAccessGuard (not ApplicationOwnershipGuard) on both routes
+  // below — internal hiring feedback is deliberately open to any team member
+  // with access to this application, including an assigned INTERVIEWER who
+  // isn't OWNER/RECRUITER/HIRING_MANAGER, not just whoever can change its
+  // status.
+  @ApiListScorecards()
+  @Get("applications/:id/scorecards")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
+  @Roles("EMPLOYER")
+  listApplicationScorecards(
+    @CurrentResource() application: ApplicationWithJobOwner,
+  ) {
+    return this.employerService.listApplicationScorecards(application);
+  }
+
+  @ApiCreateScorecard()
+  @Post("applications/:id/scorecards")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
+  @Roles("EMPLOYER")
+  @HttpCode(HttpStatus.CREATED)
+  submitApplicationScorecard(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentResource() application: ApplicationWithJobOwner,
+    @Body(new ZodValidationPipe(createScorecardSchema))
+    body: CreateScorecardDto,
+  ) {
+    this.rateLimitService.enforce(
+      `submit-scorecard:${user.id}`,
+      SCORECARD_RATE_LIMITS.CREATE_SCORECARD.limit,
+      SCORECARD_RATE_LIMITS.CREATE_SCORECARD.windowMs,
+    );
+    return this.employerService.submitApplicationScorecard(
+      application,
+      user.id,
+      body,
+    );
   }
 
   @ApiSubmitVerification()

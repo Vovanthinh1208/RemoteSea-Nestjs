@@ -1,7 +1,11 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CACHE_MANAGER, type Cache } from "@nestjs/cache-manager";
-import { Prisma, type ApplicationStatus } from "@prisma/client";
+import {
+  Prisma,
+  type ApplicationStatus,
+  type CompanyMemberRole,
+} from "@prisma/client";
 import * as crypto from "crypto";
 import {
   EmployerRepository,
@@ -34,15 +38,24 @@ import { MessagesService } from "@/modules/messages/messages.service";
 import type { SendMessageDto } from "@/modules/messages/dto/send-message.dto";
 import { InterviewsService } from "@/modules/interviews/interviews.service";
 import type { ProposeInterviewDto } from "@/modules/interviews/dto/propose-interview.dto";
+import { ScorecardsService } from "@/modules/scorecards/scorecards.service";
+import type { CreateScorecardDto } from "@/modules/scorecards/dto/create-scorecard.dto";
 import { runInBackground } from "@/common/utils/background-task.util";
 import { getOrSetCache } from "@/common/caching/cache.util";
 import {
   BadRequestApiException,
   ConflictApiException,
-  ForbiddenApiException,
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { ApplicationWithJobOwner } from "./guards/application-ownership.guard";
+import { CompanyMembershipService } from "@/modules/company/company-membership.service";
+import type { CompanyMembership } from "@/modules/company/company-membership.interfaces";
+import {
+  ALL_COMPANY_ROLES,
+  APPLICATION_REVIEW_ROLES,
+  OWNER_ONLY,
+  requireCompanyRole,
+} from "@/common/authorization/company-role.util";
 
 // Below this many responded applications, a public "responds within ~Xh"
 // figure is more noise than signal (and trivially gameable by an employer
@@ -63,8 +76,19 @@ export class EmployerService {
     private readonly notificationsService: NotificationsService,
     private readonly messagesService: MessagesService,
     private readonly interviewsService: InterviewsService,
+    private readonly scorecardsService: ScorecardsService,
+    private readonly companyMembershipService: CompanyMembershipService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
+
+  private async requireRole(
+    userId: string,
+    allowed: readonly CompanyMemberRole[],
+  ): Promise<CompanyMembership> {
+    const membership =
+      await this.companyMembershipService.resolveMembership(userId);
+    return requireCompanyRole(membership, allowed);
+  }
 
   async createProfile(
     userId: string,
@@ -75,6 +99,17 @@ export class EmployerService {
       throw new ConflictApiException(
         "Employer profile already exists",
         ErrorCode.EMPLOYER_PROFILE_ALREADY_EXISTS,
+      );
+    }
+    // A User caps at one company (CompanyMember.userId is @unique) — someone
+    // who joined another company via a team invite can't also start their
+    // own here.
+    const existingMembership =
+      await this.companyMembershipService.resolveMembership(userId);
+    if (existingMembership) {
+      throw new ConflictApiException(
+        "You already belong to a company",
+        ErrorCode.ALREADY_COMPANY_MEMBER,
       );
     }
 
@@ -112,12 +147,26 @@ export class EmployerService {
     }
   }
 
+  // Any active company role can view — only updateProfile/verification are
+  // OWNER-gated (see requireRole calls below). Deliberately doesn't reuse
+  // requireRole here (that throws 403) — the frontend's useEmployerProfile
+  // hook distinguishes "no profile yet, show the create form" from a real
+  // error by checking for exactly a 404, so "no membership" has to keep
+  // surfacing as EMPLOYER_PROFILE_NOT_FOUND/404, same as before multi-seat
+  // existed.
   async getProfile(
     userId: string,
   ): Promise<ProfileWithJobCount & { totalApplications: number }> {
+    const membership =
+      await this.companyMembershipService.resolveMembership(userId);
+    assertFound(
+      membership,
+      "Profile not found",
+      ErrorCode.EMPLOYER_PROFILE_NOT_FOUND,
+    );
     const [profile, totalApplications] = await Promise.all([
-      this.employerRepository.findProfileWithJobCount(userId),
-      this.employerRepository.countApplicationsForOwner(userId),
+      this.employerRepository.findProfileWithJobCount(membership.employerId),
+      this.employerRepository.countApplicationsForOwner(membership.employerId),
     ]);
     assertFound(
       profile,
@@ -148,11 +197,17 @@ export class EmployerService {
     return { ...profile, ...stats, avgFirstResponseHours, jobs };
   }
 
+  // OWNER only — editing the company's own identity (name, logo, etc.) is
+  // "manage company", not "manage jobs/applications" that RECRUITER/
+  // HIRING_MANAGER get.
   async updateProfile(
     userId: string,
     dto: UpdateEmployerProfileDto,
   ): Promise<PublicEmployerProfile> {
-    const profile = await this.employerRepository.findProfileByUserId(userId);
+    const membership = await this.requireRole(userId, OWNER_ONLY);
+    const profile = await this.employerRepository.findProfileByCompanyId(
+      membership.employerId,
+    );
     assertFound(
       profile,
       "Profile not found",
@@ -226,12 +281,15 @@ export class EmployerService {
     return avgHours;
   }
 
+  // OWNER only — verifying the company's identity is an ownership-tier action.
   async submitVerification(
     userId: string,
     dto: SubmitVerificationDto,
   ): Promise<void> {
-    const profile =
-      await this.employerRepository.findProfileForVerification(userId);
+    const membership = await this.requireRole(userId, OWNER_ONLY);
+    const profile = await this.employerRepository.findProfileForVerification(
+      membership.employerId,
+    );
     assertFound(
       profile,
       "Profile not found",
@@ -302,21 +360,20 @@ export class EmployerService {
     }
   }
 
+  // INTERVIEWER excluded — browsing every job on the company's board is
+  // broader than "assigned interviews/candidates".
   async listJobs(userId: string, dto: ListEmployerJobsDto) {
-    const employer = await this.employerRepository.findProfileByUserId(userId);
-    if (!employer) {
-      throw new ForbiddenApiException(
-        "Employer profile required",
-        ErrorCode.EMPLOYER_PROFILE_REQUIRED,
-      );
-    }
+    const membership = await this.requireRole(userId, APPLICATION_REVIEW_ROLES);
 
     const [
       jobs,
       { totalApps, shortlisted, avgTimeToHireInDays, avgFirstResponseHours },
     ] = await Promise.all([
-      this.employerRepository.findJobsByEmployer(employer.id, dto.status),
-      this.employerRepository.getEmployerJobStats(employer.id),
+      this.employerRepository.findJobsByEmployer(
+        membership.employerId,
+        dto.status,
+      ),
+      this.employerRepository.getEmployerJobStats(membership.employerId),
     ]);
 
     return {
@@ -428,6 +485,14 @@ export class EmployerService {
       reason: "NOT_FOUND" | "INVALID_TRANSITION" | "STALE";
     }[];
   }> {
+    // No single :id for a guard to load (see EmployerJobOwnershipGuard's
+    // comment) — company + role are resolved once here instead, then
+    // checked per item below, same shape as the guard-based routes.
+    const membership = await this.requireRole(
+      callerId,
+      APPLICATION_REVIEW_ROLES,
+    );
+
     const found = await this.employerRepository.findApplicationsForBulkUpdate(
       dto.ids,
     );
@@ -448,10 +513,14 @@ export class EmployerService {
 
     for (const id of dto.ids) {
       const application = byId.get(id);
-      // Not found and not-owned collapse to the same NOT_FOUND reason —
-      // same "don't confirm another employer's application exists" logic
-      // as notFoundOnMismatch elsewhere.
-      if (!application || application.job.employer.userId !== callerId) {
+      // Not found and not-owned (or owned by a *different* company than the
+      // caller's) collapse to the same NOT_FOUND reason — same "don't
+      // confirm another company's application exists" logic as
+      // notFoundOnMismatch elsewhere.
+      if (
+        !application ||
+        application.job.employerId !== membership.employerId
+      ) {
         failed.push({ id, reason: "NOT_FOUND" });
         continue;
       }
@@ -538,10 +607,37 @@ export class EmployerService {
     return this.interviewsService.get(application);
   }
 
+  // Company-wide, not per-application — open to any seat (ALL_COMPANY_ROLES),
+  // unlike the per-application interview routes above, which are gated by
+  // ApplicationOwnershipGuard/ApplicationAccessGuard on APPLICATION_REVIEW_ROLES
+  // (+ assignment). Pure pass-through otherwise — the role-based "mine vs
+  // team" decision belongs to and is made entirely inside
+  // InterviewsService.listUpcomingForCompany, not duplicated here.
+  async listUpcomingInterviews(userId: string) {
+    const membership = await this.requireRole(userId, ALL_COMPANY_ROLES);
+    return this.interviewsService.listUpcomingForCompany(
+      membership.employerId,
+      membership.role,
+      userId,
+    );
+  }
+
   proposeInterview(
     application: ApplicationWithJobOwner,
     dto: ProposeInterviewDto,
   ) {
     return this.interviewsService.propose(application, dto);
+  }
+
+  listApplicationScorecards(application: ApplicationWithJobOwner) {
+    return this.scorecardsService.list(application.id);
+  }
+
+  submitApplicationScorecard(
+    application: ApplicationWithJobOwner,
+    authorId: string,
+    dto: CreateScorecardDto,
+  ) {
+    return this.scorecardsService.create(application.id, authorId, dto);
   }
 }

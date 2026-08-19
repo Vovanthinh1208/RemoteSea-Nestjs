@@ -16,7 +16,7 @@ const baseJob = {
   status: "DRAFT",
   salaryMin: 1000,
   salaryMax: 2000,
-  employer: { userId: "owner-1" },
+  employerId: "owner-1-company",
 } as unknown as JobWithOwner;
 
 const owner: AuthenticatedUser = {
@@ -61,6 +61,7 @@ const makeService = (repoOverrides: Partial<JobsRepository> = {}) => {
       repo,
       cache as never,
       viewCounts as never,
+      {} as never,
       {} as never,
     ),
     repo,

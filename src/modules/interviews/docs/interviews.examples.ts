@@ -29,3 +29,20 @@ export const ValidationErrorExample = {
   error: "Validation failed",
   details: [{ path: "durationMinutes", message: "Number must be >= 15" }],
 };
+
+export const UpcomingInterviewsExample = {
+  scope: "team",
+  interviews: [
+    {
+      id: "cintv1a2b0000ug0h9x1n1a2",
+      applicationId: "capp1a2b0000ug0h9x1n1a2",
+      confirmedSlot: "2026-08-25T07:00:00.000Z",
+      durationMinutes: 30,
+      meetingUrl: "https://meet.google.com/abc-defg-hij",
+      talentName: "Nguyen Van A",
+      jobTitle: "Senior Backend Engineer",
+      interviewerId: "cusr1a2b0000ug0h9x1n1a2",
+      interviewerName: "Nguyen Van B",
+    },
+  ],
+};

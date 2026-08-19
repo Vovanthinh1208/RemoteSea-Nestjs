@@ -19,6 +19,7 @@ const parties: ApplicationParties = {
   talent: { userId: "talent-user-1", user: { name: "Talent One" } },
   job: {
     title: "Backend Engineer",
+    employerId: "company-1",
     employer: { userId: "employer-user-1", companyName: "Acme Inc" },
   },
 };

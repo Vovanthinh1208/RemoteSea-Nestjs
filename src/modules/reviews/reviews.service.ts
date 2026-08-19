@@ -12,6 +12,7 @@ import {
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
+import { isInterviewComplete } from "@/modules/interviews/interview-eligibility.util";
 
 export type ReviewEligibility = {
   eligible: boolean;
@@ -48,22 +49,17 @@ export class ReviewsService {
     return { application, isTalent };
   }
 
-  // The eligibility rule: an Interview exists for this application, has
-  // been CONFIRMED, and its confirmed slot has already passed — "the
-  // interview is complete," not just booked. See the Review Prisma model's
-  // own comment for why this — not Application.status — is the strongest
-  // verified two-sided interaction available without inventing a new
-  // interaction system.
+  // The eligibility rule itself (CONFIRMED + slot passed) lives in
+  // isInterviewComplete, shared with ScorecardsService via
+  // InterviewsService.isComplete — this module fetches the interview
+  // bundled into reviewApplicationSelect instead of going through that
+  // service, so the application/talent/employer/interview shape needed for
+  // resolveParty and eligibility comes back in one query, not two. See the
+  // Review Prisma model's own comment for why "CONFIRMED and passed" — not
+  // Application.status — is the strongest verified two-sided interaction
+  // available without inventing a new interaction system.
   private isEligibleInteraction(application: ReviewApplicationContext) {
-    const interview = application.interview;
-    if (
-      !interview ||
-      interview.status !== "CONFIRMED" ||
-      !interview.confirmedSlot
-    ) {
-      return false;
-    }
-    return interview.confirmedSlot.getTime() <= Date.now();
+    return isInterviewComplete(application.interview);
   }
 
   private directionFor(isTalent: boolean): ReviewDirection {

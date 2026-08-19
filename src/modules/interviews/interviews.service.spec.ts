@@ -12,11 +12,27 @@ const notificationsService = {
   create: jest.fn().mockResolvedValue(undefined),
 };
 
-const makeService = (repoOverrides: Partial<InterviewsRepository> = {}) => {
+const companyMembershipService = {
+  resolveMembership: jest.fn().mockResolvedValue(null),
+};
+
+const makeService = (
+  repoOverrides: Partial<InterviewsRepository> = {},
+  companyMembershipOverrides: Record<string, jest.Mock> = {},
+) => {
   const repo = { ...repoOverrides } as unknown as InterviewsRepository;
+  const company = {
+    ...companyMembershipService,
+    ...companyMembershipOverrides,
+  };
   return {
-    service: new InterviewsService(repo, notificationsService as never),
+    service: new InterviewsService(
+      repo,
+      notificationsService as never,
+      company as never,
+    ),
     repo,
+    companyMembershipService: company,
   };
 };
 
@@ -26,6 +42,7 @@ const parties: ApplicationParties = {
   talent: { userId: "talent-user-1", user: { name: "Talent One" } },
   job: {
     title: "Backend Engineer",
+    employerId: "company-1",
     employer: { userId: "employer-user-1", companyName: "Acme Inc" },
   },
 };
@@ -215,5 +232,129 @@ describe("InterviewsService.confirm", () => {
       body: "Talent One confirmed the interview for Backend Engineer.",
       link: "/applications/app-1/interview",
     });
+  });
+});
+
+describe("InterviewsService.isComplete", () => {
+  it("is false when there's no interview for the application", async () => {
+    const { service } = makeService({
+      findEligibilityByApplicationId: jest.fn().mockResolvedValue(null),
+    });
+
+    expect(await service.isComplete("app-1")).toBe(false);
+  });
+
+  it("is false while still PENDING", async () => {
+    const { service } = makeService({
+      findEligibilityByApplicationId: jest
+        .fn()
+        .mockResolvedValue({ status: "PENDING", confirmedSlot: null }),
+    });
+
+    expect(await service.isComplete("app-1")).toBe(false);
+  });
+
+  it("is false when CONFIRMED but the slot hasn't happened yet", async () => {
+    const { service } = makeService({
+      findEligibilityByApplicationId: jest.fn().mockResolvedValue({
+        status: "CONFIRMED",
+        confirmedSlot: futureSlot(),
+      }),
+    });
+
+    expect(await service.isComplete("app-1")).toBe(false);
+  });
+
+  it("is true once CONFIRMED and the slot has passed", async () => {
+    const { service } = makeService({
+      findEligibilityByApplicationId: jest.fn().mockResolvedValue({
+        status: "CONFIRMED",
+        confirmedSlot: pastSlot(),
+      }),
+    });
+
+    expect(await service.isComplete("app-1")).toBe(true);
+  });
+});
+
+const upcomingRow = (overrides: Record<string, unknown> = {}) => ({
+  id: "intv-1",
+  applicationId: "app-1",
+  confirmedSlot: futureSlot(),
+  durationMinutes: 30,
+  meetingUrl: null,
+  interviewerId: "interviewer-1",
+  interviewer: { name: "Interviewer One" },
+  application: {
+    talent: { user: { name: "Talent One" } },
+    job: { title: "Backend Engineer" },
+  },
+  ...overrides,
+});
+
+describe("InterviewsService.listUpcomingForCompany", () => {
+  it("passes no interviewerId filter (and returns scope-agnostic rows) for a non-INTERVIEWER role", async () => {
+    const findUpcomingForCompany = jest.fn().mockResolvedValue([upcomingRow()]);
+    const { service } = makeService({ findUpcomingForCompany });
+
+    const result = await service.listUpcomingForCompany(
+      "company-1",
+      "RECRUITER",
+      "viewer-1",
+    );
+
+    expect(findUpcomingForCompany).toHaveBeenCalledWith("company-1", undefined);
+    expect(result).toEqual({
+      scope: "team",
+      interviews: [
+        {
+          id: "intv-1",
+          applicationId: "app-1",
+          confirmedSlot: expect.any(Date),
+          durationMinutes: 30,
+          meetingUrl: null,
+          talentName: "Talent One",
+          jobTitle: "Backend Engineer",
+          interviewerId: "interviewer-1",
+          interviewerName: "Interviewer One",
+        },
+      ],
+    });
+  });
+
+  it("narrows to the viewer's own interviews and reports scope 'mine' for an INTERVIEWER role", async () => {
+    const findUpcomingForCompany = jest.fn().mockResolvedValue([]);
+    const { service } = makeService({ findUpcomingForCompany });
+
+    const result = await service.listUpcomingForCompany(
+      "company-1",
+      "INTERVIEWER",
+      "viewer-1",
+    );
+
+    expect(findUpcomingForCompany).toHaveBeenCalledWith(
+      "company-1",
+      "viewer-1",
+    );
+    expect(result.scope).toBe("mine");
+  });
+
+  it("flattens a row with no assigned interviewer", async () => {
+    const { service } = makeService({
+      findUpcomingForCompany: jest
+        .fn()
+        .mockResolvedValue([
+          upcomingRow({ interviewerId: null, interviewer: null }),
+        ]),
+    });
+
+    const { interviews } = await service.listUpcomingForCompany(
+      "company-1",
+      "OWNER",
+      "viewer-1",
+    );
+
+    expect(interviews[0]?.interviewerId).toBeNull();
+    expect(interviews[0]?.interviewerName).toBeNull();
   });
 });

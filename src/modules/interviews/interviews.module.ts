@@ -3,8 +3,10 @@ import { InterviewsController } from "./interviews.controller";
 import { InterviewsService } from "./interviews.service";
 import { InterviewsRepository } from "./interviews.repository";
 import { TalentApplicationOwnershipGuard } from "./guards/talent-application-ownership.guard";
+import { CompanyModule } from "@/modules/company/company.module";
 
 @Module({
+  imports: [CompanyModule],
   controllers: [InterviewsController],
   providers: [
     InterviewsService,

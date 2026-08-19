@@ -31,7 +31,7 @@ export class BillingRepository {
         status: true,
         planPaid: true,
         planType: true,
-        employer: { select: { userId: true } },
+        employerId: true,
       },
     });
   }
@@ -49,9 +49,27 @@ export class BillingRepository {
   async markJobPaidAndSubmitted(
     jobId: string,
   ): Promise<JobPaidAndSubmitted | null> {
+    // planType is immutable after creation (nothing in this codebase ever
+    // updates it), so reading it ahead of the CAS write below can't race —
+    // it can only ever match what the write eventually sees.
+    const job = await this.prisma.job.findUnique({
+      where: { id: jobId },
+      select: { planType: true },
+    });
+    if (!job) return null;
+
     const { count } = await this.prisma.job.updateMany({
       where: { id: jobId, planPaid: false },
-      data: { planPaid: true, paidAt: new Date(), status: "PENDING_REVIEW" },
+      data: {
+        planPaid: true,
+        paidAt: new Date(),
+        status: "PENDING_REVIEW",
+        // FEATURED/HANDS_ON are the whole point of paying more than
+        // STANDARD — this is what actually turns on the sort boost
+        // (isFeatured desc) and the "Featured" badge, both of which
+        // already existed and simply had nothing to read.
+        isFeatured: job.planType !== "STANDARD",
+      },
     });
     if (count === 0) return null;
 

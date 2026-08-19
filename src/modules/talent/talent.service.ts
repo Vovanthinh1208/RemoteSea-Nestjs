@@ -36,6 +36,8 @@ import {
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { SalaryRange } from "@/modules/jobs/salary-range";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+import { ProfileViewsService } from "@/modules/profile-views/profile-views.service";
+import type { ProfileViewAnalytics } from "@/modules/profile-views/interfaces";
 
 @Injectable()
 export class TalentService {
@@ -46,6 +48,7 @@ export class TalentService {
     private readonly config: ConfigService<EnvConfig, true>,
     private readonly uploadsService: UploadsService,
     private readonly emailService: EmailService,
+    private readonly profileViewsService: ProfileViewsService,
   ) {}
 
   async getOwnProfile(userId: string): Promise<OwnTalentProfile> {
@@ -120,7 +123,26 @@ export class TalentService {
       }
     }
 
+    // Best-effort — a profile view failing to record must never break the
+    // profile page itself. Guarded internally (recordView no-ops for an
+    // anonymous or non-Employer viewer), so this fires on every call and
+    // lets the service decide who actually counts.
+    runInBackground(
+      this.profileViewsService.recordView(viewer, profile.id),
+      this.logger,
+      `Failed to record profile view for talent ${profile.id}`,
+    );
+
     return TalentMapper.toPublicProfile(profile);
+  }
+
+  // "me/profile-views" twin of getActivity: returns a zero-value result
+  // (not 404) for a caller with no talent profile yet, same reasoning —
+  // simpler for the dashboard to render than a special-cased error state.
+  async getProfileViewAnalytics(userId: string): Promise<ProfileViewAnalytics> {
+    const talent = await this.talentRepository.findTalentIdByUserId(userId);
+    if (!talent) return { totalViews: 0, uniqueViewers: 0 };
+    return this.profileViewsService.getAnalytics(talent.id);
   }
 
   async search(

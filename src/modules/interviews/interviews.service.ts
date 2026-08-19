@@ -1,8 +1,14 @@
 import { Injectable, Logger } from "@nestjs/common";
+import type { CompanyMemberRole } from "@prisma/client";
 import { InterviewsRepository } from "./interviews.repository";
-import type { ApplicationParties, InterviewWithHeader } from "./interfaces";
+import type {
+  ApplicationParties,
+  InterviewWithHeader,
+  UpcomingInterviewsResult,
+} from "./interfaces";
 import type { ProposeInterviewDto } from "./dto/propose-interview.dto";
 import type { ConfirmInterviewDto } from "./dto/confirm-interview.dto";
+import { isInterviewComplete } from "./interview-eligibility.util";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { runInBackground } from "@/common/utils/background-task.util";
 import {
@@ -11,6 +17,7 @@ import {
   NotFoundApiException,
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
+import { CompanyMembershipService } from "@/modules/company/company-membership.service";
 
 @Injectable()
 export class InterviewsService {
@@ -19,7 +26,62 @@ export class InterviewsService {
   constructor(
     private readonly interviewsRepository: InterviewsRepository,
     private readonly notificationsService: NotificationsService,
+    private readonly companyMembershipService: CompanyMembershipService,
   ) {}
+
+  // Single source of truth for "has this application's interview actually
+  // happened" — Interview is this module's aggregate, so modules that gate
+  // something on a completed interview (ReviewsService, ScorecardsService)
+  // call this instead of each querying the interviews table and re-deriving
+  // the rule themselves. ReviewsService is the one exception: it already has
+  // the interview bundled into a single application-select for efficiency
+  // (see reviewApplicationSelect), so it applies isInterviewComplete
+  // directly to that instead of making a second round trip through here.
+  async isComplete(applicationId: string): Promise<boolean> {
+    const interview =
+      await this.interviewsRepository.findEligibilityByApplicationId(
+        applicationId,
+      );
+    return isInterviewComplete(interview);
+  }
+
+  // Backs GET /employer/interviews/upcoming. INTERVIEWER's whole access
+  // model elsewhere is "assigned only" (see Interview.interviewerId's
+  // schema comment and ApplicationAccessGuard's assignment bypass) — the
+  // agenda follows the same rule instead of exposing the full company
+  // schedule to a role that can't otherwise see every application. `scope`
+  // is decided here, alongside the filter it drives, and returned rather
+  // than left for EmployerService to re-derive from the raw role a second
+  // time (see UpcomingInterviewsScope's comment).
+  async listUpcomingForCompany(
+    employerId: string,
+    viewerRole: CompanyMemberRole,
+    viewerUserId: string,
+  ): Promise<UpcomingInterviewsResult> {
+    const mineOnly = viewerRole === "INTERVIEWER";
+    const rows = await this.interviewsRepository.findUpcomingForCompany(
+      employerId,
+      mineOnly ? viewerUserId : undefined,
+    );
+
+    return {
+      scope: mineOnly ? "mine" : "team",
+      interviews: rows.map((row) => ({
+        id: row.id,
+        applicationId: row.applicationId,
+        // Never actually null here — the repository's own where-clause only
+        // ever matches rows with confirmedSlot >= now — but the column
+        // itself is nullable, so Prisma's generated type doesn't know that.
+        confirmedSlot: row.confirmedSlot!,
+        durationMinutes: row.durationMinutes,
+        meetingUrl: row.meetingUrl,
+        talentName: row.application.talent.user.name,
+        jobTitle: row.application.job.title,
+        interviewerId: row.interviewerId,
+        interviewerName: row.interviewer?.name ?? null,
+      })),
+    };
+  }
 
   // Bundles the interview + header context in one response, same shape as
   // MessagesService.list — parties is already loaded by the caller's
@@ -63,11 +125,28 @@ export class InterviewsService {
       );
     }
 
+    // Never trust that interviewerId is even a real company member, let
+    // alone the right company's — an id from another company (or a random
+    // string) must fail here, not silently grant that user assigned-only
+    // access via ApplicationAccessGuard once they somehow are a member.
+    if (dto.interviewerId) {
+      const assignee = await this.companyMembershipService.resolveMembership(
+        dto.interviewerId,
+      );
+      if (!assignee || assignee.employerId !== parties.job.employerId) {
+        throw new BadRequestApiException(
+          "interviewerId must be a member of your company",
+          ErrorCode.COMPANY_MEMBER_NOT_FOUND,
+        );
+      }
+    }
+
     const interview = await this.interviewsRepository.upsertPending({
       applicationId: parties.id,
       durationMinutes: dto.durationMinutes,
       proposedSlots,
       meetingUrl: dto.meetingUrl,
+      interviewerId: dto.interviewerId,
     });
 
     runInBackground(
