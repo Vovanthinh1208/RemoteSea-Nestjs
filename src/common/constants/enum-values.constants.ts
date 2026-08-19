@@ -42,3 +42,8 @@ export const JOB_REPORT_STATUS_VALUES = [
   "RESOLVED",
   "DISMISSED",
 ] as const;
+export const ADMIN_AUDIT_TARGET_TYPE_VALUES = [
+  "EMPLOYER",
+  "JOB",
+  "JOB_REPORT",
+] as const;

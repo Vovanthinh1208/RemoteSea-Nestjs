@@ -9,6 +9,7 @@ import type { ListJobsDto } from "./dto/list-jobs.dto";
 import type { ReviewJobDto } from "./dto/review-job.dto";
 import type { ListJobReportsDto } from "@/modules/job-reports/dto/list-job-reports.dto";
 import type { ResolveJobReportDto } from "@/modules/job-reports/dto/resolve-job-report.dto";
+import type { ListAuditLogDto } from "./dto/list-audit-log.dto";
 import type { RevenueSummary } from "./interfaces";
 import {
   buildMonthlyRevenueBuckets,
@@ -25,8 +26,10 @@ import {
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { PLAN_PRICES } from "@/common/constants/plan.constants";
 import { EmailService } from "@/common/services/email.service";
+import { AuditLogService } from "@/common/services/audit-log.service";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 import { runInBackground } from "@/common/utils/background-task.util";
+import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 
 const REVENUE_MONTHS_WINDOW = 8;
 const RECENT_TRANSACTIONS_LIMIT = 10;
@@ -41,6 +44,7 @@ export class AdminService {
     private readonly jobsService: JobsService,
     private readonly jobReportsService: JobReportsService,
     private readonly emailService: EmailService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async listEmployers(query: ListEmployersDto) {
@@ -70,7 +74,7 @@ export class AdminService {
   async updateEmployer(
     id: string,
     dto: UpdateEmployerDto,
-    adminId: string,
+    admin: AuthenticatedUser,
   ): Promise<{ success: true }> {
     const employer = await this.adminRepository.findEmployerById(id);
     if (!employer) {
@@ -85,11 +89,18 @@ export class AdminService {
     } else {
       await this.employerService.suspend(id);
     }
-    // No audit table for this today — logging the actor is the only record
-    // of "who verified/suspended this employer" available during an
-    // incident or dispute.
-    const verb = dto.action === "verify" ? "verified" : "suspended";
-    this.logger.log(`Employer ${id} ${verb} by admin ${adminId}`);
+
+    await this.auditLogService.record({
+      adminId: admin.id,
+      adminEmail: admin.email,
+      action:
+        dto.action === "verify" ? "EMPLOYER_VERIFIED" : "EMPLOYER_SUSPENDED",
+      targetType: "EMPLOYER",
+      targetId: id,
+      targetLabel: employer.companyName,
+      before: { isVerified: employer.isVerified },
+      after: { isVerified: dto.action === "verify" },
+    });
 
     return { success: true };
   }
@@ -108,7 +119,7 @@ export class AdminService {
     return { jobs, pagination: buildPagination(page, limit, total) };
   }
 
-  async reviewJob(id: string, dto: ReviewJobDto, adminId: string) {
+  async reviewJob(id: string, dto: ReviewJobDto, admin: AuthenticatedUser) {
     const job = await this.adminRepository.findJobWithEmployerEmail(id);
     if (!job) {
       throw new NotFoundApiException("Job not found", ErrorCode.JOB_NOT_FOUND);
@@ -137,9 +148,16 @@ export class AdminService {
           ErrorCode.JOB_NOT_PENDING_REVIEW,
         );
       }
-      // No audit table for this today — logging the actor is the only record
-      // of "who approved this job" available during an incident or dispute.
-      this.logger.log(`Job ${id} approved by admin ${adminId}`);
+      await this.auditLogService.record({
+        adminId: admin.id,
+        adminEmail: admin.email,
+        action: "JOB_APPROVED",
+        targetType: "JOB",
+        targetId: id,
+        targetLabel: job.title,
+        before: { status: "PENDING_REVIEW" },
+        after: { status: "ACTIVE" },
+      });
       // The status change is already committed by the time we email below — a
       // notification failure must not surface as a failed review, since a retry
       // would then hit the PENDING_REVIEW guard above with no way to redo it.
@@ -158,7 +176,16 @@ export class AdminService {
         ErrorCode.JOB_NOT_PENDING_REVIEW,
       );
     }
-    this.logger.log(`Job ${id} rejected by admin ${adminId}`);
+    await this.auditLogService.record({
+      adminId: admin.id,
+      adminEmail: admin.email,
+      action: "JOB_REJECTED",
+      targetType: "JOB",
+      targetId: id,
+      targetLabel: job.title,
+      before: { status: "PENDING_REVIEW" },
+      after: { status: "REJECTED", note: note ?? null },
+    });
     runInBackground(
       this.emailService.sendJobRejectedEmail(
         employerEmail,
@@ -208,7 +235,23 @@ export class AdminService {
     return this.jobReportsService.listForAdmin(query);
   }
 
-  resolveReport(id: string, dto: ResolveJobReportDto, adminId: string) {
-    return this.jobReportsService.resolve(id, dto, adminId);
+  resolveReport(
+    id: string,
+    dto: ResolveJobReportDto,
+    admin: AuthenticatedUser,
+  ) {
+    return this.jobReportsService.resolve(id, dto, admin);
+  }
+
+  async listAuditLog(query: ListAuditLogDto) {
+    const { targetType, targetId, page, limit } = query;
+    const skip = paginationSkip(page, limit);
+    const [entries, total] = await this.auditLogService.list(
+      { targetType, targetId },
+      skip,
+      limit,
+    );
+
+    return { entries, pagination: buildPagination(page, limit, total) };
   }
 }

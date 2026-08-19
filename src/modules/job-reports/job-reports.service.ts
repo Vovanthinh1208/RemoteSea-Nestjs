@@ -12,6 +12,7 @@ import { assertFound } from "@/common/utils/assert-found";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 import { runInBackground } from "@/common/utils/background-task.util";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
+import { AuditLogService } from "@/common/services/audit-log.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 
 @Injectable()
@@ -21,6 +22,7 @@ export class JobReportsService {
   constructor(
     private readonly jobReportsRepository: JobReportsRepository,
     private readonly notificationsService: NotificationsService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async create(
@@ -62,7 +64,11 @@ export class JobReportsService {
     return { reports, pagination: buildPagination(page, limit, total) };
   }
 
-  async resolve(id: string, dto: ResolveJobReportDto, adminId: string) {
+  async resolve(
+    id: string,
+    dto: ResolveJobReportDto,
+    admin: AuthenticatedUser,
+  ) {
     const report = await this.jobReportsRepository.findByIdForAdmin(id);
     assertFound(report, "Report not found", ErrorCode.JOB_REPORT_NOT_FOUND);
     if (report.status !== "OPEN") {
@@ -81,11 +87,20 @@ export class JobReportsService {
       );
     }
 
-    // No audit table for this today — logging the actor is the only record
-    // of "who resolved/dismissed this report" available during a dispute,
-    // same reasoning as AdminService.reviewJob/updateEmployer's own logging.
     const verb = dto.action === "resolve" ? "resolved" : "dismissed";
-    this.logger.log(`Report ${id} ${verb} by admin ${adminId}`);
+    await this.auditLogService.record({
+      adminId: admin.id,
+      adminEmail: admin.email,
+      action:
+        dto.action === "resolve"
+          ? "JOB_REPORT_RESOLVED"
+          : "JOB_REPORT_DISMISSED",
+      targetType: "JOB_REPORT",
+      targetId: id,
+      targetLabel: report.job.title,
+      before: { status: "OPEN" },
+      after: { status: newStatus },
+    });
 
     runInBackground(
       this.notificationsService.create({

@@ -13,10 +13,16 @@ const makeService = (repoOverrides: Partial<JobReportsRepository> = {}) => {
   const notificationsService = {
     create: jest.fn().mockResolvedValue(undefined),
   };
+  const auditLogService = { record: jest.fn().mockResolvedValue(undefined) };
   return {
-    service: new JobReportsService(repo, notificationsService as never),
+    service: new JobReportsService(
+      repo,
+      notificationsService as never,
+      auditLogService as never,
+    ),
     repo,
     notificationsService,
+    auditLogService,
   };
 };
 
@@ -24,6 +30,13 @@ const talentUser: AuthenticatedUser = {
   id: "talent-user-1",
   role: "TALENT",
 } as AuthenticatedUser;
+
+const admin: AuthenticatedUser = {
+  id: "admin-1",
+  email: "admin@remotesea.io",
+  name: "Admin One",
+  role: "ADMIN",
+};
 
 describe("JobReportsService.create", () => {
   it("throws JOB_NOT_FOUND when the job doesn't exist", async () => {
@@ -101,7 +114,7 @@ describe("JobReportsService.resolve", () => {
     });
 
     const error = await service
-      .resolve("rep-1", { action: "resolve" }, "admin-1")
+      .resolve("rep-1", { action: "resolve" }, admin)
       .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(NotFoundApiException);
@@ -118,7 +131,7 @@ describe("JobReportsService.resolve", () => {
     });
 
     const error = await service
-      .resolve("rep-1", { action: "resolve" }, "admin-1")
+      .resolve("rep-1", { action: "resolve" }, admin)
       .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(BadRequestApiException);
@@ -139,7 +152,7 @@ describe("JobReportsService.resolve", () => {
     });
 
     const error = await service
-      .resolve("rep-1", { action: "resolve" }, "admin-1")
+      .resolve("rep-1", { action: "resolve" }, admin)
       .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(BadRequestApiException);
@@ -154,7 +167,7 @@ describe("JobReportsService.resolve", () => {
       status: "RESOLVED",
       resolvedAt: new Date(),
     });
-    const { service, notificationsService } = makeService({
+    const { service, notificationsService, auditLogService } = makeService({
       findByIdForAdmin: jest.fn().mockResolvedValue({
         id: "rep-1",
         status: "OPEN",
@@ -164,11 +177,7 @@ describe("JobReportsService.resolve", () => {
       updateStatus,
     });
 
-    const result = await service.resolve(
-      "rep-1",
-      { action: "resolve" },
-      "admin-1",
-    );
+    const result = await service.resolve("rep-1", { action: "resolve" }, admin);
 
     expect(updateStatus).toHaveBeenCalledWith("rep-1", "RESOLVED");
     expect(result.status).toBe("RESOLVED");
@@ -179,6 +188,16 @@ describe("JobReportsService.resolve", () => {
       body: 'Your report on "Backend Engineer" has been resolved.',
       link: "/jobs/backend-engineer-a1b2c3",
     });
+    expect(auditLogService.record).toHaveBeenCalledWith({
+      adminId: "admin-1",
+      adminEmail: "admin@remotesea.io",
+      action: "JOB_REPORT_RESOLVED",
+      targetType: "JOB_REPORT",
+      targetId: "rep-1",
+      targetLabel: "Backend Engineer",
+      before: { status: "OPEN" },
+      after: { status: "RESOLVED" },
+    });
   });
 
   it("dismisses an OPEN report and notifies the reporter", async () => {
@@ -187,7 +206,7 @@ describe("JobReportsService.resolve", () => {
       status: "DISMISSED",
       resolvedAt: new Date(),
     });
-    const { service, notificationsService } = makeService({
+    const { service, notificationsService, auditLogService } = makeService({
       findByIdForAdmin: jest.fn().mockResolvedValue({
         id: "rep-1",
         status: "OPEN",
@@ -197,11 +216,7 @@ describe("JobReportsService.resolve", () => {
       updateStatus,
     });
 
-    const result = await service.resolve(
-      "rep-1",
-      { action: "dismiss" },
-      "admin-1",
-    );
+    const result = await service.resolve("rep-1", { action: "dismiss" }, admin);
 
     expect(updateStatus).toHaveBeenCalledWith("rep-1", "DISMISSED");
     expect(result.status).toBe("DISMISSED");
@@ -211,6 +226,16 @@ describe("JobReportsService.resolve", () => {
       title: "Your report was dismissed",
       body: 'Your report on "Backend Engineer" has been dismissed.',
       link: "/jobs/backend-engineer-a1b2c3",
+    });
+    expect(auditLogService.record).toHaveBeenCalledWith({
+      adminId: "admin-1",
+      adminEmail: "admin@remotesea.io",
+      action: "JOB_REPORT_DISMISSED",
+      targetType: "JOB_REPORT",
+      targetId: "rep-1",
+      targetLabel: "Backend Engineer",
+      before: { status: "OPEN" },
+      after: { status: "DISMISSED" },
     });
   });
 });

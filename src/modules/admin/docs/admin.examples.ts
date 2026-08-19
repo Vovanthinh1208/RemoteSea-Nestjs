@@ -194,3 +194,33 @@ export const ResolveReportResponseExample = {
 };
 
 export const ReportNotFoundExample = { error: "Report not found" };
+
+export const ListAuditLogResponseExample = {
+  entries: [
+    {
+      id: "caud1a2b0000ug0h9x1n1a2",
+      adminId: "cadm1a2b0000ug0h9x1n1a2",
+      adminEmail: "admin@remotesea.io",
+      action: "JOB_APPROVED",
+      targetType: "JOB",
+      targetId: "cjob1a2b0000ug0h9x1n1a2",
+      targetLabel: "Senior Backend Engineer",
+      before: { status: "PENDING_REVIEW" },
+      after: { status: "ACTIVE" },
+      createdAt: "2026-08-19T09:00:00.000Z",
+    },
+    {
+      id: "caud2a2b0000ug0h9x1n1a3",
+      adminId: "cadm1a2b0000ug0h9x1n1a2",
+      adminEmail: "admin@remotesea.io",
+      action: "EMPLOYER_SUSPENDED",
+      targetType: "EMPLOYER",
+      targetId: "cemp1a2b0000ug0h9x1n1a2",
+      targetLabel: "Acme Corp",
+      before: { isVerified: true },
+      after: { isVerified: false },
+      createdAt: "2026-08-18T14:30:00.000Z",
+    },
+  ],
+  pagination: { page: 1, limit: 20, total: 2, pages: 1 },
+};
