@@ -35,8 +35,20 @@ export const FILTER_OPTIONS = {
   category: ["Engineering", "Design", "Data", "Product", "Marketing"],
 };
 
+// A listing with no expiresAt (unpaid, HANDS_ON, or approved before this
+// field existed) never expires; everything else stops counting as "live"
+// once its window is up. Exported so employer.repository.ts's company-
+// profile job list applies the exact same rule instead of drifting.
+export function notExpiredCondition(): Prisma.JobWhereInput {
+  return { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] };
+}
+
 export function activeJobBaseWhere(): Prisma.JobWhereInput {
-  return { status: "ACTIVE", publishedAt: { not: null, lte: new Date() } };
+  return {
+    status: "ACTIVE",
+    publishedAt: { not: null, lte: new Date() },
+    ...notExpiredCondition(),
+  };
 }
 
 function tzCondition(key: string): Prisma.JobWhereInput {
@@ -113,6 +125,7 @@ export function buildSearchRankedIdsQuery(q: string): Prisma.Sql {
     WHERE status = 'ACTIVE'
       AND "publishedAt" IS NOT NULL
       AND "publishedAt" <= now()
+      AND ("expiresAt" IS NULL OR "expiresAt" > now())
       AND "searchVector" @@ websearch_to_tsquery('english', ${q})
     ORDER BY ts_rank_cd("searchVector", websearch_to_tsquery('english', ${q})) DESC
     LIMIT ${SEARCH_CANDIDATE_LIMIT}
@@ -190,7 +203,9 @@ export function buildFacetCountsQuery(): Prisma.Sql {
       COUNT(*) FILTER (WHERE country = ${TZ_COUNTRY.AU})::int AS tz_au,
       COUNT(*) FILTER (WHERE country = ${TZ_COUNTRY.US})::int AS tz_us
     FROM "jobs"
-    WHERE status = 'ACTIVE' AND "publishedAt" IS NOT NULL AND "publishedAt" <= now()
+    WHERE status = 'ACTIVE'
+      AND "publishedAt" IS NOT NULL AND "publishedAt" <= now()
+      AND ("expiresAt" IS NULL OR "expiresAt" > now())
   `;
 }
 
@@ -206,6 +221,7 @@ export function buildCategoryFacetsQuery(): Prisma.Sql {
     WHERE j.status = 'ACTIVE'
       AND j."publishedAt" IS NOT NULL
       AND j."publishedAt" <= now()
+      AND (j."expiresAt" IS NULL OR j."expiresAt" > now())
       AND c.name IN (${trackedNames})
     GROUP BY c.name
   `;

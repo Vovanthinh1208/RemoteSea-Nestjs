@@ -1,10 +1,12 @@
 import {
+  activeJobBaseWhere,
   assembleFacets,
   buildCategoryFacetsQuery,
   buildFacetCountsQuery,
   buildJobOrderBy,
   buildJobWhere,
   buildSearchRankedIdsQuery,
+  notExpiredCondition,
   SEARCH_CANDIDATE_LIMIT,
   type FacetCountsRow,
 } from "./job-search.util";
@@ -34,6 +36,29 @@ describe("buildSearchRankedIdsQuery", () => {
       "\"searchVector\" @@ websearch_to_tsquery('english',",
     );
     expect(query.sql).toContain("ORDER BY ts_rank_cd(");
+  });
+
+  it("excludes expired listings", () => {
+    const query = buildSearchRankedIdsQuery("remote engineer");
+
+    expect(query.sql).toContain('("expiresAt" IS NULL OR "expiresAt" > now())');
+  });
+});
+
+describe("notExpiredCondition / activeJobBaseWhere", () => {
+  it("passes a listing with no expiresAt (unpaid, HANDS_ON, or pre-existing)", () => {
+    const where = notExpiredCondition();
+    expect(where).toEqual({
+      OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }],
+    });
+  });
+
+  it("folds the same not-expired condition into the ACTIVE base where", () => {
+    const where = activeJobBaseWhere();
+    expect(where).toMatchObject({
+      status: "ACTIVE",
+      OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }],
+    });
   });
 });
 
@@ -130,6 +155,12 @@ describe("buildFacetCountsQuery", () => {
     expect(query.sql).toContain('"publishedAt" <= now()');
     expect(query.sql).toContain("FILTER");
   });
+
+  it("excludes expired listings from every facet count", () => {
+    const query = buildFacetCountsQuery();
+
+    expect(query.sql).toContain('("expiresAt" IS NULL OR "expiresAt" > now())');
+  });
 });
 
 describe("buildCategoryFacetsQuery", () => {
@@ -146,6 +177,14 @@ describe("buildCategoryFacetsQuery", () => {
       "Product",
       "Marketing",
     ]);
+  });
+
+  it("excludes expired listings, using the jobs-table alias", () => {
+    const query = buildCategoryFacetsQuery();
+
+    expect(query.sql).toContain(
+      '(j."expiresAt" IS NULL OR j."expiresAt" > now())',
+    );
   });
 });
 

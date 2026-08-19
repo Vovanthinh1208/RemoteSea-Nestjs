@@ -11,6 +11,7 @@ import {
   jobListItemSelect,
   type JobListItem,
 } from "@/common/types/job-list-item.type";
+import { notExpiredCondition } from "@/modules/jobs/job-search.util";
 
 const EMPLOYER_JOBS_LIST_CAP = 200;
 const COMPANY_PROFILE_JOBS_CAP = 50;
@@ -124,7 +125,9 @@ export class EmployerRepository {
     employerId: string,
   ): Promise<{ activeJobCount: number; vnHireTotal: number }> {
     const [activeJobCount, vnHireAgg] = await Promise.all([
-      this.prisma.job.count({ where: { employerId, status: "ACTIVE" } }),
+      this.prisma.job.count({
+        where: { employerId, status: "ACTIVE", ...notExpiredCondition() },
+      }),
       this.prisma.job.aggregate({
         where: { employerId },
         _sum: { vnHireCount: true },
@@ -141,7 +144,7 @@ export class EmployerRepository {
   // component, nested `employer` redundancy and all — no new frontend type.
   findActiveJobsForCompany(employerId: string): Promise<JobListItem[]> {
     return this.prisma.job.findMany({
-      where: { employerId, status: "ACTIVE" },
+      where: { employerId, status: "ACTIVE", ...notExpiredCondition() },
       orderBy: [{ isFeatured: "desc" }, { publishedAt: "desc" }],
       take: COMPANY_PROFILE_JOBS_CAP,
       select: jobListItemSelect,

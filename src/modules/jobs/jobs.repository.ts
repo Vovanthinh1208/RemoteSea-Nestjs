@@ -5,6 +5,7 @@ import {
   buildCategoryFacetsQuery,
   buildFacetCountsQuery,
   buildSearchRankedIdsQuery,
+  notExpiredCondition,
   type CategoryFacetRow,
   type FacetCountsRow,
 } from "./job-search.util";
@@ -13,6 +14,9 @@ import {
   jobListItemSelect,
   type JobListItem,
 } from "@/common/types/job-list-item.type";
+import { PLAN_DURATION_DAYS } from "@/common/constants/plan.constants";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type PublicJob = Omit<Job, "stripeSessionId" | "reviewNote">;
 
@@ -96,9 +100,12 @@ export class JobsRepository {
     return rows.map((row) => row.id);
   }
 
+  // Expired is treated the same as CLOSED/REJECTED/DRAFT here — a plain 404,
+  // not a distinct "this listing has expired" page, matching how every other
+  // not-currently-live status already behaves on this route.
   async findActiveById(id: string) {
     const job = await this.prisma.job.findFirst({
-      where: { id, status: "ACTIVE" },
+      where: { id, status: "ACTIVE", ...notExpiredCondition() },
       include: jobDetailInclude,
     });
     return job && omitInternalJobFields(job);
@@ -178,16 +185,35 @@ export class JobsRepository {
   // module's domain rule regardless of which module triggers them.
   async approveJob(
     id: string,
-  ): Promise<Pick<Job, "status" | "publishedAt"> | null> {
+  ): Promise<Pick<Job, "status" | "publishedAt" | "expiresAt"> | null> {
+    // planType is immutable after creation — safe to read before the CAS
+    // write below for the same reason as BillingRepository.
+    // markJobPaidAndSubmitted. Anchored on publishedAt (the moment the
+    // listing actually goes live), not paidAt: a job that sits in
+    // PENDING_REVIEW for days waiting on manual admin approval shouldn't
+    // lose those days off its paid-for listing window.
+    const job = await this.prisma.job.findUnique({
+      where: { id },
+      select: { planType: true },
+    });
+    if (!job) return null;
+
+    const publishedAt = new Date();
+    const durationDays = PLAN_DURATION_DAYS[job.planType];
+    const expiresAt =
+      durationDays === null
+        ? null
+        : new Date(publishedAt.getTime() + durationDays * DAY_MS);
+
     const { count } = await this.prisma.job.updateMany({
       where: { id, status: "PENDING_REVIEW" },
-      data: { status: "ACTIVE", publishedAt: new Date(), reviewNote: null },
+      data: { status: "ACTIVE", publishedAt, reviewNote: null, expiresAt },
     });
     if (count === 0) return null;
 
     return this.prisma.job.findUnique({
       where: { id },
-      select: { status: true, publishedAt: true },
+      select: { status: true, publishedAt: true, expiresAt: true },
     });
   }
 
