@@ -15,7 +15,10 @@ import type { ApplicationWithJobOwner } from "./guards/application-ownership.gua
 const application = {
   id: "app-1",
   status: "PENDING",
-  talent: { userId: "talent-user-1" },
+  talent: {
+    userId: "talent-user-1",
+    user: { name: "Jane Talent", email: "jane@example.com" },
+  },
   job: { title: "Engineer", employer: { userId: "owner-1" } },
 } as unknown as ApplicationWithJobOwner;
 
@@ -25,10 +28,16 @@ const makeService = (
 ) => {
   const repo = {
     updateApplication: jest.fn(),
+    // Default "on" (matches the schema default for an absent preference
+    // row) so every test not specifically about this gating doesn't also
+    // have to stub it.
+    applicationUpdatesEnabled: jest.fn().mockResolvedValue(true),
+    findApplicationUpdatesPreferences: jest.fn().mockResolvedValue(new Map()),
     ...repoOverrides,
   } as unknown as EmployerRepository;
   const emailService = {
     sendEmployerVerificationEmail: jest.fn().mockResolvedValue(undefined),
+    sendApplicationStatusChangedEmail: jest.fn().mockResolvedValue(undefined),
     ...emailServiceOverrides,
   };
   const notificationsService = {
@@ -129,6 +138,40 @@ describe("EmployerService.updateApplication", () => {
       service.updateApplication(application, { status: "REVIEWING" }),
     ).rejects.toBeInstanceOf(ConflictApiException);
   });
+
+  it("emails the talent when applicationUpdates is enabled", async () => {
+    const updated = { ...application, status: "REVIEWING" };
+    const { service, emailService } = makeService({
+      updateApplication: jest.fn().mockResolvedValue(updated),
+      applicationUpdatesEnabled: jest.fn().mockResolvedValue(true),
+    });
+
+    await service.updateApplication(application, { status: "REVIEWING" });
+
+    expect(emailService.sendApplicationStatusChangedEmail).toHaveBeenCalledWith(
+      "jane@example.com",
+      "Jane Talent",
+      "Engineer",
+      "In review",
+    );
+  });
+
+  it("skips the email (but still notifies in-app) when applicationUpdates is disabled", async () => {
+    const updated = { ...application, status: "REVIEWING" };
+    const { service, emailService, notificationsService } = makeService({
+      updateApplication: jest.fn().mockResolvedValue(updated),
+      applicationUpdatesEnabled: jest.fn().mockResolvedValue(false),
+    });
+
+    await service.updateApplication(application, { status: "REVIEWING" });
+
+    expect(
+      emailService.sendApplicationStatusChangedEmail,
+    ).not.toHaveBeenCalled();
+    // In-app notifications are a separate, always-on channel — the email
+    // toggle above must not suppress this.
+    expect(notificationsService.create).toHaveBeenCalled();
+  });
 });
 
 describe("EmployerService.bulkUpdateApplications", () => {
@@ -138,7 +181,10 @@ describe("EmployerService.bulkUpdateApplications", () => {
         {
           id: "app-2",
           status: "PENDING",
-          talent: { userId: "talent-user-2" },
+          talent: {
+            userId: "talent-user-2",
+            user: { name: "Talent Two", email: "talent2@example.com" },
+          },
           job: { title: "Frontend Dev", employer: { userId: "someone-else" } },
         },
       ]),
@@ -164,7 +210,10 @@ describe("EmployerService.bulkUpdateApplications", () => {
         {
           id: "app-1",
           status: "REJECTED",
-          talent: { userId: "talent-user-1" },
+          talent: {
+            userId: "talent-user-1",
+            user: { name: "Jane Talent", email: "jane@example.com" },
+          },
           job: { title: "Backend Dev", employer: { userId: "owner-1" } },
         },
       ]),
@@ -188,7 +237,10 @@ describe("EmployerService.bulkUpdateApplications", () => {
         {
           id: "app-1",
           status: "PENDING",
-          talent: { userId: "talent-user-1" },
+          talent: {
+            userId: "talent-user-1",
+            user: { name: "Jane Talent", email: "jane@example.com" },
+          },
           job: { title: "Backend Dev", employer: { userId: "owner-1" } },
         },
       ]),
@@ -214,19 +266,28 @@ describe("EmployerService.bulkUpdateApplications", () => {
         {
           id: "app-1",
           status: "PENDING",
-          talent: { userId: "talent-user-1" },
+          talent: {
+            userId: "talent-user-1",
+            user: { name: "Talent One", email: "talent1@example.com" },
+          },
           job: { title: "Backend Dev", employer: { userId: "owner-1" } },
         },
         {
           id: "app-2",
           status: "REVIEWING",
-          talent: { userId: "talent-user-2" },
+          talent: {
+            userId: "talent-user-2",
+            user: { name: "Talent Two", email: "talent2@example.com" },
+          },
           job: { title: "Frontend Dev", employer: { userId: "owner-1" } },
         },
         {
           id: "app-3",
           status: "REJECTED",
-          talent: { userId: "talent-user-3" },
+          talent: {
+            userId: "talent-user-3",
+            user: { name: "Talent Three", email: "talent3@example.com" },
+          },
           job: { title: "Design Lead", employer: { userId: "owner-1" } },
         },
       ]),
@@ -251,6 +312,52 @@ describe("EmployerService.bulkUpdateApplications", () => {
     );
     expect(notificationsService.create).toHaveBeenCalledWith(
       expect.objectContaining({ userId: "talent-user-2" }),
+    );
+  });
+
+  it("emails only the talents with applicationUpdates enabled", async () => {
+    const { service, emailService } = makeService({
+      findApplicationsForBulkUpdate: jest.fn().mockResolvedValue([
+        {
+          id: "app-1",
+          status: "PENDING",
+          talent: {
+            userId: "talent-user-1",
+            user: { name: "Talent One", email: "talent1@example.com" },
+          },
+          job: { title: "Backend Dev", employer: { userId: "owner-1" } },
+        },
+        {
+          id: "app-2",
+          status: "PENDING",
+          talent: {
+            userId: "talent-user-2",
+            user: { name: "Talent Two", email: "talent2@example.com" },
+          },
+          job: { title: "Frontend Dev", employer: { userId: "owner-1" } },
+        },
+      ]),
+      bulkUpdateApplicationStatus: jest
+        .fn()
+        .mockResolvedValue(["app-1", "app-2"]),
+      findApplicationUpdatesPreferences: jest
+        .fn()
+        .mockResolvedValue(new Map([["talent-user-2", false]])),
+    });
+
+    await service.bulkUpdateApplications("owner-1", {
+      ids: ["app-1", "app-2"],
+      status: "REVIEWING",
+    });
+
+    expect(
+      emailService.sendApplicationStatusChangedEmail,
+    ).toHaveBeenCalledTimes(1);
+    expect(emailService.sendApplicationStatusChangedEmail).toHaveBeenCalledWith(
+      "talent1@example.com",
+      "Talent One",
+      "Backend Dev",
+      "In review",
     );
   });
 });

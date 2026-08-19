@@ -514,7 +514,12 @@ export class EmployerRepository {
       select: {
         id: true,
         status: true,
-        talent: { select: { userId: true, user: { select: { name: true } } } },
+        talent: {
+          select: {
+            userId: true,
+            user: { select: { name: true, email: true } },
+          },
+        },
         job: {
           select: {
             title: true,
@@ -568,7 +573,12 @@ export class EmployerRepository {
       select: {
         id: true,
         status: true,
-        talent: { select: { userId: true } },
+        talent: {
+          select: {
+            userId: true,
+            user: { select: { name: true, email: true } },
+          },
+        },
         job: {
           select: {
             title: true,
@@ -604,5 +614,33 @@ export class EmployerRepository {
       }
       return updatedIds;
     });
+  }
+
+  /** Self-contained narrow query (not a cross-import of UsersRepository) —
+   * same reasoning as InvitationsRepository.employerMessagesEnabled. */
+  async applicationUpdatesEnabled(userId: string): Promise<boolean> {
+    const pref = await this.prisma.notificationPreference.findUnique({
+      where: { userId },
+      select: { applicationUpdates: true },
+    });
+    // No row yet (never opened Settings > Notifications) — the schema
+    // default for applicationUpdates is true, so an absent row means "on".
+    return pref?.applicationUpdates ?? true;
+  }
+
+  // Batch form of applicationUpdatesEnabled for bulkUpdateApplications — one
+  // query for the whole batch instead of one per talent, since a batch can
+  // touch up to BULK_UPDATE_MAX_ITEMS different talents at once.
+  async findApplicationUpdatesPreferences(
+    userIds: string[],
+  ): Promise<Map<string, boolean>> {
+    const rows = await this.prisma.notificationPreference.findMany({
+      where: { userId: { in: userIds } },
+      select: { userId: true, applicationUpdates: true },
+    });
+    const byUserId = new Map(rows.map((r) => [r.userId, r.applicationUpdates]));
+    // Same "no row yet -> default true" rule as the single-lookup version,
+    // applied per id since userIds can include users with no preference row.
+    return new Map(userIds.map((id) => [id, byUserId.get(id) ?? true]));
   }
 }
