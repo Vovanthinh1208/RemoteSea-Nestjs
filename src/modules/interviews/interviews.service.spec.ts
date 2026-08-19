@@ -234,3 +234,45 @@ describe("InterviewsService.confirm", () => {
     });
   });
 });
+
+describe("InterviewsService.isComplete", () => {
+  it("is false when there's no interview for the application", async () => {
+    const { service } = makeService({
+      findEligibilityByApplicationId: jest.fn().mockResolvedValue(null),
+    });
+
+    expect(await service.isComplete("app-1")).toBe(false);
+  });
+
+  it("is false while still PENDING", async () => {
+    const { service } = makeService({
+      findEligibilityByApplicationId: jest
+        .fn()
+        .mockResolvedValue({ status: "PENDING", confirmedSlot: null }),
+    });
+
+    expect(await service.isComplete("app-1")).toBe(false);
+  });
+
+  it("is false when CONFIRMED but the slot hasn't happened yet", async () => {
+    const { service } = makeService({
+      findEligibilityByApplicationId: jest.fn().mockResolvedValue({
+        status: "CONFIRMED",
+        confirmedSlot: futureSlot(),
+      }),
+    });
+
+    expect(await service.isComplete("app-1")).toBe(false);
+  });
+
+  it("is true once CONFIRMED and the slot has passed", async () => {
+    const { service } = makeService({
+      findEligibilityByApplicationId: jest.fn().mockResolvedValue({
+        status: "CONFIRMED",
+        confirmedSlot: pastSlot(),
+      }),
+    });
+
+    expect(await service.isComplete("app-1")).toBe(true);
+  });
+});

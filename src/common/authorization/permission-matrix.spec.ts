@@ -423,6 +423,20 @@ const expectations: ControllerExpectation[] = [
         roles: ["EMPLOYER"],
       },
       {
+        method: "listApplicationScorecards",
+        httpMethod: "GET",
+        path: "applications/:id/scorecards",
+        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationAccessGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
+        method: "submitApplicationScorecard",
+        httpMethod: "POST",
+        path: "applications/:id/scorecards",
+        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationAccessGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
         method: "submitVerification",
         httpMethod: "POST",
         path: "verification",

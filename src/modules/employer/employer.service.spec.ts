@@ -61,6 +61,10 @@ const makeService = (
     get: jest.fn(),
     propose: jest.fn(),
   };
+  const scorecardsService = {
+    list: jest.fn(),
+    create: jest.fn(),
+  };
   // No-op cache (always a miss, set() does nothing) — fine for every
   // existing test in this file since none of them exercise the cached
   // getPublicResponseHours path, which builds its own cache stub instead.
@@ -73,6 +77,7 @@ const makeService = (
     notificationsService as never,
     messagesService as never,
     interviewsService as never,
+    scorecardsService as never,
     companyMembershipService as never,
     cache as never,
   );
@@ -83,6 +88,7 @@ const makeService = (
     notificationsService,
     messagesService,
     interviewsService,
+    scorecardsService,
     companyMembershipService,
     cache,
   };

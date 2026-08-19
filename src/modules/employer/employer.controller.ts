@@ -50,6 +50,10 @@ import {
   proposeInterviewSchema,
   type ProposeInterviewDto,
 } from "@/modules/interviews/dto/propose-interview.dto";
+import {
+  createScorecardSchema,
+  type CreateScorecardDto,
+} from "@/modules/scorecards/dto/create-scorecard.dto";
 import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
@@ -90,6 +94,11 @@ import {
   ApiProposeInterview,
 } from "@/modules/interviews/docs/interviews.swagger";
 import { RATE_LIMITS as INTERVIEW_RATE_LIMITS } from "@/modules/interviews/constants";
+import {
+  ApiCreateScorecard,
+  ApiListScorecards,
+} from "@/modules/scorecards/docs/scorecards.swagger";
+import { RATE_LIMITS as SCORECARD_RATE_LIMITS } from "@/modules/scorecards/constants";
 
 @ApiEmployerTag()
 @Controller("employer")
@@ -270,6 +279,44 @@ export class EmployerController {
       INTERVIEW_RATE_LIMITS.PROPOSE_INTERVIEW.windowMs,
     );
     return this.employerService.proposeInterview(application, body);
+  }
+
+  // ApplicationAccessGuard (not ApplicationOwnershipGuard) on both routes
+  // below — internal hiring feedback is deliberately open to any team member
+  // with access to this application, including an assigned INTERVIEWER who
+  // isn't OWNER/RECRUITER/HIRING_MANAGER, not just whoever can change its
+  // status.
+  @ApiListScorecards()
+  @Get("applications/:id/scorecards")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
+  @Roles("EMPLOYER")
+  listApplicationScorecards(
+    @CurrentResource() application: ApplicationWithJobOwner,
+  ) {
+    return this.employerService.listApplicationScorecards(application);
+  }
+
+  @ApiCreateScorecard()
+  @Post("applications/:id/scorecards")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
+  @Roles("EMPLOYER")
+  @HttpCode(HttpStatus.CREATED)
+  submitApplicationScorecard(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentResource() application: ApplicationWithJobOwner,
+    @Body(new ZodValidationPipe(createScorecardSchema))
+    body: CreateScorecardDto,
+  ) {
+    this.rateLimitService.enforce(
+      `submit-scorecard:${user.id}`,
+      SCORECARD_RATE_LIMITS.CREATE_SCORECARD.limit,
+      SCORECARD_RATE_LIMITS.CREATE_SCORECARD.windowMs,
+    );
+    return this.employerService.submitApplicationScorecard(
+      application,
+      user.id,
+      body,
+    );
   }
 
   @ApiSubmitVerification()

@@ -141,6 +141,7 @@ model User {
   companyMembership      CompanyMember?
   teamInvitationsSent    TeamInvitation[]        @relation("TeamInvitationsSent")
   assignedInterviews     Interview[]             @relation("AssignedInterviews")
+  scorecardsWritten      InterviewScorecard[]
 
   @@map("users")
 }
@@ -645,6 +646,7 @@ model Application {
   messages     Message[]
   interview    Interview?
   reviews      Review[]
+  scorecards   InterviewScorecard[]
 
   @@unique([jobId, talentId])
   @@index([talentId, appliedAt])
@@ -942,6 +944,38 @@ model Review {
   // revieweeId + status, sorted newest first).
   @@index([revieweeId, status, createdAt])
   @@map("reviews")
+}
+
+enum ScorecardRecommendation {
+  STRONG_YES
+  YES
+  NO
+  STRONG_NO
+}
+
+// Internal hiring feedback from a company team member — distinct from Review
+// above: private to the company (never shown to the talent), one-directional
+// (company -> talent only), and open to any team member with application
+// access (ApplicationAccessGuard: APPLICATION_REVIEW_ROLES, or the
+// INTERVIEWER assigned to this application's interview), not just the one
+// person who ran the interview. Same eligibility rule and same
+// one-submission-per-author shape as Review (see ScorecardsService), so no
+// updatedAt/edit path — a scorecard is a snapshot of one person's read right
+// after the interview, not a living document.
+model InterviewScorecard {
+  id             String                  @id @default(cuid())
+  applicationId  String
+  authorId       String
+  recommendation ScorecardRecommendation
+  note           String?                 @db.Text
+  createdAt      DateTime                @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  author      User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@unique([authorId, applicationId])
+  @@index([applicationId])
+  @@map("interview_scorecards")
 }
 
 // Only a real Employer viewing a Talent profile is ever recorded (never a

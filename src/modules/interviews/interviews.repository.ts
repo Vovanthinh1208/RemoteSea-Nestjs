@@ -6,6 +6,7 @@ import {
   type InterviewRecord,
   type UpsertInterviewInput,
 } from "./interfaces";
+import type { InterviewEligibilityShape } from "./interview-eligibility.util";
 
 @Injectable()
 export class InterviewsRepository {
@@ -15,6 +16,20 @@ export class InterviewsRepository {
     return this.prisma.interview.findUnique({
       where: { applicationId },
       select: interviewSelect,
+    });
+  }
+
+  // Narrow eligibility-only select, backing InterviewsService.isComplete —
+  // callers that only need "has this interview happened" (ReviewsService via
+  // its own bundled select, ScorecardsService via this one) shouldn't have
+  // to pull the full interviewSelect shape (proposedSlots, meetingUrl,
+  // interviewer, ...).
+  findEligibilityByApplicationId(
+    applicationId: string,
+  ): Promise<InterviewEligibilityShape> {
+    return this.prisma.interview.findUnique({
+      where: { applicationId },
+      select: { status: true, confirmedSlot: true },
     });
   }
 

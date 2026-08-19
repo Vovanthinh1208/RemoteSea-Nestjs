@@ -3,6 +3,7 @@ import { InterviewsRepository } from "./interviews.repository";
 import type { ApplicationParties, InterviewWithHeader } from "./interfaces";
 import type { ProposeInterviewDto } from "./dto/propose-interview.dto";
 import type { ConfirmInterviewDto } from "./dto/confirm-interview.dto";
+import { isInterviewComplete } from "./interview-eligibility.util";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { runInBackground } from "@/common/utils/background-task.util";
 import {
@@ -22,6 +23,22 @@ export class InterviewsService {
     private readonly notificationsService: NotificationsService,
     private readonly companyMembershipService: CompanyMembershipService,
   ) {}
+
+  // Single source of truth for "has this application's interview actually
+  // happened" — Interview is this module's aggregate, so modules that gate
+  // something on a completed interview (ReviewsService, ScorecardsService)
+  // call this instead of each querying the interviews table and re-deriving
+  // the rule themselves. ReviewsService is the one exception: it already has
+  // the interview bundled into a single application-select for efficiency
+  // (see reviewApplicationSelect), so it applies isInterviewComplete
+  // directly to that instead of making a second round trip through here.
+  async isComplete(applicationId: string): Promise<boolean> {
+    const interview =
+      await this.interviewsRepository.findEligibilityByApplicationId(
+        applicationId,
+      );
+    return isInterviewComplete(interview);
+  }
 
   // Bundles the interview + header context in one response, same shape as
   // MessagesService.list — parties is already loaded by the caller's

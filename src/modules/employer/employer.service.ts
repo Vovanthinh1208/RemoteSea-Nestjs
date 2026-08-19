@@ -38,6 +38,8 @@ import { MessagesService } from "@/modules/messages/messages.service";
 import type { SendMessageDto } from "@/modules/messages/dto/send-message.dto";
 import { InterviewsService } from "@/modules/interviews/interviews.service";
 import type { ProposeInterviewDto } from "@/modules/interviews/dto/propose-interview.dto";
+import { ScorecardsService } from "@/modules/scorecards/scorecards.service";
+import type { CreateScorecardDto } from "@/modules/scorecards/dto/create-scorecard.dto";
 import { runInBackground } from "@/common/utils/background-task.util";
 import { getOrSetCache } from "@/common/caching/cache.util";
 import {
@@ -73,6 +75,7 @@ export class EmployerService {
     private readonly notificationsService: NotificationsService,
     private readonly messagesService: MessagesService,
     private readonly interviewsService: InterviewsService,
+    private readonly scorecardsService: ScorecardsService,
     private readonly companyMembershipService: CompanyMembershipService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
@@ -608,5 +611,17 @@ export class EmployerService {
     dto: ProposeInterviewDto,
   ) {
     return this.interviewsService.propose(application, dto);
+  }
+
+  listApplicationScorecards(application: ApplicationWithJobOwner) {
+    return this.scorecardsService.list(application.id);
+  }
+
+  submitApplicationScorecard(
+    application: ApplicationWithJobOwner,
+    authorId: string,
+    dto: CreateScorecardDto,
+  ) {
+    return this.scorecardsService.create(application.id, authorId, dto);
   }
 }
