@@ -5,6 +5,7 @@ import {
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiTags,
 } from "@nestjs/swagger";
 import {
@@ -19,6 +20,7 @@ import {
   BacklogDispatchResponseDto,
 } from "./applications.dto";
 import {
+  ApplicationDetailExample,
   ApplicationsListExample,
   ApplyRequestExample,
   ApplyResponseExample,
@@ -26,6 +28,7 @@ import {
 } from "./applications.examples";
 import {
   AlreadyAppliedResponse,
+  ApplicationNotFoundResponse,
   CronUnauthorizedResponse,
   TalentProfileRequiredResponse,
   ValidationErrorResponse,
@@ -74,6 +77,25 @@ export const ApiApply = () =>
     TalentProfileRequiredResponse,
     AlreadyAppliedResponse,
     rateLimitResponse("10 req/60s per user"),
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiGetApplication = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Get one of my applications",
+      description:
+        "Returns a single application (with embedded job and status-event timeline) the caller owns — the target of an APPLICATION_STATUS_CHANGED notification/activity-feed link. Same 404 whether the id doesn't exist or belongs to someone else.",
+    }),
+    ApiParam({ name: "id", example: "capp1a2b0000ug0h9x1n1a2" }),
+    ApiOkResponse({
+      description: "The application",
+      type: ApplicationWithJobResponseDto,
+      schema: { example: ApplicationDetailExample },
+    }),
+    UnauthorizedApiResponse,
+    ApplicationNotFoundResponse,
     InternalServerErrorApiResponse,
   );
 

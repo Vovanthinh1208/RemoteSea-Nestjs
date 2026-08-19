@@ -90,6 +90,18 @@ export class AlertsService {
     if (alert.lastSentAt && now - alert.lastSentAt.getTime() < gap)
       return false;
 
+    // Only the WEEKLY cadence maps to Settings > Notifications' "Weekly
+    // digest" toggle — IMMEDIATE/DAILY alerts aren't gated by it (that's a
+    // deliberate, separate follow-up, not an oversight; see the product
+    // audit this closes). Checked before the job-match query below so a
+    // muted user doesn't pay for it every run.
+    if (
+      alert.frequency === "WEEKLY" &&
+      !(await this.alertsRepository.weeklyDigestEnabled(alert.userId))
+    ) {
+      return false;
+    }
+
     const since =
       alert.lastSentAt ?? new Date(now - gap || now - FREQUENCY_GAP_MS.DAILY);
 

@@ -31,7 +31,7 @@ export const statusEventsToActivity = (
     type: "APPLICATION_STATUS_CHANGED",
     title: APPLICATION_STATUS_LABELS[event.status],
     body: jobLine(event.application.job),
-    link: "/talent",
+    link: `/applications/${event.application.id}`,
     createdAt: event.createdAt,
   }));
 

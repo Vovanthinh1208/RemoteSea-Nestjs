@@ -184,6 +184,12 @@ const expectations: ControllerExpectation[] = [
         path: "cron/reminders",
         guards: ["CronSecretGuard"],
       },
+      {
+        method: "getById",
+        httpMethod: "GET",
+        path: ":id",
+        guards: ["JwtAuthGuard"],
+      },
     ],
   },
   {

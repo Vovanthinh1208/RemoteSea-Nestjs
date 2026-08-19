@@ -387,11 +387,32 @@ export class EmployerService {
           type: "APPLICATION_STATUS_CHANGED",
           title: "Your application status changed",
           body: `Your application for ${application.job.title} is now ${APPLICATION_STATUS_LABELS[status]}.`,
-          link: "/talent",
+          link: `/applications/${application.id}`,
         }),
         this.logger,
         `Failed to create application-status notification for application ${application.id}`,
       );
+
+      // In-app notification above is unconditional (an always-on channel,
+      // same as everywhere else in this codebase) — only the email is
+      // gated, same split InvitationsService already uses for
+      // employerMessages.
+      const emailEnabled =
+        await this.employerRepository.applicationUpdatesEnabled(
+          application.talent.userId,
+        );
+      if (emailEnabled) {
+        runInBackground(
+          this.emailService.sendApplicationStatusChangedEmail(
+            application.talent.user.email,
+            application.talent.user.name ?? "there",
+            application.job.title,
+            APPLICATION_STATUS_LABELS[status],
+          ),
+          this.logger,
+          `Failed to send application-status email for application ${application.id}`,
+        );
+      }
     }
 
     return updated;
@@ -420,6 +441,8 @@ export class EmployerService {
       id: string;
       expectedStatus: ApplicationStatus;
       talentUserId: string;
+      talentEmail: string;
+      talentName: string | null;
       jobTitle: string;
     }[] = [];
 
@@ -440,6 +463,8 @@ export class EmployerService {
         id,
         expectedStatus: application.status,
         talentUserId: application.talent.userId,
+        talentEmail: application.talent.user.email,
+        talentName: application.talent.user.name,
         jobTitle: application.job.title,
       });
     }
@@ -448,8 +473,17 @@ export class EmployerService {
       await this.employerRepository.bulkUpdateApplicationStatus(
         validItems.map(({ id, expectedStatus }) => ({ id, expectedStatus })),
         dto.status,
+        dto.notes,
       );
     const updatedSet = new Set(updatedIds);
+
+    // One query for every talent in the batch instead of one per item (see
+    // EmployerRepository.findApplicationUpdatesPreferences) — only the
+    // email send is gated, same as the single-item path above.
+    const emailPrefs =
+      await this.employerRepository.findApplicationUpdatesPreferences(
+        validItems.map((item) => item.talentUserId),
+      );
 
     for (const item of validItems) {
       if (!updatedSet.has(item.id)) {
@@ -465,11 +499,24 @@ export class EmployerService {
           type: "APPLICATION_STATUS_CHANGED",
           title: "Your application status changed",
           body: `Your application for ${item.jobTitle} is now ${APPLICATION_STATUS_LABELS[dto.status]}.`,
-          link: "/talent",
+          link: `/applications/${item.id}`,
         }),
         this.logger,
         `Failed to create application-status notification for application ${item.id}`,
       );
+
+      if (emailPrefs.get(item.talentUserId) ?? true) {
+        runInBackground(
+          this.emailService.sendApplicationStatusChangedEmail(
+            item.talentEmail,
+            item.talentName ?? "there",
+            item.jobTitle,
+            APPLICATION_STATUS_LABELS[dto.status],
+          ),
+          this.logger,
+          `Failed to send application-status email for application ${item.id}`,
+        );
+      }
     }
 
     return { updated: updatedIds, failed };

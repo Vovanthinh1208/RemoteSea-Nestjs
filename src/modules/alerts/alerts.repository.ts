@@ -106,4 +106,17 @@ export class AlertsRepository {
     });
     return count === 1;
   }
+
+  /** Self-contained narrow query (not a cross-import of UsersRepository) —
+   * same reasoning as InvitationsRepository.employerMessagesEnabled. Only
+   * consulted for WEEKLY-frequency alerts — see AlertsService.dispatchOne. */
+  async weeklyDigestEnabled(userId: string): Promise<boolean> {
+    const pref = await this.prisma.notificationPreference.findUnique({
+      where: { userId },
+      select: { weeklyDigest: true },
+    });
+    // No row yet (never opened Settings > Notifications) — the schema
+    // default for weeklyDigest is true, so an absent row means "on".
+    return pref?.weeklyDigest ?? true;
+  }
 }

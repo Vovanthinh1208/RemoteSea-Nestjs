@@ -168,6 +168,19 @@ export class EmailService {
     );
   }
 
+  async sendApplicationStatusChangedEmail(
+    to: string,
+    talentName: string,
+    jobTitle: string,
+    statusLabel: string,
+  ): Promise<void> {
+    await this.send(
+      to,
+      `Your application for ${jobTitle} is now ${statusLabel}`,
+      `<p>Hi ${escapeHtml(talentName)},</p><p>Your application for "${escapeHtml(jobTitle)}" is now <strong>${escapeHtml(statusLabel)}</strong>. Log in to see the full timeline.</p>`,
+    );
+  }
+
   async sendJobInvitationEmail(
     to: string,
     talentName: string,

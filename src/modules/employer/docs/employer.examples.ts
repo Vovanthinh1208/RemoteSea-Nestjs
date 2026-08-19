@@ -113,6 +113,7 @@ export const ApplicationResponseExample = {
 export const BulkUpdateApplicationsRequestExample = {
   ids: ["clapp1a2b3c4d5e6f7g8h9i0", "clapp2a2b3c4d5e6f7g8h9i1"],
   status: "REJECTED",
+  notes: "Not enough backend depth for this role.",
 };
 
 export const BulkUpdateApplicationsResponseExample = {
