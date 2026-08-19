@@ -625,3 +625,39 @@ export class MessageResponseDto {
   @ApiProperty({ example: "Verification email sent" })
   message!: string;
 }
+
+const ACTIVITY_TYPES = [
+  "APPLICATION_STATUS_CHANGED",
+  "MESSAGE_RECEIVED",
+  "INTERVIEW_PROPOSED",
+  "INTERVIEW_CONFIRMED",
+  "INVITATION_RECEIVED",
+] as const;
+
+export class ActivityItemDto {
+  @ApiProperty({ example: "clevt1a2b0000ug0h9x1n1a2" })
+  id!: string;
+
+  @ApiProperty({ enum: ACTIVITY_TYPES, example: "APPLICATION_STATUS_CHANGED" })
+  type!: (typeof ACTIVITY_TYPES)[number];
+
+  @ApiProperty({ example: "Shortlisted" })
+  title!: string;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: "Senior Backend Engineer at Acme",
+  })
+  body!: string | null;
+
+  @ApiProperty({ example: "/talent" })
+  link!: string;
+
+  @ApiProperty({ format: "date-time", example: "2026-08-17T09:12:00.000Z" })
+  createdAt!: string;
+}
+
+export class ListActivityResponseDto {
+  @ApiProperty({ type: [ActivityItemDto] })
+  activity!: ActivityItemDto[];
+}

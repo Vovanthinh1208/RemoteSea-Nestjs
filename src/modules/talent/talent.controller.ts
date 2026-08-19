@@ -40,6 +40,7 @@ import { AuthService } from "@/modules/auth/auth.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import {
   ApiConfirmVerification,
+  ApiGetActivity,
   ApiGetOwnProfile,
   ApiGetPublicProfile,
   ApiSearchTalent,
@@ -77,6 +78,14 @@ export class TalentController {
       RATE_LIMITS.UPSERT_PROFILE.windowMs,
     );
     return this.talentService.upsertProfile(user.id, body);
+  }
+
+  @ApiGetActivity()
+  @Get("me/activity")
+  @UseGuards(JwtAuthGuard)
+  async getActivity(@CurrentUser() user: AuthenticatedUser) {
+    const activity = await this.talentService.getActivity(user.id);
+    return { activity };
   }
 
   @ApiSubmitVerification()

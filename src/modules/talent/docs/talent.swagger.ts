@@ -16,6 +16,7 @@ import {
 } from "@/core/swagger/common.responses";
 import {
   ConfirmVerificationRequestDto,
+  ListActivityResponseDto,
   MessageResponseDto,
   PublicTalentProfileResponseDto,
   SubmitVerificationRequestDto,
@@ -26,6 +27,7 @@ import {
 import {
   ConfirmVerificationRequestExample,
   ConfirmVerificationResponseExample,
+  ListActivityResponseExample,
   OwnTalentProfileExample,
   PublicTalentProfileClosedExample,
   PublicTalentProfileOpenExample,
@@ -58,6 +60,23 @@ export const ApiGetOwnProfile = () =>
     }),
     UnauthorizedApiResponse,
     ProfileNotFoundResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiGetActivity = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Get recent activity",
+      description:
+        "Newest-first feed of things that happened on this talent's applications — status changes (excluding the initial PENDING event), messages received from an employer, interview proposed/confirmed, and job invitations received. Computed at request time from ApplicationStatusEvent/Message/Interview/JobInvitation, not a separate persisted feed — no read state, capped at 20 items. Returns an empty list (not 404) if the caller has no talent profile yet.",
+    }),
+    ApiOkResponse({
+      description: "The caller's recent activity, newest first",
+      type: ListActivityResponseDto,
+      schema: { example: ListActivityResponseExample },
+    }),
+    UnauthorizedApiResponse,
     InternalServerErrorApiResponse,
   );
 

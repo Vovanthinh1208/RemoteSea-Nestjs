@@ -698,6 +698,12 @@ const expectations: ControllerExpectation[] = [
         guards: ["JwtAuthGuard"],
       },
       {
+        method: "getActivity",
+        httpMethod: "GET",
+        path: "me/activity",
+        guards: ["JwtAuthGuard"],
+      },
+      {
         method: "submitVerification",
         httpMethod: "POST",
         path: "verification",
