@@ -1,6 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
+import type { CompanyMemberRole } from "@prisma/client";
 import { InterviewsRepository } from "./interviews.repository";
-import type { ApplicationParties, InterviewWithHeader } from "./interfaces";
+import type {
+  ApplicationParties,
+  InterviewWithHeader,
+  UpcomingInterviewsResult,
+} from "./interfaces";
 import type { ProposeInterviewDto } from "./dto/propose-interview.dto";
 import type { ConfirmInterviewDto } from "./dto/confirm-interview.dto";
 import { isInterviewComplete } from "./interview-eligibility.util";
@@ -38,6 +43,44 @@ export class InterviewsService {
         applicationId,
       );
     return isInterviewComplete(interview);
+  }
+
+  // Backs GET /employer/interviews/upcoming. INTERVIEWER's whole access
+  // model elsewhere is "assigned only" (see Interview.interviewerId's
+  // schema comment and ApplicationAccessGuard's assignment bypass) — the
+  // agenda follows the same rule instead of exposing the full company
+  // schedule to a role that can't otherwise see every application. `scope`
+  // is decided here, alongside the filter it drives, and returned rather
+  // than left for EmployerService to re-derive from the raw role a second
+  // time (see UpcomingInterviewsScope's comment).
+  async listUpcomingForCompany(
+    employerId: string,
+    viewerRole: CompanyMemberRole,
+    viewerUserId: string,
+  ): Promise<UpcomingInterviewsResult> {
+    const mineOnly = viewerRole === "INTERVIEWER";
+    const rows = await this.interviewsRepository.findUpcomingForCompany(
+      employerId,
+      mineOnly ? viewerUserId : undefined,
+    );
+
+    return {
+      scope: mineOnly ? "mine" : "team",
+      interviews: rows.map((row) => ({
+        id: row.id,
+        applicationId: row.applicationId,
+        // Never actually null here — the repository's own where-clause only
+        // ever matches rows with confirmedSlot >= now — but the column
+        // itself is nullable, so Prisma's generated type doesn't know that.
+        confirmedSlot: row.confirmedSlot!,
+        durationMinutes: row.durationMinutes,
+        meetingUrl: row.meetingUrl,
+        talentName: row.application.talent.user.name,
+        jobTitle: row.application.job.title,
+        interviewerId: row.interviewerId,
+        interviewerName: row.interviewer?.name ?? null,
+      })),
+    };
   }
 
   // Bundles the interview + header context in one response, same shape as

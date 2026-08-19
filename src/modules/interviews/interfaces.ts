@@ -44,3 +44,54 @@ export type InterviewWithHeader = {
   employerName: string;
   talentName: string | null;
 };
+
+// Backs GET /employer/interviews/upcoming — the one query that spans every
+// application at a company instead of a single one, so it selects across
+// the application -> {talent, job} relation instead of reusing
+// applicationPartiesSelect (which is keyed by application id, not interview).
+export const upcomingInterviewSelect = {
+  id: true,
+  applicationId: true,
+  confirmedSlot: true,
+  durationMinutes: true,
+  meetingUrl: true,
+  interviewerId: true,
+  interviewer: { select: { name: true } },
+  application: {
+    select: {
+      talent: { select: { user: { select: { name: true } } } },
+      job: { select: { title: true } },
+    },
+  },
+} satisfies Prisma.InterviewSelect;
+
+export type UpcomingInterviewRow = Prisma.InterviewGetPayload<{
+  select: typeof upcomingInterviewSelect;
+}>;
+
+// Flattened for the client — nobody outside this module needs to know the
+// agenda came from Interview.application.{talent,job}.
+export type UpcomingInterviewItem = {
+  id: string;
+  applicationId: string;
+  confirmedSlot: Date;
+  durationMinutes: number;
+  meetingUrl: string | null;
+  talentName: string | null;
+  jobTitle: string;
+  interviewerId: string | null;
+  interviewerName: string | null;
+};
+
+// 'mine' for an INTERVIEWER-role viewer (assigned-only, same as everywhere
+// else that role appears), 'team' for every other role. Decided once inside
+// InterviewsService.listUpcomingForCompany, alongside the interviewerId
+// filter it drives — callers (EmployerService) pass this straight through
+// rather than re-deriving "is this role restricted" from the raw role a
+// second time.
+export type UpcomingInterviewsScope = "mine" | "team";
+
+export type UpcomingInterviewsResult = {
+  scope: UpcomingInterviewsScope;
+  interviews: UpcomingInterviewItem[];
+};

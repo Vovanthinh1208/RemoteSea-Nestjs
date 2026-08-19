@@ -16,6 +16,16 @@ export const APPLICATION_REVIEW_ROLES: readonly CompanyMemberRole[] = [
   "RECRUITER",
   "HIRING_MANAGER",
 ];
+// Membership-only gate (any seat qualifies) — for routes open to the whole
+// team where the *response*, not route access, is what narrows by role
+// (e.g. the interview agenda: every member can call it, INTERVIEWER just
+// gets their own interviews back instead of the company's).
+export const ALL_COMPANY_ROLES: readonly CompanyMemberRole[] = [
+  "OWNER",
+  "RECRUITER",
+  "HIRING_MANAGER",
+  "INTERVIEWER",
+];
 
 export const hasCompanyRole = (
   membership: CompanyMembership | null,

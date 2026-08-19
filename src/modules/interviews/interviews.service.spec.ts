@@ -276,3 +276,85 @@ describe("InterviewsService.isComplete", () => {
     expect(await service.isComplete("app-1")).toBe(true);
   });
 });
+
+const upcomingRow = (overrides: Record<string, unknown> = {}) => ({
+  id: "intv-1",
+  applicationId: "app-1",
+  confirmedSlot: futureSlot(),
+  durationMinutes: 30,
+  meetingUrl: null,
+  interviewerId: "interviewer-1",
+  interviewer: { name: "Interviewer One" },
+  application: {
+    talent: { user: { name: "Talent One" } },
+    job: { title: "Backend Engineer" },
+  },
+  ...overrides,
+});
+
+describe("InterviewsService.listUpcomingForCompany", () => {
+  it("passes no interviewerId filter (and returns scope-agnostic rows) for a non-INTERVIEWER role", async () => {
+    const findUpcomingForCompany = jest.fn().mockResolvedValue([upcomingRow()]);
+    const { service } = makeService({ findUpcomingForCompany });
+
+    const result = await service.listUpcomingForCompany(
+      "company-1",
+      "RECRUITER",
+      "viewer-1",
+    );
+
+    expect(findUpcomingForCompany).toHaveBeenCalledWith("company-1", undefined);
+    expect(result).toEqual({
+      scope: "team",
+      interviews: [
+        {
+          id: "intv-1",
+          applicationId: "app-1",
+          confirmedSlot: expect.any(Date),
+          durationMinutes: 30,
+          meetingUrl: null,
+          talentName: "Talent One",
+          jobTitle: "Backend Engineer",
+          interviewerId: "interviewer-1",
+          interviewerName: "Interviewer One",
+        },
+      ],
+    });
+  });
+
+  it("narrows to the viewer's own interviews and reports scope 'mine' for an INTERVIEWER role", async () => {
+    const findUpcomingForCompany = jest.fn().mockResolvedValue([]);
+    const { service } = makeService({ findUpcomingForCompany });
+
+    const result = await service.listUpcomingForCompany(
+      "company-1",
+      "INTERVIEWER",
+      "viewer-1",
+    );
+
+    expect(findUpcomingForCompany).toHaveBeenCalledWith(
+      "company-1",
+      "viewer-1",
+    );
+    expect(result.scope).toBe("mine");
+  });
+
+  it("flattens a row with no assigned interviewer", async () => {
+    const { service } = makeService({
+      findUpcomingForCompany: jest
+        .fn()
+        .mockResolvedValue([
+          upcomingRow({ interviewerId: null, interviewer: null }),
+        ]),
+    });
+
+    const { interviews } = await service.listUpcomingForCompany(
+      "company-1",
+      "OWNER",
+      "viewer-1",
+    );
+
+    expect(interviews[0]?.interviewerId).toBeNull();
+    expect(interviews[0]?.interviewerName).toBeNull();
+  });
+});

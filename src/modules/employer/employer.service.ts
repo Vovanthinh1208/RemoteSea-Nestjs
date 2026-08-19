@@ -51,6 +51,7 @@ import type { ApplicationWithJobOwner } from "./guards/application-ownership.gua
 import { CompanyMembershipService } from "@/modules/company/company-membership.service";
 import type { CompanyMembership } from "@/modules/company/company-membership.interfaces";
 import {
+  ALL_COMPANY_ROLES,
   APPLICATION_REVIEW_ROLES,
   OWNER_ONLY,
   requireCompanyRole,
@@ -604,6 +605,21 @@ export class EmployerService {
 
   getApplicationInterview(application: ApplicationWithJobOwner) {
     return this.interviewsService.get(application);
+  }
+
+  // Company-wide, not per-application — open to any seat (ALL_COMPANY_ROLES),
+  // unlike the per-application interview routes above, which are gated by
+  // ApplicationOwnershipGuard/ApplicationAccessGuard on APPLICATION_REVIEW_ROLES
+  // (+ assignment). Pure pass-through otherwise — the role-based "mine vs
+  // team" decision belongs to and is made entirely inside
+  // InterviewsService.listUpcomingForCompany, not duplicated here.
+  async listUpcomingInterviews(userId: string) {
+    const membership = await this.requireRole(userId, ALL_COMPANY_ROLES);
+    return this.interviewsService.listUpcomingForCompany(
+      membership.employerId,
+      membership.role,
+      userId,
+    );
   }
 
   proposeInterview(

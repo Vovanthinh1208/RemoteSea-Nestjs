@@ -91,6 +91,7 @@ import {
 import { RATE_LIMITS as MESSAGE_RATE_LIMITS } from "@/modules/messages/constants";
 import {
   ApiGetInterview,
+  ApiListUpcomingInterviews,
   ApiProposeInterview,
 } from "@/modules/interviews/docs/interviews.swagger";
 import { RATE_LIMITS as INTERVIEW_RATE_LIMITS } from "@/modules/interviews/constants";
@@ -279,6 +280,22 @@ export class EmployerController {
       INTERVIEW_RATE_LIMITS.PROPOSE_INTERVIEW.windowMs,
     );
     return this.employerService.proposeInterview(application, body);
+  }
+
+  // Registered before "applications/:id" for the same reason as
+  // "applications/bulk" above — distinct literal first segment
+  // ("interviews" vs "applications"), so it can't actually collide, but
+  // keeping every static route ahead of the dynamic ones is the established
+  // convention in this controller. Company-wide (no ApplicationOwnershipGuard/
+  // ApplicationAccessGuard — there's no single :id resource here), open to
+  // any seat via ALL_COMPANY_ROLES; EmployerService narrows the response to
+  // "mine" for an INTERVIEWER-role caller.
+  @ApiListUpcomingInterviews()
+  @Get("interviews/upcoming")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("EMPLOYER")
+  listUpcomingInterviews(@CurrentUser() user: AuthenticatedUser) {
+    return this.employerService.listUpcomingInterviews(user.id);
   }
 
   // ApplicationAccessGuard (not ApplicationOwnershipGuard) on both routes

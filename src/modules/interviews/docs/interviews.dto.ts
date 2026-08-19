@@ -77,3 +77,51 @@ export class InterviewWithHeaderResponseDto {
   @ApiPropertyOptional({ nullable: true, example: "Nguyen Van A" })
   talentName!: string | null;
 }
+
+const UPCOMING_INTERVIEWS_SCOPE_VALUES = ["mine", "team"] as const;
+
+export class UpcomingInterviewResponseDto {
+  @ApiProperty({ example: "cintv1a2b0000ug0h9x1n1a2" })
+  id!: string;
+
+  @ApiProperty({ example: "capp1a2b0000ug0h9x1n1a2" })
+  applicationId!: string;
+
+  @ApiProperty({ format: "date-time", example: "2026-08-25T07:00:00.000Z" })
+  confirmedSlot!: string;
+
+  @ApiProperty({ example: 30 })
+  durationMinutes!: number;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    format: "url",
+    example: "https://meet.google.com/abc-defg-hij",
+  })
+  meetingUrl!: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: "Nguyen Van A" })
+  talentName!: string | null;
+
+  @ApiProperty({ example: "Senior Backend Engineer" })
+  jobTitle!: string;
+
+  @ApiPropertyOptional({ nullable: true, example: "cusr1a2b0000ug0h9x1n1a2" })
+  interviewerId!: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: "Nguyen Van B" })
+  interviewerName!: string | null;
+}
+
+export class UpcomingInterviewsResponseDto {
+  @ApiProperty({
+    enum: UPCOMING_INTERVIEWS_SCOPE_VALUES,
+    description:
+      "'mine' for an INTERVIEWER-role caller (interviews narrows to their own assignments), 'team' for every other role (the full company agenda).",
+    example: "team",
+  })
+  scope!: (typeof UPCOMING_INTERVIEWS_SCOPE_VALUES)[number];
+
+  @ApiProperty({ type: [UpcomingInterviewResponseDto] })
+  interviews!: UpcomingInterviewResponseDto[];
+}

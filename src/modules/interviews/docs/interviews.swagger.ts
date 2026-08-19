@@ -19,12 +19,14 @@ import {
   InterviewResponseDto,
   InterviewWithHeaderResponseDto,
   ProposeInterviewRequestDto,
+  UpcomingInterviewsResponseDto,
 } from "./interviews.dto";
 import {
   ConfirmInterviewRequestExample,
   InterviewExample,
   InterviewWithHeaderExample,
   ProposeInterviewRequestExample,
+  UpcomingInterviewsExample,
 } from "./interviews.examples";
 import {
   ApplicationAccessDeniedResponse,
@@ -86,6 +88,24 @@ export const ApiProposeInterview = () =>
     UnauthorizedApiResponse,
     ForbiddenApiResponse,
     rateLimitResponse("20/min"),
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiListUpcomingInterviews = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "List the company's upcoming confirmed interviews",
+      description:
+        'Company-wide agenda, not scoped to a single application — every CONFIRMED interview with a confirmedSlot still in the future, sorted soonest-first. Open to any company seat; an INTERVIEWER-role caller gets `scope: "mine"` and only their own assigned interviews back, everyone else gets `scope: "team"` and the full company agenda.',
+    }),
+    ApiOkResponse({
+      description: "The caller's interview agenda",
+      type: UpcomingInterviewsResponseDto,
+      schema: { example: UpcomingInterviewsExample },
+    }),
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
     InternalServerErrorApiResponse,
   );
 

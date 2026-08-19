@@ -3,7 +3,9 @@ import { PrismaService } from "@/core/database/prisma.service";
 import { applicationPartiesSelect } from "@/common/interfaces/application-parties.interface";
 import {
   interviewSelect,
+  upcomingInterviewSelect,
   type InterviewRecord,
+  type UpcomingInterviewRow,
   type UpsertInterviewInput,
 } from "./interfaces";
 import type { InterviewEligibilityShape } from "./interview-eligibility.util";
@@ -65,6 +67,27 @@ export class InterviewsRepository {
     });
     if (count === 0) return null;
     return this.findByApplicationId(applicationId);
+  }
+
+  // Company-wide agenda (GET /employer/interviews/upcoming) — the one place
+  // interviews are read across every application at a company instead of
+  // for a single one. interviewerId narrows to "my interviews" for an
+  // INTERVIEWER-role viewer (see InterviewsService.listUpcomingForCompany);
+  // omitted, every other role sees the full agenda.
+  findUpcomingForCompany(
+    employerId: string,
+    interviewerId: string | undefined,
+  ): Promise<UpcomingInterviewRow[]> {
+    return this.prisma.interview.findMany({
+      where: {
+        status: "CONFIRMED",
+        confirmedSlot: { gte: new Date() },
+        application: { job: { employerId } },
+        ...(interviewerId ? { interviewerId } : {}),
+      },
+      orderBy: { confirmedSlot: "asc" },
+      select: upcomingInterviewSelect,
+    });
   }
 
   /** Self-contained narrow query (not a cross-import of ApplicationsRepository)

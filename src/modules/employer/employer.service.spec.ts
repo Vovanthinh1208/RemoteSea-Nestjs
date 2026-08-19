@@ -60,6 +60,7 @@ const makeService = (
   const interviewsService = {
     get: jest.fn(),
     propose: jest.fn(),
+    listUpcomingForCompany: jest.fn(),
   };
   const scorecardsService = {
     list: jest.fn(),
@@ -665,5 +666,73 @@ describe("EmployerService.getApplicationInterview / proposeInterview", () => {
 
     expect(interviewsService.propose).toHaveBeenCalledWith(application, dto);
     expect(result).toEqual({ id: "intv-1" });
+  });
+});
+
+// Pure delegation — the "mine vs team" business rule itself is owned and
+// tested entirely by InterviewsService.listUpcomingForCompany (see
+// interviews.service.spec.ts); these tests only cover that the right
+// membership args reach it and its result passes straight through
+// unmodified, same shape as the getApplicationInterview/proposeInterview
+// delegation tests above.
+describe("EmployerService.listUpcomingInterviews", () => {
+  it("resolves the caller's membership and passes it through to InterviewsService, returning its result unmodified", async () => {
+    const { service, interviewsService } = makeService();
+    interviewsService.listUpcomingForCompany.mockResolvedValue({
+      scope: "team",
+      interviews: [{ id: "intv-1" }],
+    });
+
+    const result = await service.listUpcomingInterviews("owner-1");
+
+    expect(interviewsService.listUpcomingForCompany).toHaveBeenCalledWith(
+      "owner-1-company",
+      "OWNER",
+      "owner-1",
+    );
+    expect(result).toEqual({ scope: "team", interviews: [{ id: "intv-1" }] });
+  });
+
+  it("passes an INTERVIEWER caller's own role and id through unchanged", async () => {
+    const { service, interviewsService, companyMembershipService } =
+      makeService(
+        {},
+        {},
+        {
+          resolveMembership: jest.fn().mockResolvedValue({
+            employerId: "owner-1-company",
+            role: "INTERVIEWER",
+          }),
+        },
+      );
+    interviewsService.listUpcomingForCompany.mockResolvedValue({
+      scope: "mine",
+      interviews: [],
+    });
+
+    await service.listUpcomingInterviews("interviewer-1");
+
+    expect(companyMembershipService.resolveMembership).toHaveBeenCalledWith(
+      "interviewer-1",
+    );
+    expect(interviewsService.listUpcomingForCompany).toHaveBeenCalledWith(
+      "owner-1-company",
+      "INTERVIEWER",
+      "interviewer-1",
+    );
+  });
+
+  it("rejects a caller with no company membership", async () => {
+    const { service } = makeService(
+      {},
+      {},
+      {
+        resolveMembership: jest.fn().mockResolvedValue(null),
+      },
+    );
+
+    await expect(
+      service.listUpcomingInterviews("no-membership-user"),
+    ).rejects.toThrow();
   });
 });
