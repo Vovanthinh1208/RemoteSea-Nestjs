@@ -5,12 +5,14 @@ import {
   ForbiddenApiException,
   ConflictApiException,
   BadRequestApiException,
+  NotFoundApiException,
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { EmailService } from "@/common/services/email.service";
 import { isOwnedUploadUrl } from "@/modules/uploads/upload-url.util";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 import { runInBackground } from "@/common/utils/background-task.util";
+import { assertFound } from "@/common/utils/assert-found";
 import type { Pagination } from "@/common/interfaces/pagination.interface";
 import type { EnvConfig } from "@/core/config/env.validation";
 import { ApplicationsRepository } from "./applications.repository";
@@ -75,6 +77,33 @@ export class ApplicationsService {
       await this.applicationsRepository.findTalentIdByUserId(userId);
     if (!talent) return [];
     return this.applicationsRepository.findJobIdsByTalentId(talent.id);
+  }
+
+  // Backs the application-detail page a notification/activity-feed link now
+  // points at (see EmployerService.updateApplication) — no talent profile,
+  // or an id belonging to someone else's application, both 404 the same way.
+  async getOwnApplication(
+    userId: string,
+    applicationId: string,
+  ): Promise<ApplicationWithJob> {
+    const talent =
+      await this.applicationsRepository.findTalentIdByUserId(userId);
+    if (!talent) {
+      throw new NotFoundApiException(
+        "Application not found",
+        ErrorCode.APPLICATION_NOT_FOUND,
+      );
+    }
+    const application = await this.applicationsRepository.findByIdForTalent(
+      applicationId,
+      talent.id,
+    );
+    assertFound(
+      application,
+      "Application not found",
+      ErrorCode.APPLICATION_NOT_FOUND,
+    );
+    return application;
   }
 
   async apply(userId: string, dto: ApplyDto): Promise<OwnApplication> {

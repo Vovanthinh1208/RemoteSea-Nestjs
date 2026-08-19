@@ -107,6 +107,24 @@ export class ApplicationsRepository {
     });
   }
 
+  // Scoped by talentId in the WHERE clause itself (not a separate ownership
+  // guard) — a wrong-owner id returns null and turns into the same 404 as a
+  // nonexistent id, so this never confirms another talent's application
+  // exists. Same select as findByTalentId's list rows, so the detail page
+  // gets the identical shape (including the statusEvents timeline).
+  findByIdForTalent(
+    id: string,
+    talentId: string,
+  ): Promise<ApplicationWithJob | null> {
+    return this.prisma.application.findFirst({
+      where: { id, talentId },
+      select: {
+        ...ownApplicationSelect,
+        job: { select: jobListItemSelect },
+      },
+    });
+  }
+
   async createAndIncrementApplyCount(
     input: CreateApplicationInput,
   ): Promise<{ application: OwnApplication; job: JobWithEmployerEmail }> {

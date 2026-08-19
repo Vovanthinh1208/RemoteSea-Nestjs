@@ -2,6 +2,7 @@ import {
   ApiBadRequestResponse,
   ApiConflictResponse,
   ApiForbiddenResponse,
+  ApiNotFoundResponse,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import { ValidationErrorExample } from "./applications.examples";
@@ -21,6 +22,12 @@ export const TalentProfileRequiredResponse = ApiForbiddenResponse({
 export const AlreadyAppliedResponse = ApiConflictResponse({
   description: "A duplicate (jobId, talentId) application already exists",
   schema: { example: { error: "Already applied" } },
+});
+
+export const ApplicationNotFoundResponse = ApiNotFoundResponse({
+  description:
+    "No application with this id belongs to the caller (same response whether it doesn't exist or belongs to someone else)",
+  schema: { example: { error: "Application not found" } },
 });
 
 export const CronUnauthorizedResponse = ApiUnauthorizedResponse({

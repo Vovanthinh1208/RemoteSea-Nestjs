@@ -31,7 +31,7 @@ describe("statusEventsToActivity", () => {
       type: "APPLICATION_STATUS_CHANGED",
       title: "Shortlisted",
       body: "Senior Backend Engineer at Acme",
-      link: "/talent",
+      link: "/applications/app-1",
     });
   });
 });

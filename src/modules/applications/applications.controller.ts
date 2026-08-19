@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Query,
   UseGuards,
@@ -25,6 +26,7 @@ import {
   ApiApplicationsTag,
   ApiApply,
   ApiDispatchBacklogReminders,
+  ApiGetApplication,
   ApiListApplications,
 } from "./docs/applications.swagger";
 
@@ -91,5 +93,14 @@ export class ApplicationsController {
   @UseGuards(CronSecretGuard)
   dispatchBacklogReminders() {
     return this.applicationsService.dispatchBacklogReminders();
+  }
+
+  // Declared last — a dynamic :id segment registered above the static
+  // "stats"/"ids" routes would swallow those literal paths instead.
+  @ApiGetApplication()
+  @Get(":id")
+  @UseGuards(JwtAuthGuard)
+  getById(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    return this.applicationsService.getOwnApplication(user.id, id);
   }
 }

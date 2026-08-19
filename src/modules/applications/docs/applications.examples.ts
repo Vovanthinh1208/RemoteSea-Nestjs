@@ -78,6 +78,10 @@ export const ApplicationsListExample = [
 
 export const EmptyApplicationsListExample: unknown[] = [];
 
+// Same shape as one row of ApplicationsListExample — GET /applications/:id
+// returns exactly one application, embedded job included.
+export const ApplicationDetailExample = ApplicationsListExample[0];
+
 export const ValidationErrorExample = {
   error: { formErrors: [], fieldErrors: { jobId: ["Invalid cuid"] } },
 };

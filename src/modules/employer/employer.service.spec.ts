@@ -89,7 +89,7 @@ describe("EmployerService.updateApplication", () => {
       type: "APPLICATION_STATUS_CHANGED",
       title: "Your application status changed",
       body: "Your application for Engineer is now In review.",
-      link: "/talent",
+      link: "/applications/app-1",
     });
   });
 
