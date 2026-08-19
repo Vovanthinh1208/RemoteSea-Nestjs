@@ -14,6 +14,16 @@ import {
   talentSearchItemSelect,
   type TalentSearchItem,
 } from "@/common/types/talent-search-item.type";
+import {
+  interviewActivitySelect,
+  invitationActivitySelect,
+  messageActivitySelect,
+  statusEventActivitySelect,
+  type InterviewActivitySource,
+  type InvitationActivitySource,
+  type MessageActivitySource,
+  type StatusEventActivitySource,
+} from "./activity.interfaces";
 
 type ProfileScalarData = Omit<TalentProfileDto, "skills">;
 
@@ -198,5 +208,71 @@ export class TalentRepository {
 
   count(where: Prisma.TalentProfileWhereInput): Promise<number> {
     return this.prisma.talentProfile.count({ where });
+  }
+
+  // Twin of ApplicationsRepository.findTalentIdByUserId — the activity feed
+  // only needs the id to scope its four source queries below, not the full
+  // ownProfileArgs join.
+  findTalentIdByUserId(
+    userId: string,
+  ): Promise<Pick<TalentProfile, "id"> | null> {
+    return this.prisma.talentProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+  }
+
+  // PENDING is excluded here (not in activity.util's mapper) so the fetch
+  // itself never spends the ACTIVITY_FEED_LIMIT budget on rows that get
+  // dropped downstream — every application's very first event.
+  findRecentStatusEvents(
+    talentId: string,
+    limit: number,
+  ): Promise<StatusEventActivitySource[]> {
+    return this.prisma.applicationStatusEvent.findMany({
+      where: { status: { not: "PENDING" }, application: { talentId } },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: statusEventActivitySelect,
+    });
+  }
+
+  // senderId != userId (not talentId) — Message.sender is a User, and this
+  // feed only reports messages the *employer* sent, not the talent's own.
+  findRecentMessagesReceived(
+    talentId: string,
+    userId: string,
+    limit: number,
+  ): Promise<MessageActivitySource[]> {
+    return this.prisma.message.findMany({
+      where: { senderId: { not: userId }, application: { talentId } },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: messageActivitySelect,
+    });
+  }
+
+  findRecentInterviews(
+    talentId: string,
+    limit: number,
+  ): Promise<InterviewActivitySource[]> {
+    return this.prisma.interview.findMany({
+      where: { application: { talentId } },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: interviewActivitySelect,
+    });
+  }
+
+  findRecentInvitations(
+    talentId: string,
+    limit: number,
+  ): Promise<InvitationActivitySource[]> {
+    return this.prisma.jobInvitation.findMany({
+      where: { talentId },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: invitationActivitySelect,
+    });
   }
 }

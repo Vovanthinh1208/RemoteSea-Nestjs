@@ -401,6 +401,20 @@ const expectations: ControllerExpectation[] = [
         roles: ["EMPLOYER"],
       },
       {
+        method: "getApplicationInterview",
+        httpMethod: "GET",
+        path: "applications/:id/interview",
+        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationOwnershipGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
+        method: "proposeInterview",
+        httpMethod: "POST",
+        path: "applications/:id/interview",
+        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationOwnershipGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
         method: "submitVerification",
         httpMethod: "POST",
         path: "verification",
@@ -681,6 +695,12 @@ const expectations: ControllerExpectation[] = [
         method: "upsertProfile",
         httpMethod: "PUT",
         path: "me",
+        guards: ["JwtAuthGuard"],
+      },
+      {
+        method: "getActivity",
+        httpMethod: "GET",
+        path: "me/activity",
         guards: ["JwtAuthGuard"],
       },
       {

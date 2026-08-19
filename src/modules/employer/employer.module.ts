@@ -7,11 +7,14 @@ import { EmployerJobOwnershipGuard } from "./guards/employer-job-ownership.guard
 import { ApplicationOwnershipGuard } from "./guards/application-ownership.guard";
 import { UploadsModule } from "@/modules/uploads/uploads.module";
 import { MessagesModule } from "@/modules/messages/messages.module";
+import { InterviewsModule } from "@/modules/interviews/interviews.module";
 
 @Module({
-  // MessagesModule: EmployerService.listApplicationMessages/sendApplicationMessage
-  // delegate to MessagesService, same shape as AdminModule -> JobReportsModule.
-  imports: [UploadsModule, MessagesModule],
+  // MessagesModule/InterviewsModule: EmployerService delegates to their
+  // services (listApplicationMessages/sendApplicationMessage,
+  // getApplicationInterview/proposeInterview), same shape as
+  // AdminModule -> JobReportsModule.
+  imports: [UploadsModule, MessagesModule, InterviewsModule],
   controllers: [EmployerController, CompaniesController],
   providers: [
     EmployerService,

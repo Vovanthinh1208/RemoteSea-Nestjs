@@ -184,3 +184,24 @@ export const ConfirmVerificationRequestExample = {
 };
 
 export const ConfirmVerificationResponseExample = { message: "Email verified" };
+
+export const ListActivityResponseExample = {
+  activity: [
+    {
+      id: "iv-1:confirmed",
+      type: "INTERVIEW_CONFIRMED",
+      title: "Interview confirmed",
+      body: "Senior Backend Engineer at Acme",
+      link: "/applications/clapp1a2b3c4d5e6f7g8h9i0/interview",
+      createdAt: "2026-08-17T09:12:00.000Z",
+    },
+    {
+      id: "clevt1a2b0000ug0h9x1n1a2",
+      type: "APPLICATION_STATUS_CHANGED",
+      title: "Shortlisted",
+      body: "Senior Backend Engineer at Acme",
+      link: "/talent",
+      createdAt: "2026-08-16T14:00:00.000Z",
+    },
+  ],
+};

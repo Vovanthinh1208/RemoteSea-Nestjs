@@ -10,6 +10,15 @@ import type { ConfirmVerificationDto } from "./dto/confirm-verification.dto";
 import { buildTalentSearchWhere } from "./talent-search.util";
 import { VERIFICATION_TOKEN_TTL_MS } from "./constants";
 import type { OwnTalentProfile, TalentProfileWithSkills } from "./interfaces";
+import type { ActivityItem } from "./activity.interfaces";
+import {
+  ACTIVITY_FEED_LIMIT,
+  interviewsToActivity,
+  invitationsToActivity,
+  mergeActivity,
+  messagesToActivity,
+  statusEventsToActivity,
+} from "./activity.util";
 import type { TalentSearchItem } from "@/common/types/talent-search-item.type";
 import type { Pagination } from "@/common/interfaces/pagination.interface";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
@@ -47,6 +56,43 @@ export class TalentService {
       ErrorCode.TALENT_PROFILE_NOT_FOUND,
     );
     return profile;
+  }
+
+  // No talent profile yet -> no activity, same "empty, not an error" shape
+  // as ApplicationsService.findAllForUser (a brand-new user hitting their
+  // own dashboard isn't a 404).
+  async getActivity(userId: string): Promise<ActivityItem[]> {
+    const talent = await this.talentRepository.findTalentIdByUserId(userId);
+    if (!talent) return [];
+
+    const [statusEvents, messages, interviews, invitations] = await Promise.all(
+      [
+        this.talentRepository.findRecentStatusEvents(
+          talent.id,
+          ACTIVITY_FEED_LIMIT,
+        ),
+        this.talentRepository.findRecentMessagesReceived(
+          talent.id,
+          userId,
+          ACTIVITY_FEED_LIMIT,
+        ),
+        this.talentRepository.findRecentInterviews(
+          talent.id,
+          ACTIVITY_FEED_LIMIT,
+        ),
+        this.talentRepository.findRecentInvitations(
+          talent.id,
+          ACTIVITY_FEED_LIMIT,
+        ),
+      ],
+    );
+
+    return mergeActivity(
+      statusEventsToActivity(statusEvents),
+      messagesToActivity(messages),
+      interviewsToActivity(interviews),
+      invitationsToActivity(invitations),
+    );
   }
 
   async getPublicProfile(

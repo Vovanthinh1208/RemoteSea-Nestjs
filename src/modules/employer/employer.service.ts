@@ -32,6 +32,8 @@ import { EmailService } from "@/common/services/email.service";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { MessagesService } from "@/modules/messages/messages.service";
 import type { SendMessageDto } from "@/modules/messages/dto/send-message.dto";
+import { InterviewsService } from "@/modules/interviews/interviews.service";
+import type { ProposeInterviewDto } from "@/modules/interviews/dto/propose-interview.dto";
 import { runInBackground } from "@/common/utils/background-task.util";
 import { getOrSetCache } from "@/common/caching/cache.util";
 import {
@@ -60,6 +62,7 @@ export class EmployerService {
     private readonly emailService: EmailService,
     private readonly notificationsService: NotificationsService,
     private readonly messagesService: MessagesService,
+    private readonly interviewsService: InterviewsService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
@@ -482,5 +485,16 @@ export class EmployerService {
     dto: SendMessageDto,
   ) {
     return this.messagesService.send(application, userId, dto);
+  }
+
+  getApplicationInterview(application: ApplicationWithJobOwner) {
+    return this.interviewsService.get(application);
+  }
+
+  proposeInterview(
+    application: ApplicationWithJobOwner,
+    dto: ProposeInterviewDto,
+  ) {
+    return this.interviewsService.propose(application, dto);
   }
 }
