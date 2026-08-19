@@ -381,6 +381,13 @@ export class BulkUpdateApplicationsRequestDto {
 
   @ApiProperty({ enum: APPLICATION_STATUS_VALUES, example: "REJECTED" })
   status!: (typeof APPLICATION_STATUS_VALUES)[number];
+
+  @ApiPropertyOptional({
+    maxLength: 2000,
+    example: "Not enough backend depth for this role.",
+    description: "One shared note applied to every application in the batch",
+  })
+  notes?: string;
 }
 
 class BulkUpdateFailureDto {

@@ -587,13 +587,14 @@ export class EmployerRepository {
   async bulkUpdateApplicationStatus(
     items: { id: string; expectedStatus: ApplicationStatus }[],
     status: ApplicationStatus,
+    notes: string | undefined,
   ): Promise<string[]> {
     return this.prisma.$transaction(async (tx) => {
       const updatedIds: string[] = [];
       for (const item of items) {
         const { count } = await tx.application.updateMany({
           where: { id: item.id, status: item.expectedStatus },
-          data: { status },
+          data: { status, ...(notes !== undefined && { notes }) },
         });
         if (count === 0) continue;
         await tx.applicationStatusEvent.create({

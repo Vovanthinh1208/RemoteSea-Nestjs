@@ -203,6 +203,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
     expect(bulkUpdateApplicationStatus).toHaveBeenCalledWith(
       [{ id: "app-1", expectedStatus: "PENDING" }],
       "REJECTED",
+      undefined,
     );
     expect(result.failed).toEqual([{ id: "app-1", reason: "STALE" }]);
   });

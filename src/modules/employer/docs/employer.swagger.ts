@@ -202,7 +202,7 @@ export const ApiBulkUpdateApplications = () =>
     ApiOperation({
       summary: "Update the status of multiple applications at once",
       description:
-        "Applies one target status to a batch of the caller's own applications (up to 50 ids), e.g. bulk-rejecting a pile of candidates. Partial success by design — one stale or invalid item never blocks the rest of the batch. Each id independently goes through the same ALLOWED_TRANSITIONS check and ownership check as PATCH /employer/applications/:id; failures are reported per id in the response instead of failing the whole call. An id that doesn't exist or belongs to a different employer's job reports NOT_FOUND (not 403) — same 'don't confirm another employer's application exists' reasoning as the single-item route.",
+        "Applies one target status to a batch of the caller's own applications (up to 50 ids), e.g. bulk-rejecting a pile of candidates. Partial success by design — one stale or invalid item never blocks the rest of the batch. Each id independently goes through the same ALLOWED_TRANSITIONS check and ownership check as PATCH /employer/applications/:id; failures are reported per id in the response instead of failing the whole call. An id that doesn't exist or belongs to a different employer's job reports NOT_FOUND (not 403) — same 'don't confirm another employer's application exists' reasoning as the single-item route. `notes`, if given, overwrites every application in the batch with the same shared text (there's no per-item note in a bulk request).",
     }),
     ApiBody({
       type: BulkUpdateApplicationsRequestDto,

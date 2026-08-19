@@ -448,6 +448,7 @@ export class EmployerService {
       await this.employerRepository.bulkUpdateApplicationStatus(
         validItems.map(({ id, expectedStatus }) => ({ id, expectedStatus })),
         dto.status,
+        dto.notes,
       );
     const updatedSet = new Set(updatedIds);
 
