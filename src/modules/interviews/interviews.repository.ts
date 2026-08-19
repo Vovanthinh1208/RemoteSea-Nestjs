@@ -27,6 +27,7 @@ export class InterviewsRepository {
       durationMinutes: input.durationMinutes,
       proposedSlots: input.proposedSlots,
       meetingUrl: input.meetingUrl,
+      interviewerId: input.interviewerId,
     };
     return this.prisma.interview.upsert({
       where: { applicationId: input.applicationId },

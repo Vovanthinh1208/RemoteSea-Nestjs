@@ -19,12 +19,13 @@ const application = {
     userId: "talent-user-1",
     user: { name: "Jane Talent", email: "jane@example.com" },
   },
-  job: { title: "Engineer", employer: { userId: "owner-1" } },
+  job: { title: "Engineer", employerId: "owner-1-company" },
 } as unknown as ApplicationWithJobOwner;
 
 const makeService = (
   repoOverrides: Partial<EmployerRepository> = {},
   emailServiceOverrides: Record<string, jest.Mock> = {},
+  companyMembershipOverrides: Record<string, jest.Mock> = {},
 ) => {
   const repo = {
     updateApplication: jest.fn(),
@@ -35,6 +36,15 @@ const makeService = (
     findApplicationUpdatesPreferences: jest.fn().mockResolvedValue(new Map()),
     ...repoOverrides,
   } as unknown as EmployerRepository;
+  // "owner-1" resolves to owner-1-company/OWNER by default — matches every
+  // existing fixture below that used to compare against callerId "owner-1"
+  // directly, before ownership became company-scoped.
+  const companyMembershipService = {
+    resolveMembership: jest
+      .fn()
+      .mockResolvedValue({ employerId: "owner-1-company", role: "OWNER" }),
+    ...companyMembershipOverrides,
+  };
   const emailService = {
     sendEmployerVerificationEmail: jest.fn().mockResolvedValue(undefined),
     sendApplicationStatusChangedEmail: jest.fn().mockResolvedValue(undefined),
@@ -63,6 +73,7 @@ const makeService = (
     notificationsService as never,
     messagesService as never,
     interviewsService as never,
+    companyMembershipService as never,
     cache as never,
   );
   return {
@@ -72,6 +83,7 @@ const makeService = (
     notificationsService,
     messagesService,
     interviewsService,
+    companyMembershipService,
     cache,
   };
 };
@@ -185,7 +197,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
             userId: "talent-user-2",
             user: { name: "Talent Two", email: "talent2@example.com" },
           },
-          job: { title: "Frontend Dev", employer: { userId: "someone-else" } },
+          job: { title: "Frontend Dev", employerId: "someone-elses-company" },
         },
       ]),
       bulkUpdateApplicationStatus: jest.fn().mockResolvedValue([]),
@@ -214,7 +226,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
             userId: "talent-user-1",
             user: { name: "Jane Talent", email: "jane@example.com" },
           },
-          job: { title: "Backend Dev", employer: { userId: "owner-1" } },
+          job: { title: "Backend Dev", employerId: "owner-1-company" },
         },
       ]),
       bulkUpdateApplicationStatus: jest.fn().mockResolvedValue([]),
@@ -241,7 +253,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
             userId: "talent-user-1",
             user: { name: "Jane Talent", email: "jane@example.com" },
           },
-          job: { title: "Backend Dev", employer: { userId: "owner-1" } },
+          job: { title: "Backend Dev", employerId: "owner-1-company" },
         },
       ]),
       bulkUpdateApplicationStatus,
@@ -270,7 +282,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
             userId: "talent-user-1",
             user: { name: "Talent One", email: "talent1@example.com" },
           },
-          job: { title: "Backend Dev", employer: { userId: "owner-1" } },
+          job: { title: "Backend Dev", employerId: "owner-1-company" },
         },
         {
           id: "app-2",
@@ -279,7 +291,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
             userId: "talent-user-2",
             user: { name: "Talent Two", email: "talent2@example.com" },
           },
-          job: { title: "Frontend Dev", employer: { userId: "owner-1" } },
+          job: { title: "Frontend Dev", employerId: "owner-1-company" },
         },
         {
           id: "app-3",
@@ -288,7 +300,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
             userId: "talent-user-3",
             user: { name: "Talent Three", email: "talent3@example.com" },
           },
-          job: { title: "Design Lead", employer: { userId: "owner-1" } },
+          job: { title: "Design Lead", employerId: "owner-1-company" },
         },
       ]),
       bulkUpdateApplicationStatus: jest
@@ -325,7 +337,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
             userId: "talent-user-1",
             user: { name: "Talent One", email: "talent1@example.com" },
           },
-          job: { title: "Backend Dev", employer: { userId: "owner-1" } },
+          job: { title: "Backend Dev", employerId: "owner-1-company" },
         },
         {
           id: "app-2",
@@ -334,7 +346,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
             userId: "talent-user-2",
             user: { name: "Talent Two", email: "talent2@example.com" },
           },
-          job: { title: "Frontend Dev", employer: { userId: "owner-1" } },
+          job: { title: "Frontend Dev", employerId: "owner-1-company" },
         },
       ]),
       bulkUpdateApplicationStatus: jest

@@ -115,6 +115,20 @@ export class EmailService {
     );
   }
 
+  async sendTeamInvitationEmail(
+    to: string,
+    companyName: string,
+    role: string,
+    token: string,
+  ): Promise<void> {
+    const acceptUrl = `${this.appUrl}/team/invitations/${token}`;
+    await this.send(
+      to,
+      `You've been invited to join ${companyName} on RemoteSEA`,
+      `<p>You've been invited to join <strong>${escapeHtml(companyName)}</strong> as ${escapeHtml(role)}. Click <a href="${acceptUrl}">here</a> to accept. This link expires in 7 days.</p>`,
+    );
+  }
+
   async sendTalentVerificationEmail(to: string, token: string): Promise<void> {
     const verifyUrl = `${this.appUrl}/talent/verify?token=${token}`;
     await this.send(

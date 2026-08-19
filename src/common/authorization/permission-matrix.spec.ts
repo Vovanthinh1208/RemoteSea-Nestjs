@@ -32,6 +32,7 @@ import { UsersController } from "@/modules/users/users.controller";
 import { BillingController } from "@/modules/billing/billing.controller";
 import { TalentController } from "@/modules/talent/talent.controller";
 import { ReviewsController } from "@/modules/reviews/reviews.controller";
+import { TeamController } from "@/modules/team/team.controller";
 
 /**
  * This is the permission matrix: every route in the API, alongside the exact
@@ -397,21 +398,21 @@ const expectations: ControllerExpectation[] = [
         method: "listApplicationMessages",
         httpMethod: "GET",
         path: "applications/:id/messages",
-        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationOwnershipGuard"],
+        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationAccessGuard"],
         roles: ["EMPLOYER"],
       },
       {
         method: "sendApplicationMessage",
         httpMethod: "POST",
         path: "applications/:id/messages",
-        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationOwnershipGuard"],
+        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationAccessGuard"],
         roles: ["EMPLOYER"],
       },
       {
         method: "getApplicationInterview",
         httpMethod: "GET",
         path: "applications/:id/interview",
-        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationOwnershipGuard"],
+        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationAccessGuard"],
         roles: ["EMPLOYER"],
       },
       {
@@ -772,6 +773,67 @@ const expectations: ControllerExpectation[] = [
         httpMethod: "GET",
         path: "user/:userId",
         guards: [],
+      },
+    ],
+  },
+  {
+    name: "TeamController",
+    controller: TeamController,
+    basePath: "team",
+    routes: [
+      {
+        method: "listMembers",
+        httpMethod: "GET",
+        path: "members",
+        guards: ["JwtAuthGuard", "RolesGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
+        method: "listInvitations",
+        httpMethod: "GET",
+        path: "invitations",
+        guards: ["JwtAuthGuard", "RolesGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
+        method: "inviteMember",
+        httpMethod: "POST",
+        path: "invitations",
+        guards: ["JwtAuthGuard", "RolesGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
+        method: "acceptInvitation",
+        httpMethod: "POST",
+        path: "invitations/accept",
+        guards: ["JwtAuthGuard"],
+      },
+      {
+        method: "previewInvitation",
+        httpMethod: "GET",
+        path: "invitations/:token",
+        guards: [],
+      },
+      {
+        method: "revokeInvitation",
+        httpMethod: "DELETE",
+        path: "invitations/:id",
+        guards: ["JwtAuthGuard", "RolesGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
+        method: "updateMemberRole",
+        httpMethod: "PATCH",
+        path: "members/:id",
+        guards: ["JwtAuthGuard", "RolesGuard", "CompanyMemberOwnershipGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
+        method: "removeMember",
+        httpMethod: "DELETE",
+        path: "members/:id",
+        guards: ["JwtAuthGuard", "RolesGuard", "CompanyMemberOwnershipGuard"],
+        roles: ["EMPLOYER"],
       },
     ],
   },

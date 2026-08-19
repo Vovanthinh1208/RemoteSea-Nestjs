@@ -11,6 +11,7 @@ import {
   NotFoundApiException,
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
+import { CompanyMembershipService } from "@/modules/company/company-membership.service";
 
 @Injectable()
 export class InterviewsService {
@@ -19,6 +20,7 @@ export class InterviewsService {
   constructor(
     private readonly interviewsRepository: InterviewsRepository,
     private readonly notificationsService: NotificationsService,
+    private readonly companyMembershipService: CompanyMembershipService,
   ) {}
 
   // Bundles the interview + header context in one response, same shape as
@@ -63,11 +65,28 @@ export class InterviewsService {
       );
     }
 
+    // Never trust that interviewerId is even a real company member, let
+    // alone the right company's — an id from another company (or a random
+    // string) must fail here, not silently grant that user assigned-only
+    // access via ApplicationAccessGuard once they somehow are a member.
+    if (dto.interviewerId) {
+      const assignee = await this.companyMembershipService.resolveMembership(
+        dto.interviewerId,
+      );
+      if (!assignee || assignee.employerId !== parties.job.employerId) {
+        throw new BadRequestApiException(
+          "interviewerId must be a member of your company",
+          ErrorCode.COMPANY_MEMBER_NOT_FOUND,
+        );
+      }
+    }
+
     const interview = await this.interviewsRepository.upsertPending({
       applicationId: parties.id,
       durationMinutes: dto.durationMinutes,
       proposedSlots,
       meetingUrl: dto.meetingUrl,
+      interviewerId: dto.interviewerId,
     });
 
     runInBackground(

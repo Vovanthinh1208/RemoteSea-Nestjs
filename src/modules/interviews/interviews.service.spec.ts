@@ -12,11 +12,27 @@ const notificationsService = {
   create: jest.fn().mockResolvedValue(undefined),
 };
 
-const makeService = (repoOverrides: Partial<InterviewsRepository> = {}) => {
+const companyMembershipService = {
+  resolveMembership: jest.fn().mockResolvedValue(null),
+};
+
+const makeService = (
+  repoOverrides: Partial<InterviewsRepository> = {},
+  companyMembershipOverrides: Record<string, jest.Mock> = {},
+) => {
   const repo = { ...repoOverrides } as unknown as InterviewsRepository;
+  const company = {
+    ...companyMembershipService,
+    ...companyMembershipOverrides,
+  };
   return {
-    service: new InterviewsService(repo, notificationsService as never),
+    service: new InterviewsService(
+      repo,
+      notificationsService as never,
+      company as never,
+    ),
     repo,
+    companyMembershipService: company,
   };
 };
 
@@ -26,6 +42,7 @@ const parties: ApplicationParties = {
   talent: { userId: "talent-user-1", user: { name: "Talent One" } },
   job: {
     title: "Backend Engineer",
+    employerId: "company-1",
     employer: { userId: "employer-user-1", companyName: "Acme Inc" },
   },
 };

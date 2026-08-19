@@ -138,6 +138,9 @@ model User {
   reviewsWritten         Review[]                @relation("ReviewsWritten")
   reviewsReceived        Review[]                @relation("ReviewsReceived")
   profileViewsMade       ProfileView[]           @relation("ProfileViewsMade")
+  companyMembership      CompanyMember?
+  teamInvitationsSent    TeamInvitation[]        @relation("TeamInvitationsSent")
+  assignedInterviews     Interview[]             @relation("AssignedInterviews")
 
   @@map("users")
 }
@@ -456,6 +459,8 @@ model EmployerProfile {
   jobs               Job[]
   invitations        JobInvitation[]
   emailVerifications EmployerEmailVerification[]
+  members            CompanyMember[]
+  teamInvitations    TeamInvitation[]
 
   // Composite, not single-column: AdminRepository.findEmployers filters
   // isVerified and orders by createdAt desc — the plain isVerified index
@@ -692,11 +697,22 @@ model Interview {
   confirmedSlot   DateTime?
   meetingUrl      String?
   status          InterviewStatus @default(PENDING)
+  // Multi-seat: which company member (any role, not necessarily role
+  // INTERVIEWER) actually runs this interview — set by whoever proposes it
+  // (OWNER/RECRUITER/HIRING_MANAGER, see ApplicationOwnershipGuard). The
+  // *only* thing this field gates is an INTERVIEWER-role member's access
+  // (see ApplicationAccessGuard.getAssignedUserId) — everyone else's access
+  // is company-role-based already, regardless of assignment. SetNull (not
+  // Cascade) so removing a team member's account never deletes interview
+  // history — the interview just becomes unassigned.
+  interviewerId   String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  interviewer User?       @relation("AssignedInterviews", fields: [interviewerId], references: [id], onDelete: SetNull)
 
+  @@index([interviewerId])
   @@map("interviews")
 }
 
@@ -950,4 +966,72 @@ model ProfileView {
   // Backs getAnalytics's count() + groupBy(viewerId) for one talent.
   @@index([talentId, createdAt])
   @@map("profile_views")
+}
+
+// ─── Employer Multi-Seat Accounts ──────────────────────────────────────────
+// EmployerProfile stays the one "company" row (no separate Company model —
+// see CompanyMember.employerId, which points straight at it). The profile's
+// original creator keeps EmployerProfile.userId untouched (still resolvable
+// the old way), but going forward every authorization check reads
+// CompanyMember instead — including the creator's own OWNER seat, backfilled
+// by this feature's migration so there is exactly one access model, not two.
+enum CompanyMemberRole {
+  OWNER
+  RECRUITER
+  HIRING_MANAGER
+  INTERVIEWER
+}
+
+// One row per active seat. userId is @unique, not @@unique([userId,
+// employerId]) — deliberately caps a User at one company at a time, which is
+// what keeps this feature from needing multi-company switching (explicitly
+// out of scope): joining a second company isn't a schema-level possibility,
+// not a UI restriction bolted on top.
+model CompanyMember {
+  id         String            @id @default(cuid())
+  userId     String            @unique
+  employerId String
+  role       CompanyMemberRole
+  createdAt  DateTime          @default(now())
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employer EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
+
+  // Backs "list my company's team" + role-filtered lookups (e.g. who's an
+  // active INTERVIEWER here).
+  @@index([employerId, role])
+  @@map("company_members")
+}
+
+enum TeamInvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+}
+
+// Token+expiry email-link invite, same shape as EmployerEmailVerification —
+// deliberately NOT modeled like JobInvitation (that flow assumes the invitee
+// already has a full profile to look up by id); a team invite must work for
+// someone with no account yet, so it carries only an email + a bearer token,
+// resolved to a real User at accept time by matching emails.
+model TeamInvitation {
+  id          String               @id @default(cuid())
+  employerId  String
+  email       String
+  role        CompanyMemberRole
+  token       String               @unique
+  status      TeamInvitationStatus @default(PENDING)
+  invitedById String
+  expiresAt   DateTime
+  respondedAt DateTime?
+  createdAt   DateTime             @default(now())
+
+  employer  EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  invitedBy User            @relation("TeamInvitationsSent", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([employerId, status, createdAt])
+  // Backs the accept flow's own lookup-by-email-and-status (confirming the
+  // accepting user's email against any of their pending invites).
+  @@index([email, status])
+  @@map("team_invitations")
 }

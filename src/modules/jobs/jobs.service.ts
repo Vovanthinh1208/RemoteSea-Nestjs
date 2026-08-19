@@ -25,6 +25,11 @@ import type { JobWithOwner } from "./guards/job-ownership.guard";
 import { SalaryRange } from "./salary-range";
 import { ViewCountBuffer } from "./view-count.buffer";
 import { EmployerService } from "@/modules/employer/employer.service";
+import { CompanyMembershipService } from "@/modules/company/company-membership.service";
+import {
+  JOB_MANAGEMENT_ROLES,
+  requireCompanyRole,
+} from "@/common/authorization/company-role.util";
 
 // Facets are a single global aggregate (findFacetRows() ignores the caller's search
 // filters entirely — see job-search.util.ts), so a flat cache key is correct: every
@@ -39,6 +44,7 @@ export class JobsService {
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly viewCounts: ViewCountBuffer,
     private readonly employerService: EmployerService,
+    private readonly companyMembershipService: CompanyMembershipService,
   ) {}
 
   async list(query: ListJobsDto) {
@@ -165,20 +171,21 @@ export class JobsService {
   async create(userId: string, dto: CreateJobDto) {
     SalaryRange.create(dto.salaryMin, dto.salaryMax);
 
-    const employer =
-      await this.jobsRepository.findEmployerProfileByUserId(userId);
-    if (!employer) {
-      throw new ForbiddenApiException(
-        "Employer profile required",
-        ErrorCode.EMPLOYER_PROFILE_REQUIRED,
-      );
-    }
+    // Multi-seat: resolves through CompanyMember, not EmployerProfile.userId
+    // — a RECRUITER posting a job has no EmployerProfile row of their own.
+    const rawMembership =
+      await this.companyMembershipService.resolveMembership(userId);
+    const membership = requireCompanyRole(
+      rawMembership,
+      JOB_MANAGEMENT_ROLES,
+      "Your role doesn't allow posting jobs",
+    );
 
     const { categoryIds, skillIds, ...jobData } = dto;
 
     return this.jobsRepository.create({
       ...jobData,
-      employer: { connect: { id: employer.id } },
+      employer: { connect: { id: membership.employerId } },
       slug: uniqueSlug(jobData.title),
       status: "DRAFT",
       categories: { create: categoryIds.map((categoryId) => ({ categoryId })) },

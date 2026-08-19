@@ -114,7 +114,7 @@ export class JobsRepository {
         status: true,
         salaryMin: true,
         salaryMax: true,
-        employer: { select: { userId: true } },
+        employerId: true,
       },
     });
   }
@@ -139,13 +139,6 @@ export class JobsRepository {
       FROM (VALUES ${rows}) AS v(id, count)
       WHERE j.id = v.id
     `;
-  }
-
-  findEmployerProfileByUserId(userId: string) {
-    return this.prisma.employerProfile.findUnique({
-      where: { userId },
-      select: { id: true },
-    });
   }
 
   create(data: Prisma.JobCreateInput) {

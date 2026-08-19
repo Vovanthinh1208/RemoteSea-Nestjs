@@ -13,6 +13,10 @@ export const applicationPartiesSelect = {
   job: {
     select: {
       title: true,
+      // Scalar company id, for multi-seat checks (e.g. InterviewsService
+      // validating an assigned interviewerId belongs to the same company) —
+      // kept alongside the nested employer object below, not instead of it.
+      employerId: true,
       employer: { select: { userId: true, companyName: true } },
     },
   },

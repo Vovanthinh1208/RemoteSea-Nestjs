@@ -169,7 +169,7 @@ export const ApiListJobApplications = () =>
     ApiOperation({
       summary: "List applications for a job",
       description:
-        "Lists paginated applications for a job owned by the caller. Requires the EMPLOYER role (RolesGuard) and ownership is additionally enforced in the service via `job.employer.userId === user.id`, which surfaces as a 403 (not owning) or 404 (job not found).",
+        "Lists paginated applications for a job belonging to the caller's company. Requires the EMPLOYER role (RolesGuard); company membership and role (OWNER/RECRUITER/HIRING_MANAGER) are enforced by EmployerJobOwnershipGuard, which surfaces as a 403 (wrong company/role) or 404 (job not found).",
     }),
     ApiParam({
       name: "id",
@@ -226,7 +226,7 @@ export const ApiUpdateApplication = () =>
     ApiOperation({
       summary: "Update an application's status",
       description:
-        "Updates an application's status (and optional notes) under a state machine. Requires the EMPLOYER role (RolesGuard) and ownership is additionally enforced in the service via `application.job.employer.userId === user.id`.\n\n" +
+        "Updates an application's status (and optional notes) under a state machine. Requires the EMPLOYER role (RolesGuard); company membership and role (OWNER/RECRUITER/HIRING_MANAGER) are enforced by ApplicationOwnershipGuard.\n\n" +
         "Allowed transitions (ALLOWED_TRANSITIONS):\n" +
         "- PENDING → REVIEWING | REJECTED\n" +
         "- REVIEWING → SHORTLISTED | REJECTED\n" +

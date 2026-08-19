@@ -31,7 +31,7 @@ export class BillingRepository {
         status: true,
         planPaid: true,
         planType: true,
-        employer: { select: { userId: true } },
+        employerId: true,
       },
     });
   }

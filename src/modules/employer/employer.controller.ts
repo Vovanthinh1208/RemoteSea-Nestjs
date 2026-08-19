@@ -67,6 +67,7 @@ import {
   ApplicationOwnershipGuard,
   type ApplicationWithJobOwner,
 } from "./guards/application-ownership.guard";
+import { ApplicationAccessGuard } from "./guards/application-access.guard";
 import {
   ApiBulkUpdateApplications,
   ApiConfirmVerification,
@@ -212,7 +213,7 @@ export class EmployerController {
 
   @ApiListMessages()
   @Get("applications/:id/messages")
-  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
   @Roles("EMPLOYER")
   listApplicationMessages(
     @CurrentResource() application: ApplicationWithJobOwner,
@@ -222,7 +223,7 @@ export class EmployerController {
 
   @ApiSendMessage()
   @Post("applications/:id/messages")
-  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
   @Roles("EMPLOYER")
   @HttpCode(HttpStatus.CREATED)
   sendApplicationMessage(
@@ -244,7 +245,7 @@ export class EmployerController {
 
   @ApiGetInterview()
   @Get("applications/:id/interview")
-  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
   @Roles("EMPLOYER")
   getApplicationInterview(
     @CurrentResource() application: ApplicationWithJobOwner,
