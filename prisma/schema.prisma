@@ -135,6 +135,8 @@ model User {
   jobReports             JobReport[]
   notifications          Notification[]
   messages               Message[]
+  reviewsWritten         Review[]                @relation("ReviewsWritten")
+  reviewsReceived        Review[]                @relation("ReviewsReceived")
 
   @@map("users")
 }
@@ -635,6 +637,7 @@ model Application {
   statusEvents ApplicationStatusEvent[]
   messages     Message[]
   interview    Interview?
+  reviews      Review[]
 
   @@unique([jobId, talentId])
   @@index([talentId, appliedAt])
@@ -864,4 +867,61 @@ model AdminAuditLog {
   @@index([adminId, createdAt])
   @@index([createdAt])
   @@map("admin_audit_log")
+}
+
+enum ReviewDirection {
+  TALENT_TO_EMPLOYER
+  EMPLOYER_TO_TALENT
+}
+
+// No HIDDEN-by-moderation flow exists yet — status starts as the only lever
+// available (PUBLISHED always, today), kept as a real column rather than
+// hardcoding "always visible" in every query, so a moderation/mutual-reveal
+// feature can add a second value later without a schema change or a backfill.
+enum ReviewStatus {
+  PUBLISHED
+  HIDDEN
+}
+
+// Eligibility rule (see ReviewsService.isEligibleInteraction): a review is
+// only creatable once the Application's Interview has been CONFIRMED *and*
+// its confirmedSlot has passed — "the interview is complete," not just
+// booked. This is the strongest verified two-sided interaction this schema
+// has today (both parties agreed on an actual time, and it's already
+// happened), stronger than an application's own `status` field, which an
+// employer can set to INTERVIEW/OFFERED without any real Interview ever
+// having been proposed or confirmed. There's no "hired"/employment model to
+// build a stronger rule on top of.
+model Review {
+  id                     String          @id @default(cuid())
+  applicationId          String
+  direction              ReviewDirection
+  reviewerId             String
+  revieweeId             String
+  overallRating          Int
+  // Nullable, not four required columns: which of these apply depends on
+  // `direction` (see ReviewsService's direction-specific validation) — a
+  // TALENT_TO_EMPLOYER review never has reliabilityRating, an
+  // EMPLOYER_TO_TALENT review never has interviewProcessRating.
+  communicationRating    Int?
+  professionalismRating  Int?
+  interviewProcessRating Int?
+  reliabilityRating      Int?
+  comment                String?         @db.Text
+  status                 ReviewStatus    @default(PUBLISHED)
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  reviewer    User        @relation("ReviewsWritten", fields: [reviewerId], references: [id], onDelete: Cascade)
+  reviewee    User        @relation("ReviewsReceived", fields: [revieweeId], references: [id], onDelete: Cascade)
+
+  // One review per reviewer per verified interaction — deliberately NOT
+  // unique(reviewerId, revieweeId): the same talent and employer can
+  // legitimately interact again through a different application later.
+  @@unique([reviewerId, applicationId])
+  // Backs GET /reviews/user/:userId's aggregate + list query (filter by
+  // revieweeId + status, sorted newest first).
+  @@index([revieweeId, status, createdAt])
+  @@map("reviews")
 }

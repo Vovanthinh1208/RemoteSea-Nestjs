@@ -31,6 +31,7 @@ import { CategoriesController } from "@/modules/taxonomy/categories.controller";
 import { UsersController } from "@/modules/users/users.controller";
 import { BillingController } from "@/modules/billing/billing.controller";
 import { TalentController } from "@/modules/talent/talent.controller";
+import { ReviewsController } from "@/modules/reviews/reviews.controller";
 
 /**
  * This is the permission matrix: every route in the API, alongside the exact
@@ -739,6 +740,31 @@ const expectations: ControllerExpectation[] = [
         method: "getPublicProfile",
         httpMethod: "GET",
         path: ":slug",
+        guards: [],
+      },
+    ],
+  },
+  {
+    name: "ReviewsController",
+    controller: ReviewsController,
+    basePath: "reviews",
+    routes: [
+      {
+        method: "getEligibility",
+        httpMethod: "GET",
+        path: "eligibility/:applicationId",
+        guards: ["JwtAuthGuard"],
+      },
+      {
+        method: "create",
+        httpMethod: "POST",
+        path: "/",
+        guards: ["JwtAuthGuard"],
+      },
+      {
+        method: "listForUser",
+        httpMethod: "GET",
+        path: "user/:userId",
         guards: [],
       },
     ],
