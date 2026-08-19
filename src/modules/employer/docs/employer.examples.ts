@@ -78,6 +78,8 @@ export const ListJobApplicationsResponseExample = {
       viewedAt: "2026-06-11T08:00:00.000Z",
       updatedAt: "2026-06-11T09:15:00.000Z",
       coverLetter: "I would love to join your team...",
+      resumeUrl:
+        "https://cdn.remotesea.com/resume/cltal1a2b3c4d5e6f7g8h9i0.pdf",
       talent: {
         id: "cltal1a2b3c4d5e6f7g8h9i0",
         slug: "jane-doe",

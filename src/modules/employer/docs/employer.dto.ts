@@ -289,6 +289,9 @@ export class JobApplicationListItemDto {
   })
   coverLetter?: string | null;
 
+  @ApiPropertyOptional({ format: "url", nullable: true })
+  resumeUrl?: string | null;
+
   @ApiProperty({ type: ApplicationTalentDto })
   talent!: ApplicationTalentDto;
 }

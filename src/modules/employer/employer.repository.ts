@@ -448,6 +448,7 @@ export class EmployerRepository {
           // REVIEWING, so ApplicantsPanel's indicator can match it exactly.
           updatedAt: true,
           coverLetter: true,
+          resumeUrl: true,
           talent: {
             select: {
               id: true,
