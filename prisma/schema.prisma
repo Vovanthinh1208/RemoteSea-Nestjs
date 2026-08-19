@@ -137,6 +137,7 @@ model User {
   messages               Message[]
   reviewsWritten         Review[]                @relation("ReviewsWritten")
   reviewsReceived        Review[]                @relation("ReviewsReceived")
+  profileViewsMade       ProfileView[]           @relation("ProfileViewsMade")
 
   @@map("users")
 }
@@ -306,6 +307,7 @@ model TalentProfile {
   workExperiences    WorkExperience[]
   profileHighlights  ProfileHighlight[]
   emailVerifications TalentEmailVerification[]
+  profileViews       ProfileView[]
 
   @@map("talent_profiles")
 }
@@ -924,4 +926,28 @@ model Review {
   // revieweeId + status, sorted newest first).
   @@index([revieweeId, status, createdAt])
   @@map("reviews")
+}
+
+// Only a real Employer viewing a Talent profile is ever recorded (never a
+// Talent viewing anyone, and never an anonymous request) — see
+// ProfileViewsService.recordView, the only writer of this table; there is no
+// public/manual API to create one directly. Deduplicated to one row per
+// (viewer, talent, calendar day) via the unique constraint below, so
+// refreshing a profile repeatedly in one sitting doesn't inflate totalViews
+// — the upsert on that key either inserts the first view of the day or
+// no-ops on a repeat.
+model ProfileView {
+  id        String   @id @default(cuid())
+  viewerId  String
+  talentId  String
+  viewDate  DateTime @db.Date
+  createdAt DateTime @default(now())
+
+  viewer User          @relation("ProfileViewsMade", fields: [viewerId], references: [id], onDelete: Cascade)
+  talent TalentProfile @relation(fields: [talentId], references: [id], onDelete: Cascade)
+
+  @@unique([viewerId, talentId, viewDate])
+  // Backs getAnalytics's count() + groupBy(viewerId) for one talent.
+  @@index([talentId, createdAt])
+  @@map("profile_views")
 }

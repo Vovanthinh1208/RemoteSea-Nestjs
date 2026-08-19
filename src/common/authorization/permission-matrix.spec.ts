@@ -718,6 +718,12 @@ const expectations: ControllerExpectation[] = [
         guards: ["JwtAuthGuard"],
       },
       {
+        method: "getProfileViewAnalytics",
+        httpMethod: "GET",
+        path: "me/profile-views",
+        guards: ["JwtAuthGuard"],
+      },
+      {
         method: "submitVerification",
         httpMethod: "POST",
         path: "verification",

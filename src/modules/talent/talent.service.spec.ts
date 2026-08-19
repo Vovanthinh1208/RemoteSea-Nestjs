@@ -7,13 +7,18 @@ import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { TalentRepository } from "./talent.repository";
 import type { UploadsService } from "@/modules/uploads/uploads.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+import type { ProfileViewsService } from "@/modules/profile-views/profile-views.service";
 
-const makeService = (repoOverrides: Partial<TalentRepository> = {}) => {
+const makeService = (
+  repoOverrides: Partial<TalentRepository> = {},
+  profileViewsOverrides: Partial<ProfileViewsService> = {},
+) => {
   const repo = {
     findUserName: jest.fn().mockResolvedValue({ name: "Ada" }),
     findSalaryAndResumeByUserId: jest.fn().mockResolvedValue(null),
     upsertProfileWithSkills: jest.fn().mockResolvedValue({ id: "profile-1" }),
     findByIdWithSkills: jest.fn().mockResolvedValue({ id: "profile-1" }),
+    findTalentIdByUserId: jest.fn().mockResolvedValue({ id: "profile-1" }),
     isVerifiedEmployer: jest.fn().mockResolvedValue(false),
     search: jest.fn().mockResolvedValue([]),
     count: jest.fn().mockResolvedValue(0),
@@ -23,15 +28,24 @@ const makeService = (repoOverrides: Partial<TalentRepository> = {}) => {
   const emailService = {
     sendTalentVerificationEmail: jest.fn().mockResolvedValue(undefined),
   };
+  const profileViewsService = {
+    recordView: jest.fn().mockResolvedValue(undefined),
+    getAnalytics: jest
+      .fn()
+      .mockResolvedValue({ totalViews: 0, uniqueViewers: 0 }),
+    ...profileViewsOverrides,
+  } as unknown as ProfileViewsService;
   return {
     service: new TalentService(
       repo,
       config as never,
       {} as UploadsService,
       emailService as never,
+      profileViewsService,
     ),
     repo,
     emailService,
+    profileViewsService,
   };
 };
 
@@ -236,5 +250,93 @@ describe("TalentService.confirmVerification", () => {
     await expect(
       service.confirmVerification({ token: "raced" }),
     ).rejects.toBeInstanceOf(BadRequestApiException);
+  });
+});
+
+describe("TalentService.getPublicProfile — profile view recording", () => {
+  const profile = {
+    id: "profile-1",
+    userId: "talent-user-1",
+    visibility: "PUBLIC",
+  };
+
+  it("records a view for an authenticated Employer", async () => {
+    const { service, repo, profileViewsService } = makeService({
+      findBySlug: jest.fn().mockResolvedValue(profile),
+    });
+
+    await service.getPublicProfile("ada", viewer);
+
+    expect(repo.findBySlug).toHaveBeenCalledWith("ada");
+    expect(profileViewsService.recordView).toHaveBeenCalledWith(
+      viewer,
+      "profile-1",
+    );
+  });
+
+  it("still calls recordView for a Talent viewer, leaving the self/role exclusion to ProfileViewsService", async () => {
+    // TalentService itself doesn't decide who counts — it always forwards
+    // the viewer, and ProfileViewsService.recordView is what no-ops a
+    // non-Employer caller (see that service's own spec). This just proves
+    // the hook fires unconditionally rather than silently never firing.
+    const talentViewer = {
+      id: "talent-user-1",
+      role: "TALENT",
+    } as AuthenticatedUser;
+    const { service, repo, profileViewsService } = makeService({
+      findBySlug: jest.fn().mockResolvedValue(profile),
+    });
+
+    await service.getPublicProfile("ada", talentViewer);
+
+    expect(repo.findBySlug).toHaveBeenCalledWith("ada");
+    expect(profileViewsService.recordView).toHaveBeenCalledWith(
+      talentViewer,
+      "profile-1",
+    );
+  });
+
+  it("does not record a view for a gated VERIFIED_EMPLOYERS profile the caller can't see", async () => {
+    const { service, profileViewsService } = makeService({
+      findBySlug: jest
+        .fn()
+        .mockResolvedValue({ ...profile, visibility: "VERIFIED_EMPLOYERS" }),
+      isVerifiedEmployer: jest.fn().mockResolvedValue(false),
+    });
+
+    await expect(
+      service.getPublicProfile("ada", viewer),
+    ).rejects.toBeInstanceOf(NotFoundApiException);
+    expect(profileViewsService.recordView).not.toHaveBeenCalled();
+  });
+});
+
+describe("TalentService.getProfileViewAnalytics", () => {
+  it("returns the caller's own analytics", async () => {
+    const { service, repo, profileViewsService } = makeService(
+      {},
+      {
+        getAnalytics: jest
+          .fn()
+          .mockResolvedValue({ totalViews: 128, uniqueViewers: 47 }),
+      },
+    );
+
+    const result = await service.getProfileViewAnalytics("talent-user-1");
+
+    expect(repo.findTalentIdByUserId).toHaveBeenCalledWith("talent-user-1");
+    expect(profileViewsService.getAnalytics).toHaveBeenCalledWith("profile-1");
+    expect(result).toEqual({ totalViews: 128, uniqueViewers: 47 });
+  });
+
+  it("returns zero values, not a 404, when the caller has no talent profile yet", async () => {
+    const { service, profileViewsService } = makeService({
+      findTalentIdByUserId: jest.fn().mockResolvedValue(null),
+    });
+
+    const result = await service.getProfileViewAnalytics("no-profile-user");
+
+    expect(result).toEqual({ totalViews: 0, uniqueViewers: 0 });
+    expect(profileViewsService.getAnalytics).not.toHaveBeenCalled();
   });
 });

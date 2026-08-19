@@ -18,6 +18,7 @@ import {
   ConfirmVerificationRequestDto,
   ListActivityResponseDto,
   MessageResponseDto,
+  ProfileViewAnalyticsResponseDto,
   PublicTalentProfileResponseDto,
   SubmitVerificationRequestDto,
   TalentProfileRequestDto,
@@ -29,6 +30,7 @@ import {
   ConfirmVerificationResponseExample,
   ListActivityResponseExample,
   OwnTalentProfileExample,
+  ProfileViewAnalyticsExample,
   PublicTalentProfileClosedExample,
   PublicTalentProfileOpenExample,
   SubmitVerificationRequestExample,
@@ -75,6 +77,23 @@ export const ApiGetActivity = () =>
       description: "The caller's recent activity, newest first",
       type: ListActivityResponseDto,
       schema: { example: ListActivityResponseExample },
+    }),
+    UnauthorizedApiResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiGetProfileViewAnalytics = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Get profile view analytics",
+      description:
+        "Real view counts for the caller's own talent profile — never another user's. Only views from an authenticated Employer count (never anonymous requests, never a Talent viewing anyone, including themselves); repeat views from the same employer on the same UTC calendar day are deduplicated to one. Returns zero values (not 404) if the caller has no talent profile yet.",
+    }),
+    ApiOkResponse({
+      description: "Aggregate view stats for the caller's own profile",
+      type: ProfileViewAnalyticsResponseDto,
+      schema: { example: ProfileViewAnalyticsExample },
     }),
     UnauthorizedApiResponse,
     InternalServerErrorApiResponse,

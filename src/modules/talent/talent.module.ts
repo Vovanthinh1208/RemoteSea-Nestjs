@@ -4,9 +4,10 @@ import { TalentService } from "./talent.service";
 import { TalentRepository } from "./talent.repository";
 import { UploadsModule } from "@/modules/uploads/uploads.module";
 import { AuthModule } from "@/modules/auth/auth.module";
+import { ProfileViewsModule } from "@/modules/profile-views/profile-views.module";
 
 @Module({
-  imports: [UploadsModule, AuthModule],
+  imports: [UploadsModule, AuthModule, ProfileViewsModule],
   controllers: [TalentController],
   providers: [TalentService, TalentRepository],
 })

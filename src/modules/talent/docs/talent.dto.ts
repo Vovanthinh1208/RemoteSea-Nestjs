@@ -661,3 +661,11 @@ export class ListActivityResponseDto {
   @ApiProperty({ type: [ActivityItemDto] })
   activity!: ActivityItemDto[];
 }
+
+export class ProfileViewAnalyticsResponseDto {
+  @ApiProperty({ example: 128 })
+  totalViews!: number;
+
+  @ApiProperty({ example: 47 })
+  uniqueViewers!: number;
+}
