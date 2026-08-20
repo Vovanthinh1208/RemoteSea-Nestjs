@@ -360,9 +360,7 @@ async function main(): Promise<void> {
       }),
     ),
   );
-  const engineeringCategory = categories.find(
-    (c) => c.name === "Engineering",
-  )!;
+  const engineeringCategory = categories.find((c) => c.name === "Engineering")!;
 
   // ─── Shared helpers (used by both phases) ──────────────────────────────
   const createTalent = async (
@@ -618,8 +616,10 @@ async function main(): Promise<void> {
         const isPublished =
           status === JobStatus.ACTIVE || status === JobStatus.CLOSED;
         const salaryMin = randomInt(600, 3000);
-        const { description, requirements, responsibilities } =
-          jobDescription(title, employer.companyName);
+        const { description, requirements, responsibilities } = jobDescription(
+          title,
+          employer.companyName,
+        );
 
         const job = await prisma.job.create({
           data: {
@@ -1495,9 +1495,7 @@ async function main(): Promise<void> {
     "        hiringmanager1@remotesea.dev (HIRING_MANAGER, Duc Pham)",
   );
   console.log("        interviewer1@remotesea.dev (INTERVIEWER, Linh Vu)");
-  console.log(
-    "        interviewer2@remotesea.dev (INTERVIEWER, Khanh Hoang)",
-  );
+  console.log("        interviewer2@remotesea.dev (INTERVIEWER, Khanh Hoang)");
   console.log(
     `Second company: ${secondCompany.companyName} — ${SECOND_COMPANY_OWNER_EMAIL} (OWNER) + recruiter2@remotesea.dev (RECRUITER)`,
   );
