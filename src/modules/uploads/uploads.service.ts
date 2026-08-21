@@ -15,7 +15,10 @@ import {
 } from "./constants";
 import type { PresignDto } from "./dto/presign.dto";
 import type { PresignResult } from "./interfaces";
-import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import {
+  BadRequestApiException,
+  ServiceUnavailableApiException,
+} from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { EnvConfig } from "@/core/config/env.validation";
 
@@ -33,6 +36,21 @@ export class UploadsService {
     dto: PresignDto,
   ): Promise<PresignResult> {
     const { type, filename, contentType, fileSize } = dto;
+
+    // Without this, an unset CDN_URL silently produces publicUrl =
+    // "undefined/uploads/..." (template-literal string interpolation of
+    // `undefined`, not a thrown error) — the upload to S3 itself can still
+    // succeed against that broken URL, so the caller sees success right up
+    // until the profile/application save a step later fails with a
+    // confusing "not owned" error (isOwnedUploadUrl also treats an unset
+    // CDN_URL as "reject everything"). Failing here instead makes a missing
+    // CDN_URL loud and immediate rather than a two-step mystery.
+    if (!this.config.get("CDN_URL", { infer: true })) {
+      throw new ServiceUnavailableApiException(
+        "File uploads are not configured.",
+        ErrorCode.UPLOADS_NOT_CONFIGURED,
+      );
+    }
 
     if (!(CONTENT_TYPES[type] as readonly string[]).includes(contentType)) {
       throw new BadRequestApiException(
