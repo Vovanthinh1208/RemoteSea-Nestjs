@@ -79,6 +79,7 @@ const makeService = (
     messagesService as never,
     interviewsService as never,
     scorecardsService as never,
+    {} as never,
     companyMembershipService as never,
     cache as never,
   );

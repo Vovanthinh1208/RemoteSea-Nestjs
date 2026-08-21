@@ -56,6 +56,14 @@ const envSchema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().optional(),
   S3_ENDPOINT: z.string().optional(),
   CDN_URL: z.string().optional(),
+  // AI features (CV analysis, etc.) — unset API keys mean the feature 503s
+  // rather than the app failing to boot, same convention as every other
+  // optional integration above. AI_PROVIDER picks which one AiService
+  // delegates to (see ai.service.ts); only that provider's key needs to
+  // actually be set for AI features to work — the other can stay empty.
+  AI_PROVIDER: z.enum(["ANTHROPIC", "GEMINI"]).default("ANTHROPIC"),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

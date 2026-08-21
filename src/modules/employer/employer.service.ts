@@ -40,6 +40,7 @@ import { InterviewsService } from "@/modules/interviews/interviews.service";
 import type { ProposeInterviewDto } from "@/modules/interviews/dto/propose-interview.dto";
 import { ScorecardsService } from "@/modules/scorecards/scorecards.service";
 import type { CreateScorecardDto } from "@/modules/scorecards/dto/create-scorecard.dto";
+import { CvAnalysisService } from "@/modules/cv-analysis/cv-analysis.service";
 import { runInBackground } from "@/common/utils/background-task.util";
 import { getOrSetCache } from "@/common/caching/cache.util";
 import {
@@ -77,6 +78,7 @@ export class EmployerService {
     private readonly messagesService: MessagesService,
     private readonly interviewsService: InterviewsService,
     private readonly scorecardsService: ScorecardsService,
+    private readonly cvAnalysisService: CvAnalysisService,
     private readonly companyMembershipService: CompanyMembershipService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
@@ -631,6 +633,10 @@ export class EmployerService {
 
   listApplicationScorecards(application: ApplicationWithJobOwner) {
     return this.scorecardsService.list(application.id);
+  }
+
+  getApplicationCvAnalysis(application: ApplicationWithJobOwner) {
+    return this.cvAnalysisService.getOrCreate(application.id);
   }
 
   submitApplicationScorecard(

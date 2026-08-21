@@ -647,6 +647,7 @@ model Application {
   interview    Interview?
   reviews      Review[]
   scorecards   InterviewScorecard[]
+  cvAnalysis   CvAnalysis?
 
   @@unique([jobId, talentId])
   @@index([talentId, appliedAt])
@@ -976,6 +977,31 @@ model InterviewScorecard {
   @@unique([authorId, applicationId])
   @@index([applicationId])
   @@map("interview_scorecards")
+}
+
+// AI-generated CV fit analysis, cached 1:1 with Application — see
+// CvAnalysisService. resumeUrl is set once at apply time and never edited in
+// place (a new resume means a new Application, not an update to this one),
+// so "does a row already exist" is the entire cache-invalidation rule — no
+// staleness check needed. Never shown to the talent (internal hiring aid,
+// same visibility rule as InterviewScorecard above).
+model CvAnalysis {
+  id                 String   @id @default(cuid())
+  applicationId      String   @unique
+  fitScore           Int
+  summary            String   @db.Text
+  strengths          String[] @default([])
+  gaps               String[] @default([])
+  suggestedQuestions String[] @default([])
+  // Which model produced this — lets a future prompt/model change
+  // distinguish old analyses from new ones instead of treating the table as
+  // one undifferentiated cache.
+  model              String
+  createdAt          DateTime @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@map("cv_analyses")
 }
 
 // Only a real Employer viewing a Talent profile is ever recorded (never a
