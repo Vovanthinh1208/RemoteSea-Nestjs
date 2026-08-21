@@ -444,6 +444,13 @@ const expectations: ControllerExpectation[] = [
         roles: ["EMPLOYER"],
       },
       {
+        method: "getApplicationCvAnalysis",
+        httpMethod: "GET",
+        path: "applications/:id/ai-cv-analysis",
+        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationAccessGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
         method: "submitVerification",
         httpMethod: "POST",
         path: "verification",

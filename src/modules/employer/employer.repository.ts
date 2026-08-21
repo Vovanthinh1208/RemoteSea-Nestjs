@@ -354,7 +354,10 @@ export class EmployerRepository {
         skills: {
           select: {
             isRequired: true,
-            skill: { select: { id: true } },
+            // name: needed by match.util.ts's missingSkills — the client
+            // shows a required-skill's name in the applicant match badge's
+            // tooltip (see MatchBadge.tsx), not just its id.
+            skill: { select: { id: true, name: true } },
           },
         },
       },
