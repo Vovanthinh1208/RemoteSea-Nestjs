@@ -17,6 +17,18 @@ import type { EnvConfig } from "@/core/config/env.validation";
         new S3Client({
           region: config.get("S3_REGION", { infer: true }) ?? "auto",
           endpoint: config.get("S3_ENDPOINT", { infer: true }),
+          // AWS SDK v3 defaults to WHEN_SUPPORTED, which attaches a flexible
+          // CRC32 checksum to presigned PutObject URLs. At presign time this
+          // process has never seen the actual file (it's uploaded straight
+          // from the browser, see UploadsService's doc comment), so the SDK
+          // has nothing real to checksum — the value it embeds is a
+          // placeholder for an empty body. Cloudflare R2 validates that
+          // checksum against the real uploaded bytes and rejects the
+          // mismatch with a 403, breaking every presigned upload. WHEN_REQUIRED
+          // matches AWS's own documented workaround for S3-compatible
+          // providers (R2, MinIO, ...) — PutObject only requires a checksum
+          // when the caller explicitly asks for one, which nothing here does.
+          requestChecksumCalculation: "WHEN_REQUIRED",
           credentials: {
             accessKeyId: config.get("S3_ACCESS_KEY_ID", {
               infer: true,
