@@ -43,9 +43,19 @@ export class UploadsService {
     // succeed against that broken URL, so the caller sees success right up
     // until the profile/application save a step later fails with a
     // confusing "not owned" error (isOwnedUploadUrl also treats an unset
-    // CDN_URL as "reject everything"). Failing here instead makes a missing
-    // CDN_URL loud and immediate rather than a two-step mystery.
-    if (!this.config.get("CDN_URL", { infer: true })) {
+    // CDN_URL as "reject everything"). An unset S3_BUCKET is a different
+    // failure shape — PutObjectCommand's marshalling throws its own generic
+    // AWS SDK error, which would otherwise surface as an unhandled 500
+    // instead of a clean, actionable one. Failing here instead makes either
+    // kind of missing config loud and immediate rather than a confusing
+    // multi-step mystery (S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY don't need
+    // the same treatment — bad credentials can't be caught here since
+    // presigning never calls out to R2, they only ever surface once the
+    // frontend actually PUTs to the signed URL and gets a 403 back).
+    if (
+      !this.config.get("S3_BUCKET", { infer: true }) ||
+      !this.config.get("CDN_URL", { infer: true })
+    ) {
       throw new ServiceUnavailableApiException(
         "File uploads are not configured.",
         ErrorCode.UPLOADS_NOT_CONFIGURED,
