@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { ApiError, GoogleGenAI } from "@google/genai";
+import { ApiError, GoogleGenAI, ThinkingLevel } from "@google/genai";
 import type {
   AiCompletionRequest,
   AiCompletionResult,
@@ -9,7 +9,9 @@ import type {
 import { ServiceUnavailableApiException } from "@/common/exceptions/api.exception";
 import type { EnvConfig } from "@/core/config/env.validation";
 
-const DEFAULT_MODEL = "gemini-2.5-flash";
+// gemini-2.5-flash was retired ("no longer available to new users" per the
+// API's own error) — 3.6 is Google's current fast/cheap tier.
+const DEFAULT_MODEL = "gemini-3.6-flash";
 // A 401/403 here means GEMINI_API_KEY is set but invalid/unauthorized — same
 // "actionable config bug, log it loudly" treatment as Anthropic's
 // AuthenticationError (see AnthropicProvider).
@@ -44,6 +46,15 @@ export class GeminiProvider implements AiProvider {
         config: {
           systemInstruction: request.system,
           maxOutputTokens: request.maxTokens,
+          // 3.x models think by default, spending part of maxOutputTokens on
+          // invisible reasoning before the real answer — for a
+          // structured-JSON task like this (see CvAnalysisService), that risks
+          // silently eating the whole budget and truncating the actual
+          // output. gemini-3.6-flash rejects thinkingBudget: 0 outright
+          // (400 — this model line doesn't support fully disabling it);
+          // MINIMAL is the lowest level it accepts, verified to produce zero
+          // thoughtsTokenCount in practice.
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
           // Same bounded-request reasoning as AnthropicProvider's client
           // timeout — this runs inline within an HTTP request.
           httpOptions: { timeout: 30_000 },
