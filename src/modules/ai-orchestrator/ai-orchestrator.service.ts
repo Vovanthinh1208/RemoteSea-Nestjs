@@ -1,9 +1,19 @@
-import { Injectable, Logger } from "@nestjs/common";
+import {
+  HttpException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { CompanyMembershipService } from "@/modules/company/company-membership.service";
 import type { EnvConfig } from "@/core/config/env.validation";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+
+// CPU-only inference on the dev remotesea-ai instance can take minutes (see
+// that repo's README) — a chat/ask call needs a far longer budget than the
+// 5s used for plain reachability checks below.
+const ORCHESTRATOR_CALL_TIMEOUT_MS = 180_000;
 
 export interface OrchestratorContextTokenClaims {
   sub: string;
@@ -129,5 +139,54 @@ export class AiOrchestratorService {
         error: error instanceof Error ? error.message : String(error),
       };
     }
+  }
+
+  // The general-purpose forwarding path Chat (and any future orchestrator
+  // feature) uses: mint this user's context token, call remotesea-ai's
+  // /v1/orchestrator/... route, and hand back exactly what it returned.
+  // remotesea-ai's own response status/body is propagated as-is on failure
+  // (a 404 stays a 404) rather than collapsed into a generic 500 — same
+  // "don't hide a real authorization/not-found signal" principle as
+  // remotesea-ai's own tool_service.py uses when it calls back into this
+  // app.
+  async proxyToOrchestrator<T>(
+    user: AuthenticatedUser,
+    method: "GET" | "POST",
+    path: string,
+    body?: unknown,
+  ): Promise<T> {
+    if (!this.isConfigured) {
+      throw new ServiceUnavailableException(
+        "AI Orchestrator is not configured",
+      );
+    }
+
+    const token = await this.mintContextToken(user);
+    let response: Response;
+    try {
+      response = await fetch(`${this.aiServiceUrl}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(ORCHESTRATOR_CALL_TIMEOUT_MS),
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Orchestrator call to ${path} failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new ServiceUnavailableException("AI Orchestrator is unreachable");
+    }
+
+    const data = await response.json().catch(() => undefined);
+    if (!response.ok) {
+      throw new HttpException(
+        data ?? "AI Orchestrator request failed",
+        response.status,
+      );
+    }
+    return data as T;
   }
 }

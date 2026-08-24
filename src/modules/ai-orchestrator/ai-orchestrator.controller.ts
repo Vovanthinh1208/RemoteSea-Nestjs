@@ -1,9 +1,17 @@
-import { Controller, Get, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { AiOrchestratorService } from "./ai-orchestrator.service";
+import { ChatRequestDto, chatRequestSchema } from "./dto/chat.dto";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
+import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+
+// Response shapes below are passed through untyped from remotesea-ai
+// (ChatResponse/ConversationSummaryResponse/ConversationDetailResponse) —
+// its own Pydantic schemas are the source of truth for those, same
+// reasoning as chatRequestSchema only validating what's worth failing fast
+// on locally rather than duplicating the full response contract here.
 
 @ApiTags("ai-orchestrator")
 @Controller("ai-orchestrator")
@@ -29,5 +37,45 @@ export class AiOrchestratorController {
       apiToAi: outbound,
       aiToApiRoundTrip: roundTrip,
     };
+  }
+
+  // Phase 5: the actual remotesea-web-facing surface for AI Chat. This
+  // controller never talks to remotesea-ai's Postgres or re-implements its
+  // conversation-ownership check — proxyToOrchestrator forwards the same
+  // signed context token remotesea-ai already trusts, and remotesea-ai's
+  // own ChatService is what enforces "this conversation belongs to this
+  // user" (see that repo's chat_service.py).
+  @Post("chat")
+  async chat(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(chatRequestSchema)) body: ChatRequestDto,
+  ) {
+    return this.aiOrchestratorService.proxyToOrchestrator(
+      user,
+      "POST",
+      "/v1/orchestrator/chat",
+      body,
+    );
+  }
+
+  @Get("chat")
+  async listConversations(@CurrentUser() user: AuthenticatedUser) {
+    return this.aiOrchestratorService.proxyToOrchestrator(
+      user,
+      "GET",
+      "/v1/orchestrator/chat",
+    );
+  }
+
+  @Get("chat/:id")
+  async getConversation(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+  ) {
+    return this.aiOrchestratorService.proxyToOrchestrator(
+      user,
+      "GET",
+      `/v1/orchestrator/chat/${encodeURIComponent(id)}`,
+    );
   }
 }
