@@ -39,7 +39,14 @@ import { CompanyModule } from "@/modules/company/company.module";
     ApplicationAccessGuard,
   ],
   // AdminModule calls EmployerService.setVerified/suspend for admin-triggered
-  // employer moderation — see admin.service.ts.
-  exports: [EmployerService],
+  // employer moderation — see admin.service.ts. ApplicationAccessGuard:
+  // AiOrchestratorModule's tool routes reuse this exact guard (same
+  // company-role + assigned-interviewer check as the real employer routes
+  // above) rather than reimplementing application access control for tools.
+  // EmployerRepository is exported alongside it purely because Nest
+  // resolves a class passed to @UseGuards() fresh in the consuming module's
+  // own injector context — it needs the guard's full constructor dependency
+  // chain reachable there too, not just the guard class itself.
+  exports: [EmployerService, ApplicationAccessGuard, EmployerRepository],
 })
 export class EmployerModule {}

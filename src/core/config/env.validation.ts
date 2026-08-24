@@ -64,6 +64,18 @@ const envSchema = z.object({
   AI_PROVIDER: z.enum(["ANTHROPIC", "GEMINI"]).default("ANTHROPIC"),
   ANTHROPIC_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
+
+  // remotesea-ai (separate FastAPI/Python service — the AI Orchestrator,
+  // RAG, and Qwen inference live there, not here) — unset means
+  // AiOrchestratorService reports the integration as not configured rather
+  // than the app failing to boot, same convention as the AI keys above.
+  // AI_SERVICE_SECRET must be the exact same value configured on
+  // remotesea-ai's side: it's both the legacy bearer secret for its
+  // pre-orchestrator endpoints and the HS256 signing key this service uses
+  // to mint short-lived per-request orchestrator context tokens (see
+  // AiOrchestratorService.mintContextToken).
+  AI_SERVICE_URL: z.string().url().default("http://localhost:8000"),
+  AI_SERVICE_SECRET: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

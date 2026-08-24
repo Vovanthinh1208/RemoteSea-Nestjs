@@ -25,6 +25,7 @@ import { HealthModule } from "@/modules/health/health.module";
 import { NotificationsModule } from "@/modules/notifications/notifications.module";
 import { ReviewsModule } from "@/modules/reviews/reviews.module";
 import { TeamModule } from "@/modules/team/team.module";
+import { AiOrchestratorModule } from "@/modules/ai-orchestrator/ai-orchestrator.module";
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { TeamModule } from "@/modules/team/team.module";
     HealthModule,
     ReviewsModule,
     TeamModule,
+    AiOrchestratorModule,
   ],
 })
 export class AppModule {}
