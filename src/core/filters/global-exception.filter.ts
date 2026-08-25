@@ -23,6 +23,10 @@ const FALLBACK_CODE_BY_STATUS: Partial<Record<number, ErrorCode>> = {
   404: ErrorCode.NOT_FOUND,
   409: ErrorCode.CONFLICT,
   429: ErrorCode.RATE_LIMITED,
+  // AiOrchestratorService.proxyToOrchestrator forwards remotesea-ai's own
+  // status as-is, so a 502 here means "the upstream AI service failed",
+  // same meaning as SERVICE_UNAVAILABLE elsewhere in this API.
+  502: ErrorCode.SERVICE_UNAVAILABLE,
 };
 
 @Catch()
@@ -56,10 +60,18 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       // avoids.
       const status = exception.getStatus();
       const body = exception.getResponse();
+      // "message" is Nest's own convention; "detail" is FastAPI's (remotesea-ai's
+      // errors arrive via AiOrchestratorService.proxyToOrchestrator's
+      // `new HttpException(data, status)`, `data` being remotesea-ai's raw
+      // `{"detail": "..."}` body) — without this, every proxied remotesea-ai
+      // failure surfaced as the generic, useless "Http Exception" instead of
+      // the actual reason (e.g. "RAG retrieval failed: ...").
       const message =
         typeof body === "object" && body !== null && "message" in body
           ? (body as { message: unknown }).message
-          : exception.message;
+          : typeof body === "object" && body !== null && "detail" in body
+            ? (body as { detail: unknown }).detail
+            : exception.message;
       response.status(status).json({
         error: message,
         code: FALLBACK_CODE_BY_STATUS[status] ?? ErrorCode.INTERNAL_ERROR,

@@ -78,6 +78,27 @@ describe("GlobalExceptionFilter", () => {
     });
   });
 
+  it("extracts FastAPI's `detail` field when `message` is absent (proxied remotesea-ai error)", () => {
+    const filter = new GlobalExceptionFilter();
+    const { host, response } = makeHost();
+
+    // The exact shape AiOrchestratorService.proxyToOrchestrator produces
+    // from remotesea-ai's raw FastAPI error body.
+    filter.catch(
+      new HttpException(
+        { detail: "RAG retrieval failed: connection refused" },
+        HttpStatus.BAD_GATEWAY,
+      ),
+      host,
+    );
+
+    expect(response.status).toHaveBeenCalledWith(502);
+    expect(response.json).toHaveBeenCalledWith({
+      error: "RAG retrieval failed: connection refused",
+      code: ErrorCode.SERVICE_UNAVAILABLE,
+    });
+  });
+
   it("maps Prisma P2002 to a 409 conflict", () => {
     const filter = new GlobalExceptionFilter();
     const { host, response } = makeHost();
