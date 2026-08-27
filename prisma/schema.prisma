@@ -574,6 +574,18 @@ model Job {
   // Covers GET /jobs?sort=salary (buildJobOrderBy), which orders by salaryMax
   // with no index to back it — previously a full sort over every ACTIVE row.
   @@index([status, salaryMax])
+  // Covers GET /jobs?type=... and ?level=... (buildJobWhere) — same
+  // reasoning as the country/salaryMax indexes above: an { in: [...] }
+  // filter on a low-cardinality enum, always combined with the status
+  // filter every search already applies, previously unindexed together.
+  // Not empirically measured against production query plans (no slow-query
+  // log data available at the time this was added) — reasoned from the
+  // same query-shape precedent the existing composite indexes here already
+  // establish, not a guess from nothing. Revisit/drop if
+  // SLOW_QUERY_THRESHOLD_MS logging shows these filters were never actually
+  // the bottleneck.
+  @@index([status, jobType])
+  @@index([status, level])
   @@map("jobs")
 }
 

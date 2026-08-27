@@ -628,28 +628,50 @@ export class EmployerRepository {
     });
   }
 
-  // One transaction, one conditional updateMany per item — a stale row
-  // (status moved since the fresh read above) just returns count 0 for that
-  // item and the loop continues; it doesn't roll back the others. Returns
-  // the ids that actually updated, same partial-success shape callers of
-  // EmployerService.bulkUpdateApplications expect.
+  // One conditional CAS UPDATE for the whole batch (via a VALUES list, same
+  // pattern as JobsRepository.incrementViewCounts) instead of a per-item
+  // updateMany — up to BULK_UPDATE_MAX_ITEMS (50) sequential round trips
+  // inside one open transaction, previously. Each item still carries its
+  // own expectedStatus (a mixed-status batch, e.g. rejecting some REVIEWING
+  // and some SHORTLISTED applications together, is a real, reachable case —
+  // the DTO's single `status` is only the target, not the precondition), so
+  // this can't drop to a plain updateMany with one shared WHERE; the CAS
+  // condition itself has to travel per-row through the VALUES list. A stale
+  // row (status moved since the fresh read that produced `items`) simply
+  // doesn't match `a.status = v.expected_status` and is silently excluded
+  // from RETURNING — identical partial-success semantics to the old
+  // per-item loop, not a behavior change. applicationStatusEvent rows are
+  // now one batched createMany instead of one create per updated id.
   async bulkUpdateApplicationStatus(
     items: { id: string; expectedStatus: ApplicationStatus }[],
     status: ApplicationStatus,
     notes: string | undefined,
   ): Promise<string[]> {
     return this.prisma.$transaction(async (tx) => {
-      const updatedIds: string[] = [];
-      for (const item of items) {
-        const { count } = await tx.application.updateMany({
-          where: { id: item.id, status: item.expectedStatus },
-          data: { status, ...(notes !== undefined && { notes }) },
+      const rows = Prisma.join(
+        items.map(
+          (item) =>
+            Prisma.sql`(${item.id}, ${item.expectedStatus}::"ApplicationStatus")`,
+        ),
+      );
+      // notes is applied to every row in the batch when present (see the
+      // DTO's own comment: no per-item note in a bulk request) — conditional
+      // at the SQL level, same as the old data: { status, ...(notes !==
+      // undefined && { notes }) }, so an omitted notes leaves existing
+      // values untouched rather than overwriting them with NULL.
+      const updated = await tx.$queryRaw<{ id: string }[]>`
+        UPDATE "applications" AS a
+        SET "status" = ${status}::"ApplicationStatus"
+          ${notes !== undefined ? Prisma.sql`, "notes" = ${notes}` : Prisma.empty}
+        FROM (VALUES ${rows}) AS v(id, expected_status)
+        WHERE a.id = v.id AND a.status = v.expected_status
+        RETURNING a.id
+      `;
+      const updatedIds = updated.map((row) => row.id);
+      if (updatedIds.length > 0) {
+        await tx.applicationStatusEvent.createMany({
+          data: updatedIds.map((applicationId) => ({ applicationId, status })),
         });
-        if (count === 0) continue;
-        await tx.applicationStatusEvent.create({
-          data: { applicationId: item.id, status },
-        });
-        updatedIds.push(item.id);
       }
       return updatedIds;
     });
