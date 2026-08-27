@@ -25,6 +25,18 @@ const envSchema = z.object({
   DATABASE_STATEMENT_TIMEOUT: z.coerce.number().int().min(1).optional(),
   AUTH_SECRET: z.string().min(32, "AUTH_SECRET must be at least 32 characters"),
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
+  // Extra origins CORS should also accept, beyond FRONTEND_URL — comma-
+  // separated (e.g. "https://remotesea-web.fly.dev,https://preview.example.com").
+  // Deliberately separate from FRONTEND_URL, not a list-ified version of it:
+  // FRONTEND_URL is also the single canonical redirect target for OAuth
+  // callbacks (auth.controller.ts), billing return URLs (billing.service.ts),
+  // and email links (email.service.ts) — those need exactly one URL, not a
+  // set, so overloading it to accept a list would break all three. This
+  // exists for running a second frontend deployment (a parallel host
+  // migration, a preview environment) that only needs API access, not to be
+  // the OAuth/email/billing target. Unset = CORS behavior unchanged from
+  // before this existed (FRONTEND_URL only).
+  ADDITIONAL_CORS_ORIGINS: z.string().optional(),
   JWT_EXPIRES_IN: z.string().default("30d"),
   // Number of reverse-proxy hops in front of this app (load balancer, CDN, etc.) —
   // passed to Express's `trust proxy` setting so req.ip resolves to the real client
