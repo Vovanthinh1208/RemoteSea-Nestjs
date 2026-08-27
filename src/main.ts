@@ -174,7 +174,11 @@ async function bootstrap(): Promise<void> {
   }
 
   const port = config.get("PORT", { infer: true });
-  const server = await app.listen(port);
+  // Explicit host: Nest's app.listen(port) without one lets Node pick its own
+  // default bind address, which is unreliable across container base images —
+  // Fly.io's proxy reaches the app over its private network interface, not
+  // loopback, so this must bind every interface, not just localhost.
+  const server = await app.listen(port, "0.0.0.0");
 
   // Node's http.Server defaults (keepAliveTimeout: 5s, headersTimeout: 60s)
   // assume nothing sits in front of it. This app always runs behind a reverse

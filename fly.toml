@@ -1,0 +1,58 @@
+# fly.toml app configuration for remotesea-api (NestJS backend)
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+# App name below is a placeholder — `fly launch` will ask you to confirm or
+# rename it (Fly app names are globally unique). Update it here to match
+# whatever you actually choose, since flyctl reads this file's `app` value
+# on every subsequent `fly deploy`.
+
+app = 'remotesea-api'
+primary_region = 'sin' # Singapore — matches remotesea-web's fly.toml, keeps API/frontend co-located
+
+[build]
+  # No [build.args] here on purpose, unlike remotesea-web's fly.toml — this
+  # Dockerfile needs no build-time secrets or public config baked into the
+  # image. DATABASE_URL etc. are only read at container start (process.env),
+  # via `fly secrets set`, not at `docker build` time.
+
+[env]
+  NODE_ENV = 'production'
+  # Must match [http_service].internal_port below and the Dockerfile's
+  # EXPOSE — env.validation.ts defaults PORT to 4000 if unset, so this is
+  # belt-and-suspenders, not strictly required, but keeps the two files from
+  # silently drifting apart if either default ever changes.
+  PORT = '4000'
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  # Always-on, unlike remotesea-web's scale-to-zero: an idle API machine
+  # restarting on the next request pays Prisma's connection-retry backoff
+  # (up to 5 attempts, 2s apart — see prisma.service.ts) as added latency on
+  # whatever request woke it up. A static frontend has no such cold-start
+  # cost, which is why that app can safely scale to zero.
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = '15s'
+    timeout = '5s'
+    grace_period = '15s'
+    method = 'GET'
+    # /health/live is the plain liveness probe (no DB call) — see
+    # health.controller.ts. Deliberately not /health (which runs `SELECT 1`):
+    # a transient Supabase blip would otherwise make Fly kill and restart an
+    # otherwise-healthy machine instead of just leaving requests to fail
+    # until the DB recovers, which /health's own 503 already communicates to
+    # callers without a restart.
+    path = '/health/live'
+    protocol = 'http'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  # Matches the Dockerfile's own NODE_OPTIONS=--max-old-space-size=768
+  # comment ("~75% of the production container's 1GB memory limit") — that
+  # assumption breaks if this is set any lower.
+  memory = '1gb'
