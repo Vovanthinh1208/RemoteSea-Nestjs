@@ -91,8 +91,23 @@ async function bootstrap(): Promise<void> {
   // X-Forwarded-For once trust proxy is set to the right hop count.
   app.set("trust proxy", config.get("TRUST_PROXY_HOPS", { infer: true }));
 
+  // Array, not a single string — ADDITIONAL_CORS_ORIGINS (see its own
+  // comment in env.validation.ts) lets a second frontend deployment (a
+  // parallel host migration, a preview environment) call this API without
+  // becoming the OAuth/email/billing redirect target that FRONTEND_URL
+  // alone still is. Unset ADDITIONAL_CORS_ORIGINS = this array has exactly
+  // one entry, functionally identical to the previous single-origin config.
+  const additionalCorsOrigins = (
+    config.get("ADDITIONAL_CORS_ORIGINS", { infer: true }) ?? ""
+  )
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   app.enableCors({
-    origin: config.get("FRONTEND_URL", { infer: true }),
+    origin: [
+      config.get("FRONTEND_URL", { infer: true }),
+      ...additionalCorsOrigins,
+    ],
     credentials: true,
   });
   // Strict helmet defaults (CSP included) for every route. The only page that
