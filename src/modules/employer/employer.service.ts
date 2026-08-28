@@ -407,6 +407,21 @@ export class EmployerService {
     };
   }
 
+  // Backs the dashboard's "Recent applicants" panel — replaces what used to
+  // be one listJobApplications() call per job (fired client-side via
+  // useQueries) with the single company-wide query this delegates to. Same
+  // role gate as listJobs/listUpcomingInterviews (company-wide, no
+  // per-resource ownership guard needed since it's already scoped by the
+  // caller's own membership.employerId).
+  async getRecentApplications(userId: string) {
+    const membership = await this.requireRole(userId, APPLICATION_REVIEW_ROLES);
+    const applications =
+      await this.employerRepository.findRecentApplicationsForCompany(
+        membership.employerId,
+      );
+    return { applications };
+  }
+
   async updateApplication(
     application: ApplicationWithJobOwner,
     dto: UpdateApplicationDto,

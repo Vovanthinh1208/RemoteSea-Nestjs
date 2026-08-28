@@ -80,6 +80,7 @@ import {
   ApiGetEmployerProfile,
   ApiListEmployerJobs,
   ApiListJobApplications,
+  ApiListRecentApplications,
   ApiSubmitVerification,
   ApiUpdateApplication,
   ApiUpdateEmployerProfile,
@@ -181,6 +182,18 @@ export class EmployerController {
     query: ListJobApplicationsDto,
   ) {
     return this.employerService.listJobApplications(job.id, query);
+  }
+
+  // Static route, registered ahead of the dynamic ones below for the same
+  // reason as "applications/bulk" — company-wide (no
+  // ApplicationOwnershipGuard/ApplicationAccessGuard; there's no single
+  // :id resource here, same as "interviews/upcoming" above).
+  @ApiListRecentApplications()
+  @Get("applications/recent")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("EMPLOYER")
+  listRecentApplications(@CurrentUser() user: AuthenticatedUser) {
+    return this.employerService.getRecentApplications(user.id);
   }
 
   // Registered before "applications/:id" — Nest/Express match routes in

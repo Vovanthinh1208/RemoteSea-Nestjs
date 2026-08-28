@@ -318,6 +318,23 @@ export class ListJobApplicationsResponseDto {
   pagination!: PaginationDto;
 }
 
+// Same fields as JobApplicationListItemDto plus jobId/job — a response
+// spanning every job in the company (not scoped to one, unlike the type
+// above) can't let the caller infer which job an item belongs to from
+// request context alone.
+export class RecentApplicationListItemDto extends JobApplicationListItemDto {
+  @ApiProperty({ example: "cljob1a2b3c4d5e6f7g8h9i0" })
+  jobId!: string;
+
+  @ApiProperty({ example: { title: "Senior Frontend Engineer" } })
+  job!: { title: string };
+}
+
+export class ListRecentApplicationsResponseDto {
+  @ApiProperty({ type: [RecentApplicationListItemDto] })
+  applications!: RecentApplicationListItemDto[];
+}
+
 export class UpdateApplicationRequestDto {
   @ApiProperty({ enum: APPLICATION_STATUS_VALUES, example: "REVIEWING" })
   status!: (typeof APPLICATION_STATUS_VALUES)[number];

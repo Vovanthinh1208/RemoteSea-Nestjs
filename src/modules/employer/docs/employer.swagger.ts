@@ -30,6 +30,7 @@ import {
   EmployerProfileDto,
   ListEmployerJobsResponseDto,
   ListJobApplicationsResponseDto,
+  ListRecentApplicationsResponseDto,
   MessageResponseDto,
   PublicCompanyProfileDto,
   SubmitVerificationRequestDto,
@@ -193,6 +194,23 @@ export const ApiListJobApplications = () =>
     UnauthorizedApiResponse,
     NotOwningEmployerResponse,
     JobNotFoundResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiListRecentApplications = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "List the company's most recent applications, across jobs",
+      description:
+        "Company-wide activity feed for the dashboard's 'Recent applicants' panel — the most recent applications across every job in the caller's company, newest first, capped server-side (not paginated). Requires the EMPLOYER role; company membership and role (OWNER/RECRUITER/HIRING_MANAGER) are resolved from the caller's own membership, same as GET /employer/jobs.",
+    }),
+    ApiOkResponse({
+      description: "The company's most recent applications",
+      type: ListRecentApplicationsResponseDto,
+    }),
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
     InternalServerErrorApiResponse,
   );
 

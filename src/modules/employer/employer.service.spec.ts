@@ -737,3 +737,59 @@ describe("EmployerService.listUpcomingInterviews", () => {
     ).rejects.toThrow();
   });
 });
+
+// Backs the dashboard's "Recent applicants" panel — replaced N per-job
+// GET /employer/jobs/:id/applications calls with this one company-wide
+// query (see EmployerRepository.findRecentApplicationsForCompany).
+describe("EmployerService.getRecentApplications", () => {
+  it("resolves the caller's membership and delegates to the repository with the company id, wrapping the result", async () => {
+    const applications = [{ id: "app-1", jobId: "job-1" }];
+    const { service, repo } = makeService({
+      findRecentApplicationsForCompany: jest
+        .fn()
+        .mockResolvedValue(applications),
+    });
+
+    const result = await service.getRecentApplications("owner-1");
+
+    expect(repo.findRecentApplicationsForCompany).toHaveBeenCalledWith(
+      "owner-1-company",
+    );
+    expect(result).toEqual({ applications });
+  });
+
+  it("rejects a company role outside APPLICATION_REVIEW_ROLES (e.g. INTERVIEWER)", async () => {
+    const { service } = makeService(
+      {
+        findRecentApplicationsForCompany: jest.fn(),
+      },
+      {},
+      {
+        resolveMembership: jest.fn().mockResolvedValue({
+          employerId: "owner-1-company",
+          role: "INTERVIEWER",
+        }),
+      },
+    );
+
+    await expect(
+      service.getRecentApplications("interviewer-1"),
+    ).rejects.toThrow();
+  });
+
+  it("rejects a caller with no company membership", async () => {
+    const { service } = makeService(
+      {
+        findRecentApplicationsForCompany: jest.fn(),
+      },
+      {},
+      {
+        resolveMembership: jest.fn().mockResolvedValue(null),
+      },
+    );
+
+    await expect(
+      service.getRecentApplications("no-membership-user"),
+    ).rejects.toThrow();
+  });
+});

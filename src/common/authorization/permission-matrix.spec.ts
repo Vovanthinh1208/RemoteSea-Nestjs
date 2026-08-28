@@ -374,6 +374,13 @@ const expectations: ControllerExpectation[] = [
         roles: ["EMPLOYER"],
       },
       {
+        method: "listRecentApplications",
+        httpMethod: "GET",
+        path: "applications/recent",
+        guards: ["JwtAuthGuard", "RolesGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
         method: "listJobApplications",
         httpMethod: "GET",
         path: "jobs/:id/applications",

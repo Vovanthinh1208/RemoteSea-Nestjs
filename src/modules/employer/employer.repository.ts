@@ -15,6 +15,15 @@ import { notExpiredCondition } from "@/modules/jobs/job-search.util";
 
 const EMPLOYER_JOBS_LIST_CAP = 200;
 const COMPANY_PROFILE_JOBS_CAP = 50;
+// The dashboard's "Recent applicants" panel used to be assembled by the
+// frontend firing one GET /employer/jobs/:id/applications request per job
+// with any applicants (via useQueries) and merging the results client-side —
+// an employer with N active listings paid N full request/auth/DB round
+// trips just to render one panel. This single company-wide query replaces
+// all of them. Same order of magnitude as EMPLOYER_JOBS_LIST_CAP's
+// reasoning: a hard cap instead of pagination, since this is a fixed-size
+// "recent activity" view, not a paginated list a caller pages through.
+const RECENT_APPLICATIONS_LIST_CAP = 300;
 
 // GET /companies/:slug is unauthenticated — explicit select so every public
 // field is a decision, not an accident (same reasoning as talent's
@@ -538,6 +547,74 @@ export class EmployerRepository {
     }
 
     return { applications, total };
+  }
+
+  // Company-wide twin of findApplicationsForJob above — same select shape
+  // (kept in sync by hand; see that method's own field-by-field comments
+  // for why each one is there) plus jobId/job.title, since a response
+  // spanning many jobs can no longer let the caller infer which job an
+  // application belongs to from request context alone. No `status`/skip
+  // filter — this feeds one fixed "recent activity" view, not a paginated
+  // list, so it takes no query params at all.
+  async findRecentApplicationsForCompany(employerId: string) {
+    const applications = await this.prisma.application.findMany({
+      where: { job: { employerId } },
+      take: RECENT_APPLICATIONS_LIST_CAP,
+      orderBy: { appliedAt: "desc" },
+      select: {
+        id: true,
+        status: true,
+        appliedAt: true,
+        updatedAt: true,
+        coverLetter: true,
+        resumeUrl: true,
+        viewedAt: true,
+        jobId: true,
+        job: { select: { title: true } },
+        talent: {
+          select: {
+            id: true,
+            slug: true,
+            headline: true,
+            level: true,
+            user: { select: { name: true } },
+            skills: { include: { skill: true } },
+            yearsExperience: true,
+            desiredSalaryMin: true,
+            desiredSalaryMax: true,
+            currency: true,
+            timezone: true,
+            country: true,
+            employmentTypes: true,
+            timezoneOverlap: true,
+            rightToWork: true,
+            noticePeriod: true,
+            isOpenToWork: true,
+          },
+        },
+      },
+    });
+
+    // Same Application Transparency stamping as findApplicationsForJob —
+    // this view is just as much "the employer looked at it" as the
+    // per-job one was, and previously *was* implemented as N calls to
+    // that exact method, so preserving this side effect keeps behavior
+    // identical, not just the response shape.
+    const unviewedIds = applications
+      .filter((a) => a.viewedAt === null)
+      .map((a) => a.id);
+    if (unviewedIds.length > 0) {
+      const now = new Date();
+      await this.prisma.application.updateMany({
+        where: { id: { in: unviewedIds } },
+        data: { viewedAt: now },
+      });
+      for (const a of applications) {
+        if (unviewedIds.includes(a.id)) a.viewedAt = now;
+      }
+    }
+
+    return applications;
   }
 
   findApplicationWithJobOwner(id: string) {
