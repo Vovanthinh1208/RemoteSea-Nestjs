@@ -532,19 +532,7 @@ export class EmployerRepository {
     // IS-NULL-implied filter below makes repeat views a no-op. The
     // in-memory patch means this same response already reflects the
     // stamp instead of the caller needing a second fetch to see it.
-    const unviewedIds = applications
-      .filter((a) => a.viewedAt === null)
-      .map((a) => a.id);
-    if (unviewedIds.length > 0) {
-      const now = new Date();
-      await this.prisma.application.updateMany({
-        where: { id: { in: unviewedIds } },
-        data: { viewedAt: now },
-      });
-      for (const a of applications) {
-        if (unviewedIds.includes(a.id)) a.viewedAt = now;
-      }
-    }
+    await this.stampViewedApplications(applications);
 
     return { applications, total };
   }
@@ -600,21 +588,34 @@ export class EmployerRepository {
     // per-job one was, and previously *was* implemented as N calls to
     // that exact method, so preserving this side effect keeps behavior
     // identical, not just the response shape.
+    await this.stampViewedApplications(applications);
+
+    return applications;
+  }
+
+  // Shared by findApplicationsForJob and findRecentApplicationsForCompany,
+  // which previously each hand-wrote this exact stamp-then-patch-back logic
+  // independently. Set, not Array.includes, for the patch-back lookup —
+  // applications here is the same list unviewedIds was derived from, so an
+  // O(n) includes() scan per row would make the whole patch-back O(n^2) on
+  // a list that's already known to be a superset of unviewedIds.
+  private async stampViewedApplications<
+    T extends { id: string; viewedAt: Date | null },
+  >(applications: T[]): Promise<void> {
     const unviewedIds = applications
       .filter((a) => a.viewedAt === null)
       .map((a) => a.id);
-    if (unviewedIds.length > 0) {
-      const now = new Date();
-      await this.prisma.application.updateMany({
-        where: { id: { in: unviewedIds } },
-        data: { viewedAt: now },
-      });
-      for (const a of applications) {
-        if (unviewedIds.includes(a.id)) a.viewedAt = now;
-      }
-    }
+    if (unviewedIds.length === 0) return;
 
-    return applications;
+    const now = new Date();
+    await this.prisma.application.updateMany({
+      where: { id: { in: unviewedIds } },
+      data: { viewedAt: now },
+    });
+    const unviewedSet = new Set(unviewedIds);
+    for (const a of applications) {
+      if (unviewedSet.has(a.id)) a.viewedAt = now;
+    }
   }
 
   findApplicationWithJobOwner(id: string) {
