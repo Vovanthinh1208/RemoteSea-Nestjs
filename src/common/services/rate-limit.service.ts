@@ -4,6 +4,19 @@ import { TooManyRequestsApiException } from "@/common/exceptions/api.exception";
 
 type Bucket = { count: number; resetAt: number };
 
+const CLEANUP_SIZE_THRESHOLD = 10_000;
+// Throttles the sweep below to at most once per minute regardless of request
+// volume — without this, once the store passes CLEANUP_SIZE_THRESHOLD, *every*
+// request that lands on a fresh key re-triggers a full O(store.size) scan
+// until enough entries happen to expire to drop back under the threshold.
+// Under the exact load pattern this limiter exists to defend against (many
+// distinct keys arriving in a short window, each with a live, unexpired
+// bucket), that scan can re-run on every single request — the limiter
+// blocking the event loop on every request is worse than the thing it's
+// protecting against. A time-based throttle bounds the sweep's total cost
+// independently of how many requests arrive while the store is oversized.
+const CLEANUP_INTERVAL_MS = 60_000;
+
 export type RateLimitResult = {
   allowed: boolean;
   remaining: number;
@@ -29,6 +42,12 @@ declare global {
 @Injectable()
 export class RateLimitService {
   private readonly store = new Map<string, Bucket>();
+  // -Infinity, not 0 — this must always be "due" on the very first sweep
+  // regardless of what `now` happens to be (a real epoch ms value in
+  // production, but tests pass small synthetic values; `0` would wrongly
+  // throttle the first sweep whenever `now` isn't already >=
+  // CLEANUP_INTERVAL_MS).
+  private lastCleanupAt = -Infinity;
 
   check(
     key: string,
@@ -40,11 +59,7 @@ export class RateLimitService {
 
     if (!bucket || bucket.resetAt <= now) {
       this.store.set(key, { count: 1, resetAt: now + windowMs });
-      if (this.store.size > 10_000) {
-        this.store.forEach((b, k) => {
-          if (b.resetAt <= now) this.store.delete(k);
-        });
-      }
+      this.maybeCleanup(now);
       return { allowed: true, remaining: limit - 1, retryAfter: 0 };
     }
 
@@ -60,13 +75,19 @@ export class RateLimitService {
     return { allowed: true, remaining: limit - bucket.count, retryAfter: 0 };
   }
 
-  /**
-   * Throws TooManyRequestsApiException if the bucket for `key` is exhausted.
-   * When `request` is passed, stashes { limit, remaining } on it so
-   * RateLimitHeadersInterceptor can surface X-RateLimit-* on a successful
-   * response — previously the only signal a client ever got was Retry-After,
-   * and only once it was already blocked.
-   */
+  private maybeCleanup(now: number): void {
+    if (
+      this.store.size <= CLEANUP_SIZE_THRESHOLD ||
+      now - this.lastCleanupAt < CLEANUP_INTERVAL_MS
+    ) {
+      return;
+    }
+    this.lastCleanupAt = now;
+    this.store.forEach((bucket, key) => {
+      if (bucket.resetAt <= now) this.store.delete(key);
+    });
+  }
+
   enforce(
     key: string,
     limit: number,

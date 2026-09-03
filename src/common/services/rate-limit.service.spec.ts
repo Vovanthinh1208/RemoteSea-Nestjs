@@ -39,6 +39,64 @@ describe("RateLimitService.check", () => {
   });
 });
 
+// Reaches into the private `store` directly — there's no public way to
+// observe how many buckets are held, and that's exactly what this behavior
+// is about (the cleanup sweep shouldn't run more often than the throttle
+// allows, regardless of request volume).
+type StoreAccess = { store: Map<string, { count: number; resetAt: number }> };
+
+describe("RateLimitService cleanup", () => {
+  const CLEANUP_SIZE_THRESHOLD = 10_000;
+  const CLEANUP_INTERVAL_MS = 60_000;
+
+  it("does not sweep while the store is below the size threshold", () => {
+    const service = new RateLimitService();
+    const store = (service as unknown as StoreAccess).store;
+    const now = 1_000;
+    store.set("expired", { count: 1, resetAt: now - 1 });
+
+    service.check("fresh", 5, 60_000, now);
+
+    expect(store.has("expired")).toBe(true);
+  });
+
+  it("sweeps expired entries once the store exceeds the size threshold", () => {
+    const service = new RateLimitService();
+    const store = (service as unknown as StoreAccess).store;
+    const now = 1_000;
+    for (let i = 0; i < CLEANUP_SIZE_THRESHOLD; i += 1) {
+      store.set(`expired-${i}`, { count: 1, resetAt: now - 1 });
+    }
+    store.set("still-active", { count: 1, resetAt: now + 60_000 });
+
+    service.check("fresh", 5, 60_000, now);
+
+    expect(store.has("expired-0")).toBe(false);
+    expect(store.has("still-active")).toBe(true);
+  });
+
+  it("does not re-sweep again before the cleanup interval elapses", () => {
+    const service = new RateLimitService();
+    const store = (service as unknown as StoreAccess).store;
+    const now = 1_000;
+    for (let i = 0; i < CLEANUP_SIZE_THRESHOLD; i += 1) {
+      store.set(`expired-${i}`, { count: 1, resetAt: now - 1 });
+    }
+    service.check("fresh-1", 5, 60_000, now);
+    expect(store.has("expired-0")).toBe(false);
+
+    // A second batch of now-expired entries, added right after the first
+    // sweep — a naive per-request check would sweep these away too, but the
+    // throttle should skip it since CLEANUP_INTERVAL_MS hasn't elapsed yet.
+    for (let i = 0; i < CLEANUP_SIZE_THRESHOLD; i += 1) {
+      store.set(`expired-again-${i}`, { count: 1, resetAt: now - 1 });
+    }
+    service.check("fresh-2", 5, 60_000, now + CLEANUP_INTERVAL_MS - 1);
+
+    expect(store.has("expired-again-0")).toBe(true);
+  });
+});
+
 describe("RateLimitService.enforce", () => {
   it("does not throw while under the limit", () => {
     const service = new RateLimitService();
