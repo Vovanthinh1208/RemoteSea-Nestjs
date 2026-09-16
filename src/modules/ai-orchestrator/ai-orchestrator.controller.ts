@@ -2,9 +2,11 @@ import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { AiOrchestratorService } from "./ai-orchestrator.service";
 import { ChatRequestDto, chatRequestSchema } from "./dto/chat.dto";
+import { RATE_LIMITS } from "./constants";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
+import { RateLimitService } from "@/common/services/rate-limit.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 
 // Response shapes below are passed through untyped from remotesea-ai
@@ -17,7 +19,10 @@ import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.i
 @Controller("ai-orchestrator")
 @UseGuards(JwtAuthGuard)
 export class AiOrchestratorController {
-  constructor(private readonly aiOrchestratorService: AiOrchestratorService) {}
+  constructor(
+    private readonly aiOrchestratorService: AiOrchestratorService,
+    private readonly rateLimitService: RateLimitService,
+  ) {}
 
   // Phase 1 round-trip proof only — no RAG/tool-calling/LLM invocation
   // happens here. Any authenticated user (TALENT or EMPLOYER) can call this;
@@ -44,12 +49,19 @@ export class AiOrchestratorController {
   // conversation-ownership check — proxyToOrchestrator forwards the same
   // signed context token remotesea-ai already trusts, and remotesea-ai's
   // own ChatService is what enforces "this conversation belongs to this
-  // user" (see that repo's chat_service.py).
+  // user" (see that repo's chat_service.py). What this side IS responsible
+  // for: every call here is a real LLM completion at remotesea-ai, a direct
+  // cost this endpoint previously left completely uncapped.
   @Post("chat")
   async chat(
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(chatRequestSchema)) body: ChatRequestDto,
   ) {
+    this.rateLimitService.enforce(
+      `ai-chat:${user.id}`,
+      RATE_LIMITS.CHAT.limit,
+      RATE_LIMITS.CHAT.windowMs,
+    );
     return this.aiOrchestratorService.proxyToOrchestrator(
       user,
       "POST",

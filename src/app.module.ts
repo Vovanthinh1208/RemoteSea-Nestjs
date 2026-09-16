@@ -4,7 +4,9 @@ import { ConfigModule } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
 import { validateEnv } from "@/core/config/env.validation";
 import { PrismaModule } from "@/core/database/prisma.module";
+import { LoggingInterceptor } from "@/core/interceptors/logging.interceptor";
 import { SharedServicesModule } from "@/common/services/shared-services.module";
+import { MetricsModule } from "@/modules/metrics/metrics.module";
 import { AuthModule } from "@/modules/auth/auth.module";
 import { UsersModule } from "@/modules/users/users.module";
 import { TalentModule } from "@/modules/talent/talent.module";
@@ -39,6 +41,7 @@ import { AiOrchestratorModule } from "@/modules/ai-orchestrator/ai-orchestrator.
     CacheModule.register({ isGlobal: true }),
     PrismaModule,
     SharedServicesModule,
+    MetricsModule,
     NotificationsModule,
     AuthModule,
     UsersModule,
@@ -61,5 +64,9 @@ import { AiOrchestratorModule } from "@/modules/ai-orchestrator/ai-orchestrator.
     TeamModule,
     AiOrchestratorModule,
   ],
+  // LoggingInterceptor is resolved via app.get() in main.ts (not `new`), so
+  // its MetricsService dependency is DI-injected — it needs a provider
+  // registration somewhere in the graph to be resolvable that way.
+  providers: [LoggingInterceptor],
 })
 export class AppModule {}

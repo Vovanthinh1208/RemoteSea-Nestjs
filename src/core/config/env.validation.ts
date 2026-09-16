@@ -62,6 +62,12 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
   CRON_SECRET: z.string().optional(),
+  // Unset means no error tracking, not a boot failure — same convention as
+  // every other optional integration here. See main.ts's Sentry.init call.
+  SENTRY_DSN: z.string().optional(),
+  // Gates GET /metrics the same way CRON_SECRET gates the cron endpoints —
+  // unset means the route always 401s (fail closed), not "open to anyone".
+  METRICS_SECRET: z.string().optional(),
   S3_BUCKET: z.string().optional(),
   S3_REGION: z.string().optional(),
   S3_ACCESS_KEY_ID: z.string().optional(),

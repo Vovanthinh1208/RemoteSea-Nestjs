@@ -12,6 +12,7 @@ import {
   TooManyRequestsApiException,
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
+import { reportException } from "@/core/observability/sentry";
 
 // Falls back to INTERNAL_ERROR for any status this map doesn't cover — those
 // only ever reach here via a framework/library exception this app didn't
@@ -139,6 +140,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     this.logger.error(exception instanceof Error ? exception.stack : exception);
+    // The one place every truly unexpected error in this app converges —
+    // everything above this point is a recognized, already-classified
+    // condition (an ApiException this app threw itself, a known Prisma
+    // error code, ...). No-op when SENTRY_DSN isn't configured.
+    reportException(exception);
     response
       .status(500)
       .json({ error: "Internal server error", code: ErrorCode.INTERNAL_ERROR });

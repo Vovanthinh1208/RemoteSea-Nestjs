@@ -102,7 +102,9 @@ describe("JobPayerOwnershipGuard", () => {
     );
     const error = await guard.canActivate(context).catch((e: unknown) => e);
     expect(error).not.toBeInstanceOf(NotFoundApiException);
-    expect((error as { getResponse: () => unknown }).getResponse()).toMatchObject({
+    expect(
+      (error as { getResponse: () => unknown }).getResponse(),
+    ).toMatchObject({
       code: "COMPANY_SUSPENDED",
     });
   });

@@ -1117,6 +1117,14 @@ enum TeamInvitationStatus {
 // already has a full profile to look up by id); a team invite must work for
 // someone with no account yet, so it carries only an email + a bearer token,
 // resolved to a real User at accept time by matching emails.
+//
+// A partial unique index on (employerId, email) WHERE status = 'PENDING'
+// also exists in the database (see migration
+// 20260916120000_add_pending_invitation_unique_index) — not expressible in
+// this schema DSL (no WHERE clause on @@unique), same as the pg_trgm/
+// search-vector indexes elsewhere. Backs TeamService.inviteMember's P2002
+// handling: only one *live* invitation per (employer, email) at a time,
+// while ACCEPTED/REVOKED history for the same email can still accumulate.
 model TeamInvitation {
   id          String               @id @default(cuid())
   employerId  String

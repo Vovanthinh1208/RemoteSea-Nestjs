@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import * as crypto from "crypto";
 import { TeamRepository } from "./team.repository";
 import { INVITATION_TOKEN_TTL_MS } from "./constants";
@@ -102,14 +103,28 @@ export class TeamService {
 
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + INVITATION_TOKEN_TTL_MS);
-    const invitation = await this.teamRepository.createInvitation({
-      employerId: membership.employerId,
-      email: dto.email,
-      role: dto.role,
-      token,
-      invitedById: userId,
-      expiresAt,
-    });
+    let invitation: Awaited<ReturnType<TeamRepository["createInvitation"]>>;
+    try {
+      invitation = await this.teamRepository.createInvitation({
+        employerId: membership.employerId,
+        email: dto.email,
+        role: dto.role,
+        token,
+        invitedById: userId,
+        expiresAt,
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        throw new ConflictApiException(
+          "This email already has a pending invitation",
+          ErrorCode.TEAM_INVITATION_ALREADY_PENDING,
+        );
+      }
+      throw error;
+    }
 
     runInBackground(
       this.emailService.sendTeamInvitationEmail(

@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import type { Observable } from "rxjs";
+import { MetricsService } from "@/modules/metrics/metrics.service";
 
 /**
  * One JSON line per request, logged from the response's `finish` event rather
@@ -20,6 +21,8 @@ import type { Observable } from "rxjs";
 export class LoggingInterceptor implements NestInterceptor {
   private readonly logger = new Logger("HTTP");
 
+  constructor(private readonly metricsService: MetricsService) {}
+
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse<Response>();
@@ -27,15 +30,18 @@ export class LoggingInterceptor implements NestInterceptor {
 
     response.on("finish", () => {
       const status = response.statusCode;
+      // req.route.path is the matched route pattern ("/jobs/:id"), not the
+      // raw URL — logging raw URLs would blow up log cardinality with one
+      // series per job id instead of one per route. Same value feeds both
+      // the access log line below and the /metrics counters/histogram.
+      const route = request.route?.path ?? request.path;
+      const durationMs = Date.now() - start;
       const line = JSON.stringify({
         requestId: request.id,
         method: request.method,
-        // req.route.path is the matched route pattern ("/jobs/:id"), not the
-        // raw URL — logging raw URLs would blow up log cardinality with one
-        // series per job id instead of one per route.
-        route: request.route?.path ?? request.path,
+        route,
         status,
-        durationMs: Date.now() - start,
+        durationMs,
       });
 
       // Every request logged at the same level regardless of outcome meant a
@@ -44,6 +50,13 @@ export class LoggingInterceptor implements NestInterceptor {
       if (status >= 500) this.logger.error(line);
       else if (status >= 400) this.logger.warn(line);
       else this.logger.log(line);
+
+      this.metricsService.recordRequest(
+        request.method,
+        route,
+        status,
+        durationMs / 1000,
+      );
     });
 
     return next.handle();

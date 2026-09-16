@@ -15,6 +15,11 @@ import { LoggingInterceptor } from "@/core/interceptors/logging.interceptor";
 import { RateLimitHeadersInterceptor } from "@/core/interceptors/rate-limit-headers.interceptor";
 import { requestIdMiddleware } from "@/core/middleware/request-id.middleware";
 import { AppLogger } from "@/core/logging/app-logger";
+import {
+  flushSentry,
+  initSentry,
+  reportException,
+} from "@/core/observability/sentry";
 import type { EnvConfig } from "@/core/config/env.validation";
 
 // Node 15+ already terminates the process on an unhandled rejection by
@@ -25,19 +30,37 @@ import type { EnvConfig } from "@/core/config/env.validation";
 // Without this, a bug that produces a genuinely unhandled rejection anywhere
 // in the app leaves no structured trace of what actually happened.
 const bootstrapLogger = new Logger("Process");
+// A bare process.exit(1) right after reportException would very likely kill
+// the process before Sentry's async network send actually goes out —
+// flushSentry bounds that wait instead of skipping it.
+async function flushSentryThenExit(exception: unknown): Promise<never> {
+  reportException(exception);
+  await flushSentry(2_000);
+  process.exit(1);
+}
+
 process.on("unhandledRejection", (reason) => {
   bootstrapLogger.error(
     "Unhandled promise rejection — exiting",
     reason instanceof Error ? reason.stack : reason,
   );
-  process.exit(1);
+  void flushSentryThenExit(reason);
 });
 process.on("uncaughtException", (error) => {
   bootstrapLogger.error("Uncaught exception — exiting", error.stack);
-  process.exit(1);
+  void flushSentryThenExit(error);
 });
 
 async function bootstrap(): Promise<void> {
+  // Read directly off process.env, not ConfigService — this needs to run
+  // before NestFactory.create() even starts, so a crash during bootstrap
+  // itself (before ConfigModule.forRoot() has parsed .env) is still
+  // reported. Same env-var-availability caveat as AuthModule's own
+  // process.env reads: correct in a real deployment (env vars are already
+  // exported before the process starts), not when running locally off a
+  // bare .env file with nothing exporting it into the shell first.
+  initSentry(process.env.SENTRY_DSN);
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   // Shared by every `new Logger(X.name)` call site app-wide (Nest's Logger
   // class delegates to whatever instance is registered here) — see
@@ -153,7 +176,10 @@ async function bootstrap(): Promise<void> {
   app.use(compression());
   app.useGlobalFilters(new GlobalExceptionFilter());
   app.useGlobalInterceptors(
-    new LoggingInterceptor(),
+    // Resolved through Nest's DI (not `new`, unlike RateLimitHeadersInterceptor
+    // below) so its MetricsService dependency is the same singleton instance
+    // MetricsController reads from.
+    app.get(LoggingInterceptor),
     new RateLimitHeadersInterceptor(),
   );
 

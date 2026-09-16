@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { TeamService } from "./team.service";
 import {
   BadRequestApiException,
@@ -222,6 +223,32 @@ describe("TeamService — invitation flow", () => {
 
     const error = await service
       .inviteMember("owner-1", { email: "dup@acme.com", role: "RECRUITER" })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ConflictApiException);
+    expect((error as ConflictApiException).getResponse()).toMatchObject({
+      code: ErrorCode.TEAM_INVITATION_ALREADY_PENDING,
+    });
+  });
+
+  it("maps a P2002 race on the partial unique (employerId, email, PENDING) index to TEAM_INVITATION_ALREADY_PENDING, not a generic conflict", async () => {
+    // The findPendingInvitationByEmail check above is only a fast path — a
+    // concurrent duplicate invite (double-click, retried request) can still
+    // race past it and hit the DB's partial unique index.
+    const { service } = makeService(
+      {
+        createInvitation: jest.fn().mockRejectedValue(
+          new Prisma.PrismaClientKnownRequestError("duplicate", {
+            code: "P2002",
+            clientVersion: "5.22.0",
+          }),
+        ),
+      },
+      jest.fn().mockResolvedValue(OWNER_MEMBERSHIP),
+    );
+
+    const error = await service
+      .inviteMember("owner-1", { email: "race@acme.com", role: "RECRUITER" })
       .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(ConflictApiException);
