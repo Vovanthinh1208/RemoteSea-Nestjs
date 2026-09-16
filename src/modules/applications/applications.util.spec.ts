@@ -14,6 +14,8 @@ describe("buildApplicationStatusCounts", () => {
       SHORTLISTED: 0,
       INTERVIEW: 0,
       OFFERED: 0,
+      OFFER_ACCEPTED: 0,
+      OFFER_DECLINED: 0,
       REJECTED: 0,
       WITHDRAWN: 0,
     });

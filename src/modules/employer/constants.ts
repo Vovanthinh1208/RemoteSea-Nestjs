@@ -20,6 +20,13 @@ export const BULK_UPDATE_MAX_ITEMS = 50;
 // company inbox is checked less reflexively than a personal one.
 export const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
+// OFFER_ACCEPTED/OFFER_DECLINED never appear as a target anywhere in this
+// table — they're the talent's own response to an offer (see
+// ApplicationsService.respondToOffer), set through a dedicated talent-only
+// endpoint, not something an employer PATCH can set directly. Since
+// EmployerService.updateApplication checks its requested `status` against
+// this table regardless of which status is requested, an employer request
+// for either one always falls through to INVALID_STATUS_TRANSITION.
 export const ALLOWED_TRANSITIONS: Record<
   ApplicationStatus,
   ApplicationStatus[]
@@ -29,6 +36,8 @@ export const ALLOWED_TRANSITIONS: Record<
   SHORTLISTED: ["INTERVIEW", "REJECTED"],
   INTERVIEW: ["OFFERED", "REJECTED"],
   OFFERED: ["REJECTED"],
+  OFFER_ACCEPTED: [],
+  OFFER_DECLINED: [],
   REJECTED: [],
   WITHDRAWN: [],
 };
@@ -43,6 +52,8 @@ export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
   SHORTLISTED: "Shortlisted",
   INTERVIEW: "Interview",
   OFFERED: "Offer extended",
+  OFFER_ACCEPTED: "Offer accepted",
+  OFFER_DECLINED: "Offer declined",
   REJECTED: "Rejected",
   WITHDRAWN: "Withdrawn",
 };

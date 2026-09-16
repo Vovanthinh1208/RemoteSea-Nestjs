@@ -3,6 +3,7 @@ import type { CompanyMemberRole } from "@prisma/client";
 import { InterviewsRepository } from "./interviews.repository";
 import type {
   ApplicationParties,
+  InterviewRecord,
   InterviewWithHeader,
   UpcomingInterviewsResult,
 } from "./interfaces";
@@ -210,5 +211,34 @@ export class InterviewsService {
     );
 
     return updated;
+  }
+
+  // Employer-only (see EmployerController's ApplicationOwnershipGuard on the
+  // route that calls this) — cancels a PENDING or CONFIRMED interview.
+  // Terminal at the data layer, but the employer can always schedule a fresh
+  // one afterward: propose()'s upsertPending resets a CANCELLED row back to
+  // PENDING rather than treating the applicationId as permanently spent.
+  async cancel(parties: ApplicationParties): Promise<InterviewRecord> {
+    const cancelled = await this.interviewsRepository.cancel(parties.id);
+    if (!cancelled) {
+      throw new NotFoundApiException(
+        "No interview to cancel, or it's already cancelled",
+        ErrorCode.INTERVIEW_NOT_FOUND,
+      );
+    }
+
+    runInBackground(
+      this.notificationsService.create({
+        userId: parties.talent.userId,
+        type: "INTERVIEW_CANCELLED",
+        title: "Interview cancelled",
+        body: `${parties.job.employer.companyName} cancelled the interview for ${parties.job.title}.`,
+        link: `/applications/${parties.id}/interview`,
+      }),
+      this.logger,
+      `Failed to create interview-cancelled notification for application ${parties.id}`,
+    );
+
+    return cancelled;
   }
 }

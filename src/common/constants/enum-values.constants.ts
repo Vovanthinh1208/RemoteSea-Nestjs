@@ -17,6 +17,7 @@ export const JOB_STATUS_VALUES = [
   "ACTIVE",
   "CLOSED",
   "REJECTED",
+  "EXPIRED",
 ] as const;
 export const APPLICATION_STATUS_VALUES = [
   "PENDING",
@@ -24,6 +25,8 @@ export const APPLICATION_STATUS_VALUES = [
   "SHORTLISTED",
   "INTERVIEW",
   "OFFERED",
+  "OFFER_ACCEPTED",
+  "OFFER_DECLINED",
   "REJECTED",
   "WITHDRAWN",
 ] as const;

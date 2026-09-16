@@ -20,6 +20,7 @@ import { updateJobSchema, type UpdateJobDto } from "./dto/update-job.dto";
 import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
+import { CronSecretGuard } from "@/modules/alerts/guards/cron-secret.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import { CurrentResource } from "@/common/authorization/current-resource.decorator";
 import {
@@ -33,6 +34,7 @@ import {
 } from "./guards/job-ownership.guard";
 import {
   ApiCreateJob,
+  ApiDispatchExpireJobs,
   ApiGetJobById,
   ApiJobsTag,
   ApiListJobs,
@@ -87,6 +89,16 @@ export class JobsController {
       req,
     );
     return this.jobsService.create(user.id, body);
+  }
+
+  // Registered before ":id" — a dynamic segment there would otherwise
+  // swallow this literal "cron/expire" path (same ordering rule as
+  // ApplicationsController's "stats"/"ids" routes above its own :id).
+  @ApiDispatchExpireJobs()
+  @Get("cron/expire")
+  @UseGuards(CronSecretGuard)
+  expireStaleJobs() {
+    return this.jobsService.expireStaleJobs();
   }
 
   @ApiGetJobById()

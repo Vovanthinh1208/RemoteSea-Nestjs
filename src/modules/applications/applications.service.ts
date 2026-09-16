@@ -9,6 +9,7 @@ import {
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { EmailService } from "@/common/services/email.service";
+import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { isOwnedUploadUrl } from "@/modules/uploads/upload-url.util";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 import { runInBackground } from "@/common/utils/background-task.util";
@@ -17,6 +18,7 @@ import type { Pagination } from "@/common/interfaces/pagination.interface";
 import type { EnvConfig } from "@/core/config/env.validation";
 import { ApplicationsRepository } from "./applications.repository";
 import type { ApplyDto } from "./dto/apply.dto";
+import type { OfferResponseDto } from "./dto/offer-response.dto";
 import type { ApplicationWithJob, OwnApplication } from "./interfaces";
 import type { JobWithEmployerEmail } from "@/common/types/job-with-employer-email.type";
 import {
@@ -24,7 +26,7 @@ import {
   groupBackloggedByEmployer,
   type ApplicationStatusCounts,
 } from "./applications.util";
-import { SEND_CONCURRENCY } from "./constants";
+import { SEND_CONCURRENCY, WITHDRAWABLE_STATUSES } from "./constants";
 
 export type BacklogDispatchResult = { processed: number; sent: number };
 
@@ -40,6 +42,7 @@ export class ApplicationsService {
   constructor(
     private readonly applicationsRepository: ApplicationsRepository,
     private readonly emailService: EmailService,
+    private readonly notificationsService: NotificationsService,
     private readonly config: ConfigService<EnvConfig, true>,
   ) {}
 
@@ -240,5 +243,142 @@ export class ApplicationsService {
     } finally {
       this.dispatchInProgress = false;
     }
+  }
+
+  // Talent self-withdraw — the talent's own equivalent of the employer's
+  // updateApplication, but with a fixed target status (WITHDRAWN) and its
+  // own eligibility rule (WITHDRAWABLE_STATUSES) instead of the employer's
+  // ALLOWED_TRANSITIONS table.
+  async withdraw(userId: string, applicationId: string): Promise<OwnApplication> {
+    const talent =
+      await this.applicationsRepository.findTalentIdByUserId(userId);
+    if (!talent) {
+      throw new NotFoundApiException(
+        "Application not found",
+        ErrorCode.APPLICATION_NOT_FOUND,
+      );
+    }
+
+    const application = await this.applicationsRepository.findByIdForTalent(
+      applicationId,
+      talent.id,
+    );
+    assertFound(
+      application,
+      "Application not found",
+      ErrorCode.APPLICATION_NOT_FOUND,
+    );
+
+    if (!WITHDRAWABLE_STATUSES.includes(application.status)) {
+      throw new BadRequestApiException(
+        `Cannot withdraw an application that is already ${application.status}`,
+        ErrorCode.INVALID_STATUS_TRANSITION,
+      );
+    }
+
+    const updated = await this.applicationsRepository.withdraw(
+      applicationId,
+      talent.id,
+    );
+    if (!updated) {
+      throw new ConflictApiException(
+        "Application was updated concurrently — please refresh and try again",
+        ErrorCode.APPLICATION_UPDATE_CONFLICT,
+      );
+    }
+
+    const parties =
+      await this.applicationsRepository.findPartiesById(applicationId);
+    if (parties) {
+      runInBackground(
+        this.notificationsService.create({
+          userId: parties.job.employer.userId,
+          type: "APPLICATION_WITHDRAWN",
+          title: "An applicant withdrew their application",
+          body: `${parties.talent.user.name ?? "A candidate"} withdrew their application for ${parties.job.title}.`,
+          link: `/employer-dashboard/applications/${applicationId}`,
+        }),
+        this.logger,
+        `Failed to create withdrawal notification for application ${applicationId}`,
+      );
+    }
+
+    return updated;
+  }
+
+  // The talent's response to an extended offer. Only reachable from OFFERED
+  // (enforced atomically by the repository's CAS, not just this upfront
+  // check) — a second response attempt, or one against an application that
+  // moved on in the meantime, surfaces as a conflict rather than silently
+  // overwriting whatever the current state actually is.
+  async respondToOffer(
+    userId: string,
+    applicationId: string,
+    dto: OfferResponseDto,
+  ): Promise<OwnApplication> {
+    const talent =
+      await this.applicationsRepository.findTalentIdByUserId(userId);
+    if (!talent) {
+      throw new NotFoundApiException(
+        "Application not found",
+        ErrorCode.APPLICATION_NOT_FOUND,
+      );
+    }
+
+    const application = await this.applicationsRepository.findByIdForTalent(
+      applicationId,
+      talent.id,
+    );
+    assertFound(
+      application,
+      "Application not found",
+      ErrorCode.APPLICATION_NOT_FOUND,
+    );
+
+    if (application.status !== "OFFERED") {
+      throw new BadRequestApiException(
+        `Cannot respond to an offer on an application that is ${application.status}`,
+        ErrorCode.INVALID_STATUS_TRANSITION,
+      );
+    }
+
+    const status =
+      dto.response === "ACCEPTED" ? "OFFER_ACCEPTED" : "OFFER_DECLINED";
+    const updated = await this.applicationsRepository.respondToOffer(
+      applicationId,
+      talent.id,
+      status,
+    );
+    if (!updated) {
+      throw new ConflictApiException(
+        "Application was updated concurrently — please refresh and try again",
+        ErrorCode.APPLICATION_UPDATE_CONFLICT,
+      );
+    }
+
+    const parties =
+      await this.applicationsRepository.findPartiesById(applicationId);
+    if (parties) {
+      const talentName = parties.talent.user.name ?? "The candidate";
+      runInBackground(
+        this.notificationsService.create({
+          userId: parties.job.employer.userId,
+          type: status,
+          title:
+            status === "OFFER_ACCEPTED"
+              ? "Offer accepted!"
+              : "Offer declined",
+          body:
+            status === "OFFER_ACCEPTED"
+              ? `${talentName} accepted your offer for ${parties.job.title}.`
+              : `${talentName} declined your offer for ${parties.job.title}.`,
+          link: `/employer-dashboard/applications/${applicationId}`,
+        }),
+        this.logger,
+        `Failed to create offer-response notification for application ${applicationId}`,
+      );
+    }
+
+    return updated;
   }
 }

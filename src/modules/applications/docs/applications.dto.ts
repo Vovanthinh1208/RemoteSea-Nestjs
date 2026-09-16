@@ -71,6 +71,8 @@ class ApplicationStatusEventDto {
     | "SHORTLISTED"
     | "INTERVIEW"
     | "OFFERED"
+    | "OFFER_ACCEPTED"
+    | "OFFER_DECLINED"
     | "REJECTED"
     | "WITHDRAWN";
 
@@ -147,6 +149,8 @@ export class ApplicationResponseDto {
     | "SHORTLISTED"
     | "INTERVIEW"
     | "OFFERED"
+    | "OFFER_ACCEPTED"
+    | "OFFER_DECLINED"
     | "REJECTED"
     | "WITHDRAWN";
 

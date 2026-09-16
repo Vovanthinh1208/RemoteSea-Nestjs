@@ -3,6 +3,7 @@ import { ApplicationsService } from "./applications.service";
 import type { ApplicationsRepository } from "./applications.repository";
 import type { ApplicationWithJob, BackloggedApplication } from "./interfaces";
 import type { EmailService } from "@/common/services/email.service";
+import type { NotificationsService } from "@/modules/notifications/notifications.service";
 import { ConflictApiException } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 
@@ -12,7 +13,8 @@ const makeService = (
 ) => {
   const repo = { ...repoOverrides } as unknown as ApplicationsRepository;
   const email = { ...emailOverrides } as unknown as EmailService;
-  return new ApplicationsService(repo, email, {} as never);
+  const notifications = { create: jest.fn() } as unknown as NotificationsService;
+  return new ApplicationsService(repo, email, notifications, {} as never);
 };
 
 describe("ApplicationsService.findAllForUser", () => {

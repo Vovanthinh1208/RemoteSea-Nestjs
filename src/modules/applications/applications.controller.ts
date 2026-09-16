@@ -5,12 +5,17 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
 } from "@nestjs/common";
 import { ApplicationsService } from "./applications.service";
 import { applySchema, type ApplyDto } from "./dto/apply.dto";
+import {
+  offerResponseSchema,
+  type OfferResponseDto,
+} from "./dto/offer-response.dto";
 import {
   listApplicationsSchema,
   type ListApplicationsDto,
@@ -28,6 +33,8 @@ import {
   ApiDispatchBacklogReminders,
   ApiGetApplication,
   ApiListApplications,
+  ApiRespondToOffer,
+  ApiWithdrawApplication,
 } from "./docs/applications.swagger";
 
 @ApiApplicationsTag()
@@ -102,5 +109,35 @@ export class ApplicationsController {
   @UseGuards(JwtAuthGuard)
   getById(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
     return this.applicationsService.getOwnApplication(user.id, id);
+  }
+
+  // PATCH, not GET, so no ordering concern relative to "stats"/"ids" above —
+  // those only collide with another GET on the same literal segment.
+  @ApiWithdrawApplication()
+  @Patch(":id/withdraw")
+  @UseGuards(JwtAuthGuard)
+  withdraw(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    this.rateLimitService.enforce(
+      `withdraw-application:${user.id}`,
+      RATE_LIMITS.WITHDRAW.limit,
+      RATE_LIMITS.WITHDRAW.windowMs,
+    );
+    return this.applicationsService.withdraw(user.id, id);
+  }
+
+  @ApiRespondToOffer()
+  @Patch(":id/offer-response")
+  @UseGuards(JwtAuthGuard)
+  respondToOffer(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(offerResponseSchema)) body: OfferResponseDto,
+  ) {
+    this.rateLimitService.enforce(
+      `offer-response:${user.id}`,
+      RATE_LIMITS.OFFER_RESPONSE.limit,
+      RATE_LIMITS.OFFER_RESPONSE.windowMs,
+    );
+    return this.applicationsService.respondToOffer(user.id, id, body);
   }
 }

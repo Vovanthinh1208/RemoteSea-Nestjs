@@ -39,6 +39,12 @@ enum ApplicationStatus {
   SHORTLISTED
   INTERVIEW
   OFFERED
+  // The talent's response to an extended offer — set via the talent-only
+  // offer-response endpoint (never reachable through the employer's own
+  // ALLOWED_TRANSITIONS table, see employer/constants.ts), not a status an
+  // employer can set directly.
+  OFFER_ACCEPTED
+  OFFER_DECLINED
   REJECTED
   WITHDRAWN
 }
@@ -76,6 +82,13 @@ enum JobStatus {
   ACTIVE
   CLOSED
   REJECTED
+  // Set by the expire-jobs cron (JobsRepository.expireStaleJobs) once
+  // expiresAt has passed — previously an ACTIVE job past its expiry stayed
+  // ACTIVE forever in the database, with expiry enforced only by
+  // notExpiredCondition() at query time. A distinct value (not reusing
+  // CLOSED) so an employer/admin can still tell "expired on its own" apart
+  // from "closed by the owner."
+  EXPIRED
 }
 
 enum PlanType {
@@ -147,9 +160,14 @@ model User {
 }
 
 // Settings > Notifications toggles. One row per user, created on first read
-// (see NotificationsRepository.upsertRow) rather than at signup — nothing
-// currently sends notifications gated by these, so they're a persisted
-// preference with no reader yet, same caveat as the Account fields above.
+// (see NotificationsRepository.upsertRow) rather than at signup.
+// applicationUpdates/employerMessages/weeklyDigest/instantMatchAlerts each
+// gate a real send path (EmployerService.updateApplication,
+// InvitationsService, AlertsService.dispatchOne — see each one's own
+// comment). productNews/tipsAndResources have no corresponding send path
+// yet (no newsletter/digest cron exists for them) and browserPush has no
+// push-subscription infrastructure at all — those three are persisted
+// preferences with no reader yet, same caveat as the Account fields above.
 model NotificationPreference {
   id                 String   @id @default(cuid())
   userId             String   @unique
@@ -174,6 +192,10 @@ enum NotificationType {
   MESSAGE_RECEIVED
   INTERVIEW_PROPOSED
   INTERVIEW_CONFIRMED
+  APPLICATION_WITHDRAWN
+  OFFER_ACCEPTED
+  OFFER_DECLINED
+  INTERVIEW_CANCELLED
 }
 
 // In-app notification feed (bell + /notifications page). Content is baked in
@@ -697,13 +719,16 @@ model Message {
 enum InterviewStatus {
   PENDING
   CONFIRMED
+  CANCELLED
 }
 
 // 1:1 with Application (applicationId unique) — v1 supports exactly one
-// active interview per application, no history of past proposals and no
-// CANCELLED state (confirmed with the user: v1 has no cancel/decline path —
-// the employer may revise proposedSlots freely while still PENDING, but the
-// row is locked once CONFIRMED).
+// active interview per application, no history of past proposals. The
+// employer may revise proposedSlots freely while still PENDING; once
+// CONFIRMED, the only further transition is employer-initiated cancellation
+// (InterviewsService.cancel) — CANCELLED is terminal, same as
+// ApplicationStatus.WITHDRAWN, and a cancelled interview can be re-proposed
+// via a fresh upsertPending call, which starts the row back at PENDING.
 model Interview {
   id              String          @id @default(cuid())
   applicationId   String          @unique

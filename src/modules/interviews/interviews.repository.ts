@@ -39,12 +39,19 @@ export class InterviewsRepository {
   // concurrent other-party race the way confirmSlot below has), so a plain
   // upsert is enough; InterviewsService checks the "not already CONFIRMED"
   // precondition before calling this.
+  // status: "PENDING" is explicit here (not left to the schema's @default)
+  // so re-proposing after a CANCELLED interview resets it back to PENDING —
+  // InterviewsService.propose only ever calls this when existing is
+  // undefined, PENDING, or CANCELLED (CONFIRMED is rejected before this
+  // runs), so unconditionally setting it is correct in every case this
+  // reaches.
   upsertPending(input: UpsertInterviewInput): Promise<InterviewRecord> {
     const data = {
       durationMinutes: input.durationMinutes,
       proposedSlots: input.proposedSlots,
       meetingUrl: input.meetingUrl,
       interviewerId: input.interviewerId,
+      status: "PENDING" as const,
     };
     return this.prisma.interview.upsert({
       where: { applicationId: input.applicationId },
@@ -52,6 +59,18 @@ export class InterviewsRepository {
       update: data,
       select: interviewSelect,
     });
+  }
+
+  // CAS: only cancels while PENDING or CONFIRMED — a nonexistent interview or
+  // one that's already CANCELLED both match zero rows and return null, same
+  // no-op-on-race shape as confirmSlot above.
+  async cancel(applicationId: string): Promise<InterviewRecord | null> {
+    const { count } = await this.prisma.interview.updateMany({
+      where: { applicationId, status: { in: ["PENDING", "CONFIRMED"] } },
+      data: { status: "CANCELLED" },
+    });
+    if (count === 0) return null;
+    return this.findByApplicationId(applicationId);
   }
 
   // CAS: only succeeds while still PENDING — returns null if it's already

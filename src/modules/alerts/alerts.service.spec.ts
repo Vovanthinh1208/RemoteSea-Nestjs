@@ -131,16 +131,18 @@ describe("AlertsService.dispatchCron — weeklyDigest gating", () => {
     expect(result).toEqual({ processed: 1, sent: 1 });
   });
 
-  it("never consults weeklyDigest for a non-WEEKLY alert", async () => {
+  it("consults instantMatchAlerts (not weeklyDigest) for a non-WEEKLY alert", async () => {
     const findActiveAlerts = jest
       .fn()
       .mockResolvedValue([{ ...weeklyAlert, frequency: "IMMEDIATE" }]);
     const weeklyDigestEnabled = jest.fn();
+    const instantMatchAlertsEnabled = jest.fn().mockResolvedValue(true);
     const findMatchingJobs = jest.fn().mockResolvedValue([]);
     const service = new AlertsService(
       {
         findActiveAlerts,
         weeklyDigestEnabled,
+        instantMatchAlertsEnabled,
         findMatchingJobs,
       } as unknown as AlertsRepository,
       {} as EmailService,
@@ -149,5 +151,31 @@ describe("AlertsService.dispatchCron — weeklyDigest gating", () => {
     await service.dispatchCron();
 
     expect(weeklyDigestEnabled).not.toHaveBeenCalled();
+    expect(instantMatchAlertsEnabled).toHaveBeenCalledWith("user-1");
+  });
+
+  it("skips an IMMEDIATE/DAILY alert when instantMatchAlerts is disabled, without matching jobs or claiming it", async () => {
+    const findActiveAlerts = jest
+      .fn()
+      .mockResolvedValue([{ ...weeklyAlert, frequency: "DAILY" }]);
+    const instantMatchAlertsEnabled = jest.fn().mockResolvedValue(false);
+    const findMatchingJobs = jest.fn();
+    const claimForSend = jest.fn();
+    const service = new AlertsService(
+      {
+        findActiveAlerts,
+        instantMatchAlertsEnabled,
+        findMatchingJobs,
+        claimForSend,
+      } as unknown as AlertsRepository,
+      {} as EmailService,
+    );
+
+    const result = await service.dispatchCron();
+
+    expect(instantMatchAlertsEnabled).toHaveBeenCalledWith("user-1");
+    expect(findMatchingJobs).not.toHaveBeenCalled();
+    expect(claimForSend).not.toHaveBeenCalled();
+    expect(result).toEqual({ processed: 1, sent: 0 });
   });
 });

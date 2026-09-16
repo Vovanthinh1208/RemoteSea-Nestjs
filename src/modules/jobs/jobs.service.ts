@@ -247,4 +247,17 @@ export class JobsService {
   rejectForReview(id: string, note: string | null) {
     return this.jobsRepository.rejectJob(id, note);
   }
+
+  // Cron-triggered (GET /jobs/cron/expire, CronSecretGuard — see
+  // ApplicationsService.dispatchBacklogReminders for the same external-
+  // scheduler shape). Previously an ACTIVE job past its expiresAt stayed
+  // ACTIVE in the database forever, with expiry enforced only by
+  // notExpiredCondition() at query time on the public listing/detail
+  // routes — every other reader of Job.status (the employer dashboard,
+  // admin, match alerts) had no way to tell a live listing from a lapsed
+  // one without re-deriving that same date comparison itself.
+  async expireStaleJobs(): Promise<{ expired: number }> {
+    const expired = await this.jobsRepository.expireStaleJobs();
+    return { expired };
+  }
 }

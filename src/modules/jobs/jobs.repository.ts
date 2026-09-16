@@ -232,4 +232,21 @@ export class JobsRepository {
       select: { status: true, publishedAt: true },
     });
   }
+
+  // Plain updateMany (no CAS re-read needed) — every row this WHERE matches
+  // is, by definition, still ACTIVE and past its expiry, so there's no
+  // "expected previous state" to race against the way approveJob/rejectJob
+  // guard a single specific row does. A row that a concurrent request moves
+  // out of ACTIVE (e.g. the owner closing it) between this query planning
+  // and executing simply no longer matches — Postgres's own MVCC snapshot
+  // for the UPDATE statement handles that, no application-level check
+  // needed on top.
+  expireStaleJobs(): Promise<number> {
+    return this.prisma.job
+      .updateMany({
+        where: { status: "ACTIVE", expiresAt: { lt: new Date() } },
+        data: { status: "EXPIRED" },
+      })
+      .then(({ count }) => count);
+  }
 }

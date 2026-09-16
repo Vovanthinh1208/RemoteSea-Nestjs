@@ -144,3 +144,26 @@ export const ApiConfirmInterview = () =>
     rateLimitResponse("20/min"),
     InternalServerErrorApiResponse,
   );
+
+export const ApiCancelInterview = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Cancel a scheduled interview (employer only)",
+      description:
+        "Cancels a PENDING or CONFIRMED interview and notifies the talent via the Notification Center. Terminal for this row, but the employer can propose a fresh set of times afterward — that resets it back to PENDING rather than leaving the application permanently unable to schedule.",
+    }),
+    ApiParam({ name: "id", description: "Application id" }),
+    ApiOkResponse({
+      description: "Interview cancelled",
+      type: InterviewResponseDto,
+      schema: { example: { ...InterviewExample, status: "CANCELLED" } },
+    }),
+    InterviewNotFoundResponse,
+    ApplicationNotFoundResponse,
+    ApplicationAccessDeniedResponse,
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
+    rateLimitResponse("20/min"),
+    InternalServerErrorApiResponse,
+  );

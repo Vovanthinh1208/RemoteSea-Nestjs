@@ -29,7 +29,9 @@ import {
 import {
   AlreadyAppliedResponse,
   ApplicationNotFoundResponse,
+  ApplicationUpdateConflictResponse,
   CronUnauthorizedResponse,
+  InvalidStatusTransitionResponse,
   TalentProfileRequiredResponse,
   ValidationErrorResponse,
 } from "./applications.responses";
@@ -96,6 +98,59 @@ export const ApiGetApplication = () =>
     }),
     UnauthorizedApiResponse,
     ApplicationNotFoundResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiWithdrawApplication = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Withdraw my own application",
+      description:
+        "Talent-initiated withdrawal — only allowed while the application is PENDING, REVIEWING, SHORTLISTED, or INTERVIEW. An extended offer (OFFERED) is handled by PATCH .../offer-response instead. Notifies the employer via the Notification Center.",
+    }),
+    ApiParam({ name: "id", example: "capp1a2b0000ug0h9x1n1a2" }),
+    ApiOkResponse({
+      description: "Application withdrawn",
+      type: ApplicationWithJobResponseDto,
+      schema: { example: { ...ApplicationDetailExample, status: "WITHDRAWN" } },
+    }),
+    ApplicationNotFoundResponse,
+    InvalidStatusTransitionResponse,
+    ApplicationUpdateConflictResponse,
+    UnauthorizedApiResponse,
+    rateLimitResponse("10 req/60s per user"),
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiRespondToOffer = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Accept or decline an extended offer",
+      description:
+        "Only allowed while the application is exactly OFFERED. Sets the application to OFFER_ACCEPTED or OFFER_DECLINED and notifies the employer via the Notification Center.",
+    }),
+    ApiParam({ name: "id", example: "capp1a2b0000ug0h9x1n1a2" }),
+    ApiBody({
+      schema: {
+        example: { response: "ACCEPTED" },
+        properties: { response: { enum: ["ACCEPTED", "DECLINED"] } },
+      },
+    }),
+    ApiOkResponse({
+      description: "Offer response recorded",
+      type: ApplicationWithJobResponseDto,
+      schema: {
+        example: { ...ApplicationDetailExample, status: "OFFER_ACCEPTED" },
+      },
+    }),
+    ValidationErrorResponse,
+    ApplicationNotFoundResponse,
+    InvalidStatusTransitionResponse,
+    ApplicationUpdateConflictResponse,
+    UnauthorizedApiResponse,
+    rateLimitResponse("10 req/60s per user"),
     InternalServerErrorApiResponse,
   );
 

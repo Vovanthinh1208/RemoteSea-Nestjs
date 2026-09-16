@@ -490,6 +490,11 @@ export class EmployerRepository {
           updatedAt: true,
           coverLetter: true,
           resumeUrl: true,
+          // Previously write-only from the frontend's perspective (only ever
+          // sent alongside a status-change PATCH, never read back) — the
+          // Candidate Notes UI needs to display an existing note before
+          // editing it.
+          notes: true,
           talent: {
             select: {
               id: true,
@@ -556,6 +561,7 @@ export class EmployerRepository {
         updatedAt: true,
         coverLetter: true,
         resumeUrl: true,
+        notes: true,
         viewedAt: true,
         jobId: true,
         job: { select: { title: true } },

@@ -119,4 +119,18 @@ export class AlertsRepository {
     // default for weeklyDigest is true, so an absent row means "on".
     return pref?.weeklyDigest ?? true;
   }
+
+  /** Same shape as weeklyDigestEnabled above, for the IMMEDIATE/DAILY
+   * cadences — Settings > Notifications' "Instant high-match alerts"
+   * toggle. Only consulted for non-WEEKLY alerts — see
+   * AlertsService.dispatchOne. */
+  async instantMatchAlertsEnabled(userId: string): Promise<boolean> {
+    const pref = await this.prisma.notificationPreference.findUnique({
+      where: { userId },
+      select: { instantMatchAlerts: true },
+    });
+    // No row yet — the schema default for instantMatchAlerts is true, so an
+    // absent row means "on", same convention as every other preference here.
+    return pref?.instantMatchAlerts ?? true;
+  }
 }

@@ -1,0 +1,15 @@
+-- AlterEnum
+ALTER TYPE "ApplicationStatus" ADD VALUE 'OFFER_ACCEPTED';
+ALTER TYPE "ApplicationStatus" ADD VALUE 'OFFER_DECLINED';
+
+-- AlterEnum
+ALTER TYPE "JobStatus" ADD VALUE 'EXPIRED';
+
+-- AlterEnum
+ALTER TYPE "InterviewStatus" ADD VALUE 'CANCELLED';
+
+-- AlterEnum
+ALTER TYPE "NotificationType" ADD VALUE 'APPLICATION_WITHDRAWN';
+ALTER TYPE "NotificationType" ADD VALUE 'OFFER_ACCEPTED';
+ALTER TYPE "NotificationType" ADD VALUE 'OFFER_DECLINED';
+ALTER TYPE "NotificationType" ADD VALUE 'INTERVIEW_CANCELLED';

@@ -7,6 +7,10 @@ import type {
 import { PrismaService } from "@/core/database/prisma.service";
 import { MEMBERSHIP_SET_CAP } from "@/common/constants/membership-set.constants";
 import {
+  applicationPartiesSelect,
+  type ApplicationParties,
+} from "@/common/interfaces/application-parties.interface";
+import {
   backloggedApplicationSelect,
   ownApplicationSelect,
   type ApplicationWithJob,
@@ -18,6 +22,7 @@ import {
   BACKLOG_MAX_PER_RUN,
   BACKLOG_REMINDER_COOLDOWN_MS,
   BACKLOG_THRESHOLD_MS,
+  WITHDRAWABLE_STATUSES,
 } from "./constants";
 import { jobListItemSelect } from "@/common/types/job-list-item.type";
 import {
@@ -202,6 +207,78 @@ export class ApplicationsRepository {
     await this.prisma.application.updateMany({
       where: { id: { in: ids } },
       data: { lastReminderSentAt: new Date() },
+    });
+  }
+
+  /** Notification context (talent name, job title, employer userId/name) —
+   * the same shape messages/interviews use for their own notifications, so
+   * ApplicationsService.withdraw/respondToOffer can notify the other party
+   * without carrying a second, differently-shaped select through this file. */
+  findPartiesById(id: string): Promise<ApplicationParties | null> {
+    return this.prisma.application.findUnique({
+      where: { id },
+      select: applicationPartiesSelect,
+    });
+  }
+
+  // Talent-initiated self-withdraw. CAS on both ownership (talentId) and
+  // eligibility (status still in WITHDRAWABLE_STATUSES) in the same
+  // updateMany, so a status change that lands concurrently (e.g. the
+  // employer rejecting it, or extending an offer, a moment before this
+  // runs) can't silently be overwritten — count === 0 covers "not found",
+  // "not owned," and "no longer withdrawable" alike, same ambiguity
+  // findByIdForTalent's own ownership scoping already relies on elsewhere in
+  // this file.
+  async withdraw(
+    id: string,
+    talentId: string,
+  ): Promise<ApplicationWithJob | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.application.updateMany({
+        where: { id, talentId, status: { in: WITHDRAWABLE_STATUSES } },
+        data: { status: "WITHDRAWN" },
+      });
+      if (count === 0) return null;
+
+      await tx.applicationStatusEvent.create({
+        data: { applicationId: id, status: "WITHDRAWN" },
+      });
+      return tx.application.findUnique({
+        where: { id },
+        select: {
+          ...ownApplicationSelect,
+          job: { select: jobListItemSelect },
+        },
+      });
+    });
+  }
+
+  // Talent's response to an extended offer — same CAS shape as withdraw
+  // above, gated on the application still being exactly OFFERED (a second
+  // response attempt, or one that races a concurrent employer action,
+  // matches zero rows and returns null).
+  async respondToOffer(
+    id: string,
+    talentId: string,
+    status: Extract<ApplicationStatus, "OFFER_ACCEPTED" | "OFFER_DECLINED">,
+  ): Promise<ApplicationWithJob | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.application.updateMany({
+        where: { id, talentId, status: "OFFERED" },
+        data: { status },
+      });
+      if (count === 0) return null;
+
+      await tx.applicationStatusEvent.create({
+        data: { applicationId: id, status },
+      });
+      return tx.application.findUnique({
+        where: { id },
+        select: {
+          ...ownApplicationSelect,
+          job: { select: jobListItemSelect },
+        },
+      });
     });
   }
 }

@@ -35,3 +35,24 @@ export const CronUnauthorizedResponse = ApiUnauthorizedResponse({
     "Missing or incorrect Authorization header (expected `Authorization: Bearer <CRON_SECRET>`)",
   schema: { example: { error: "Unauthorized" } },
 });
+
+export const InvalidStatusTransitionResponse = ApiBadRequestResponse({
+  description: "The application isn't in a status this action can be performed from",
+  schema: {
+    example: {
+      error: "Cannot withdraw an application that is already REJECTED",
+      code: "INVALID_STATUS_TRANSITION",
+    },
+  },
+});
+
+export const ApplicationUpdateConflictResponse = ApiConflictResponse({
+  description:
+    "The application was updated concurrently (e.g. by the employer) between the caller's last read and this request",
+  schema: {
+    example: {
+      error: "Application was updated concurrently — please refresh and try again",
+      code: "APPLICATION_UPDATE_CONFLICT",
+    },
+  },
+});

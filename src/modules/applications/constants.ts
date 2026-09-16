@@ -1,6 +1,22 @@
+import type { ApplicationStatus } from "@prisma/client";
+
 export const RATE_LIMITS = {
   APPLY: { limit: 10, windowMs: 60_000 },
+  WITHDRAW: { limit: 10, windowMs: 60_000 },
+  OFFER_RESPONSE: { limit: 10, windowMs: 60_000 },
 } as const;
+
+// Talent-initiated self-withdraw (see ApplicationsService.withdraw) — every
+// status the talent is still actively waiting on. OFFERED is deliberately
+// excluded: once an offer is extended, the talent's response is
+// accept/decline (see ApplicationsService.respondToOffer), not withdraw.
+// REJECTED/WITHDRAWN/OFFER_ACCEPTED/OFFER_DECLINED are already terminal.
+export const WITHDRAWABLE_STATUSES: ApplicationStatus[] = [
+  "PENDING",
+  "REVIEWING",
+  "SHORTLISTED",
+  "INTERVIEW",
+];
 
 // Backlog-reminder cron thresholds (Application Transparency / Employer
 // Response SLA) — how long an application can sit in a stage before it's

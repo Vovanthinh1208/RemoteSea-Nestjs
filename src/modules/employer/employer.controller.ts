@@ -91,6 +91,7 @@ import {
 } from "@/modules/messages/docs/messages.swagger";
 import { RATE_LIMITS as MESSAGE_RATE_LIMITS } from "@/modules/messages/constants";
 import {
+  ApiCancelInterview,
   ApiGetInterview,
   ApiListUpcomingInterviews,
   ApiProposeInterview,
@@ -295,6 +296,22 @@ export class EmployerController {
       INTERVIEW_RATE_LIMITS.PROPOSE_INTERVIEW.windowMs,
     );
     return this.employerService.proposeInterview(application, body);
+  }
+
+  @ApiCancelInterview()
+  @Patch("applications/:id/interview/cancel")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
+  @Roles("EMPLOYER")
+  cancelInterview(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentResource() application: ApplicationWithJobOwner,
+  ) {
+    this.rateLimitService.enforce(
+      `cancel-interview:${user.id}`,
+      INTERVIEW_RATE_LIMITS.CANCEL_INTERVIEW.limit,
+      INTERVIEW_RATE_LIMITS.CANCEL_INTERVIEW.windowMs,
+    );
+    return this.employerService.cancelInterview(application);
   }
 
   // Registered before "applications/:id" for the same reason as

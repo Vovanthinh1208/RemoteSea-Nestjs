@@ -8,6 +8,7 @@ import {
   ApiParam,
   ApiQuery,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import {
   InternalServerErrorApiResponse,
@@ -172,6 +173,26 @@ export const ApiGetJobById = () =>
       schema: { example: JobDetailResponseExample },
     }),
     JobNotFoundResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiDispatchExpireJobs = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "Cron-triggered expiry of stale ACTIVE jobs",
+      description:
+        "Transitions every ACTIVE job whose expiresAt has passed to EXPIRED. Previously expiry was enforced only at query time (notExpiredCondition on the public listing/detail routes), so a lapsed job stayed ACTIVE in the database forever — this closes that gap for every other reader of Job.status. Meant for an external scheduler, not browser clients. " +
+        "**Auth**: not JWT — requires the exact header `Authorization: Bearer <CRON_SECRET>`, same as `GET /alerts/cron/dispatch`.",
+    }),
+    ApiOkResponse({
+      description: "Expiry summary",
+      schema: { example: { expired: 3 } },
+    }),
+    ApiUnauthorizedResponse({
+      description:
+        "Missing or incorrect Authorization header (expected `Authorization: Bearer <CRON_SECRET>`)",
+      schema: { example: { error: "Unauthorized" } },
+    }),
     InternalServerErrorApiResponse,
   );
 

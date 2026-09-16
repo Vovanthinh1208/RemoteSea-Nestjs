@@ -646,6 +646,10 @@ export class EmployerService {
     return this.interviewsService.propose(application, dto);
   }
 
+  cancelInterview(application: ApplicationWithJobOwner) {
+    return this.interviewsService.cancel(application);
+  }
+
   listApplicationScorecards(application: ApplicationWithJobOwner) {
     return this.scorecardsService.list(application.id);
   }
