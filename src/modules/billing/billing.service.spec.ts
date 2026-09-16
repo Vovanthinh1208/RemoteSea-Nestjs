@@ -242,7 +242,9 @@ describe("BillingService.reconcileStuckJobs", () => {
 
   it("leaves a stuck job alone (and never calls approveForReview) when it isn't actually auto-approval-eligible", async () => {
     const { service, jobsService, emailService } = makeService({
-      stuckJobs: [{ ...stuckJob, employer: { ...stuckJob.employer, isVerified: false } }],
+      stuckJobs: [
+        { ...stuckJob, employer: { ...stuckJob.employer, isVerified: false } },
+      ],
     });
 
     const result = await service.reconcileStuckJobs();

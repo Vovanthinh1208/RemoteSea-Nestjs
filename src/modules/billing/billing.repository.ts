@@ -88,7 +88,11 @@ export class BillingRepository {
   // always a safe no-op.
   findStuckPaidJobs(olderThan: Date): Promise<JobPaidAndSubmitted[]> {
     return this.prisma.job.findMany({
-      where: { planPaid: true, status: "PENDING_REVIEW", paidAt: { lt: olderThan } },
+      where: {
+        planPaid: true,
+        status: "PENDING_REVIEW",
+        paidAt: { lt: olderThan },
+      },
       include: jobPaidAndSubmittedInclude,
     });
   }
