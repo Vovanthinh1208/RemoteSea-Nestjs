@@ -6,6 +6,7 @@ import type { EmailService } from "@/common/services/email.service";
 import {
   BadRequestApiException,
   ConflictApiException,
+  ForbiddenApiException,
   UnauthorizedApiException,
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
@@ -226,6 +227,33 @@ describe("AuthService.validateCredentials", () => {
       email: "a@b.com",
       name: "A",
       role: "TALENT",
+    });
+  });
+
+  // Unlike isPaused (self-service, doesn't block sign-in), a ban DOES —
+  // there's no "reactivate anytime" path for it, only an admin lifting it.
+  it("rejects a banned user's otherwise-correct credentials with ACCOUNT_BANNED", async () => {
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    const { service } = makeService({
+      authRepository: {
+        findUserByEmail: jest.fn().mockResolvedValue({
+          id: "u1",
+          email: "a@b.com",
+          passwordHash: "hash",
+          name: "A",
+          role: "TALENT",
+          bannedAt: new Date("2026-01-01"),
+        }),
+      },
+    });
+
+    const error = await service
+      .validateCredentials("a@b.com", "correct")
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ForbiddenApiException);
+    expect((error as ForbiddenApiException).getResponse()).toMatchObject({
+      code: ErrorCode.ACCOUNT_BANNED,
     });
   });
 });

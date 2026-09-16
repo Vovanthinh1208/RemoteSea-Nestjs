@@ -431,6 +431,31 @@ export class EmployerRepository {
     };
   }
 
+  // Hiring funnel dashboard chart: how many DISTINCT applications ever
+  // reached each status, across every one of this employer's jobs. Distinct
+  // is the reason this is raw SQL rather than a Prisma groupBy(['status'])
+  // — an application that bounced REVIEWING -> SHORTLISTED -> REVIEWING
+  // (an employer moving someone back a stage) would otherwise be double
+  // counted at REVIEWING, since ApplicationStatusEvent is a full transition
+  // log, not a current-state table. One row per status that was ever
+  // reached at least once; a status with zero events for this employer
+  // simply doesn't appear — the caller (EmployerService.getHiringFunnel /
+  // buildFunnelStages) fills in the gaps with 0.
+  async getApplicationFunnelCounts(
+    employerId: string,
+  ): Promise<Array<{ status: ApplicationStatus; count: number }>> {
+    return this.prisma.$queryRaw<
+      Array<{ status: ApplicationStatus; count: number }>
+    >(Prisma.sql`
+      SELECT e.status AS "status", COUNT(DISTINCT e."applicationId")::int AS "count"
+      FROM application_status_events e
+      JOIN applications a ON a.id = e."applicationId"
+      JOIN jobs j ON j.id = a."jobId"
+      WHERE j."employerId" = ${employerId}
+      GROUP BY e.status
+    `);
+  }
+
   // Public-facing counterpart to getEmployerJobStats's avgFirstResponseHours —
   // same "first non-PENDING ApplicationStatusEvent" definition of "response,"
   // but also returns the sample count so the caller can gate on a minimum

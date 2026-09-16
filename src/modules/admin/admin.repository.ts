@@ -1,5 +1,12 @@
 import { Injectable } from "@nestjs/common";
-import type { EmployerProfile, Job, JobStatus, PlanType } from "@prisma/client";
+import type {
+  EmployerProfile,
+  Job,
+  JobStatus,
+  PlanType,
+  User,
+  UserRole,
+} from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 
@@ -30,6 +37,11 @@ export type PaidJobRevenueRow = Pick<
 > & {
   employer: { companyName: string };
 };
+
+export type AdminUserListItem = Pick<
+  User,
+  "id" | "email" | "name" | "role" | "bannedAt" | "createdAt"
+>;
 
 @Injectable()
 export class AdminRepository {
@@ -202,5 +214,45 @@ export class AdminRepository {
       orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
       take: limit,
     });
+  }
+
+  findUsers(
+    where: Prisma.UserWhereInput,
+    skip: number,
+    take: number,
+  ): Promise<[AdminUserListItem[], number]> {
+    return Promise.all([
+      this.prisma.user.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          bannedAt: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+  }
+
+  findUserById(
+    id: string,
+  ): Promise<Pick<User, "id" | "role" | "bannedAt" | "email"> | null> {
+    return this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, role: true, bannedAt: true, email: true },
+    });
+  }
+
+  updateUserRoleOrBan(
+    id: string,
+    data: { role?: UserRole; bannedAt?: Date | null },
+  ): Promise<User> {
+    return this.prisma.user.update({ where: { id }, data });
   }
 }

@@ -2,8 +2,12 @@ import { AdminService } from "./admin.service";
 import type { AdminRepository } from "./admin.repository";
 import type { EmployerService } from "@/modules/employer/employer.service";
 import type { JobsService } from "@/modules/jobs/jobs.service";
+import type { AuthService } from "@/modules/auth/auth.service";
 import type { AuditLogService } from "@/common/services/audit-log.service";
-import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import {
+  BadRequestApiException,
+  NotFoundApiException,
+} from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 
@@ -27,6 +31,7 @@ const makeService = (
     adminRepository?: Partial<AdminRepository>;
     jobsService?: Partial<JobsService>;
     employerService?: Partial<EmployerService>;
+    authService?: Partial<AuthService>;
   } = {},
 ) => {
   const adminRepository = {
@@ -36,6 +41,10 @@ const makeService = (
   const employerService = {
     ...overrides.employerService,
   } as unknown as EmployerService;
+  const authService = {
+    revokeAllSessionsForUser: jest.fn().mockResolvedValue(0),
+    ...overrides.authService,
+  } as unknown as AuthService;
   const emailService = {
     sendJobLiveEmail: jest.fn().mockResolvedValue(undefined),
     sendJobRejectedEmail: jest.fn().mockResolvedValue(undefined),
@@ -47,12 +56,14 @@ const makeService = (
       employerService,
       jobsService,
       {} as never,
+      authService,
       emailService as never,
       auditLogService as unknown as AuditLogService,
     ),
     adminRepository,
     jobsService,
     employerService,
+    authService,
     emailService,
     auditLogService,
   };
@@ -261,5 +272,133 @@ describe("AdminService.updateEmployer", () => {
       before: { isVerified: true },
       after: { isVerified: false },
     });
+  });
+});
+
+// Security fix for "JWT role never re-validated": rather than re-checking
+// role/bannedAt from the DB on every request, ban/role-change here revokes
+// every existing session for the target user, so JwtStrategy's own
+// per-request revocation check is what closes the stale-privilege window.
+describe("AdminService.updateUser", () => {
+  const targetUser = {
+    id: "user-1",
+    email: "talent@example.com",
+    role: "TALENT",
+    bannedAt: null,
+  };
+
+  it("throws USER_NOT_FOUND for a nonexistent user", async () => {
+    const { service } = makeService({
+      adminRepository: { findUserById: jest.fn().mockResolvedValue(null) },
+    });
+
+    const error = await service
+      .updateUser("missing", { action: "ban" }, admin)
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(NotFoundApiException);
+    expect((error as NotFoundApiException).getResponse()).toMatchObject({
+      code: ErrorCode.USER_NOT_FOUND,
+    });
+  });
+
+  it("refuses to let an admin ban or change the role of their own account", async () => {
+    const { service, adminRepository, authService } = makeService({
+      adminRepository: {
+        findUserById: jest
+          .fn()
+          .mockResolvedValue({ ...targetUser, id: "admin-1" }),
+        updateUserRoleOrBan: jest.fn(),
+      },
+    });
+
+    const error = await service
+      .updateUser("admin-1", { action: "ban" }, admin)
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(BadRequestApiException);
+    expect((error as BadRequestApiException).getResponse()).toMatchObject({
+      code: ErrorCode.CANNOT_MODIFY_OWN_ACCOUNT,
+    });
+    expect(adminRepository.updateUserRoleOrBan).not.toHaveBeenCalled();
+    expect(authService.revokeAllSessionsForUser).not.toHaveBeenCalled();
+  });
+
+  it("bans the user and revokes every one of their sessions", async () => {
+    const { service, adminRepository, authService } = makeService({
+      adminRepository: {
+        findUserById: jest.fn().mockResolvedValue(targetUser),
+        updateUserRoleOrBan: jest.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    await service.updateUser("user-1", { action: "ban" }, admin);
+
+    expect(adminRepository.updateUserRoleOrBan).toHaveBeenCalledWith("user-1", {
+      bannedAt: expect.any(Date),
+    });
+    expect(authService.revokeAllSessionsForUser).toHaveBeenCalledWith("user-1");
+  });
+
+  it("unbans the user WITHOUT revoking sessions — there's no stale privilege to close", async () => {
+    const { service, adminRepository, authService } = makeService({
+      adminRepository: {
+        findUserById: jest
+          .fn()
+          .mockResolvedValue({ ...targetUser, bannedAt: new Date() }),
+        updateUserRoleOrBan: jest.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    await service.updateUser("user-1", { action: "unban" }, admin);
+
+    expect(adminRepository.updateUserRoleOrBan).toHaveBeenCalledWith("user-1", {
+      bannedAt: null,
+    });
+    expect(authService.revokeAllSessionsForUser).not.toHaveBeenCalled();
+  });
+
+  it("changes the role and revokes every one of their sessions", async () => {
+    const { service, adminRepository, authService } = makeService({
+      adminRepository: {
+        findUserById: jest.fn().mockResolvedValue(targetUser),
+        updateUserRoleOrBan: jest.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    await service.updateUser(
+      "user-1",
+      { action: "change-role", role: "ADMIN" },
+      admin,
+    );
+
+    expect(adminRepository.updateUserRoleOrBan).toHaveBeenCalledWith("user-1", {
+      role: "ADMIN",
+    });
+    expect(authService.revokeAllSessionsForUser).toHaveBeenCalledWith("user-1");
+  });
+
+  it("records a USER_BANNED audit entry with the before/after bannedAt", async () => {
+    const { service, auditLogService } = makeService({
+      adminRepository: {
+        findUserById: jest.fn().mockResolvedValue(targetUser),
+        updateUserRoleOrBan: jest.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    await service.updateUser("user-1", { action: "ban" }, admin);
+
+    expect(auditLogService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adminId: "admin-1",
+        adminEmail: "admin@remotesea.io",
+        action: "USER_BANNED",
+        targetType: "USER",
+        targetId: "user-1",
+        targetLabel: "talent@example.com",
+        before: { role: "TALENT", bannedAt: null },
+        after: { bannedAt: expect.any(Date) },
+      }),
+    );
   });
 });

@@ -793,3 +793,43 @@ describe("EmployerService.getRecentApplications", () => {
     ).rejects.toThrow();
   });
 });
+
+describe("EmployerService.getHiringFunnel", () => {
+  it("resolves the caller's membership and builds the funnel from the company's raw counts", async () => {
+    const { service, repo } = makeService({
+      getApplicationFunnelCounts: jest.fn().mockResolvedValue([
+        { status: "PENDING", count: 10 },
+        { status: "OFFER_ACCEPTED", count: 2 },
+      ]),
+    });
+
+    const result = await service.getHiringFunnel("owner-1");
+
+    expect(repo.getApplicationFunnelCounts).toHaveBeenCalledWith(
+      "owner-1-company",
+    );
+    expect(result.stages[0]).toMatchObject({ status: "PENDING", count: 10 });
+    expect(result.stages.at(-1)).toMatchObject({
+      status: "OFFER_ACCEPTED",
+      count: 2,
+      conversionFromFirst: 20,
+    });
+  });
+
+  it("rejects a company role outside APPLICATION_REVIEW_ROLES (e.g. INTERVIEWER)", async () => {
+    const { service } = makeService(
+      {
+        getApplicationFunnelCounts: jest.fn(),
+      },
+      {},
+      {
+        resolveMembership: jest.fn().mockResolvedValue({
+          employerId: "owner-1-company",
+          role: "INTERVIEWER",
+        }),
+      },
+    );
+
+    await expect(service.getHiringFunnel("interviewer-1")).rejects.toThrow();
+  });
+});

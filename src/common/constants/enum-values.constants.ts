@@ -49,4 +49,6 @@ export const ADMIN_AUDIT_TARGET_TYPE_VALUES = [
   "EMPLOYER",
   "JOB",
   "JOB_REPORT",
+  "USER",
 ] as const;
+export const USER_ROLE_VALUES = ["TALENT", "EMPLOYER", "ADMIN"] as const;

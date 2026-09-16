@@ -27,6 +27,7 @@ import { BCRYPT_SALT_ROUNDS } from "@/common/constants/bcrypt.constants";
 import {
   BadRequestApiException,
   ConflictApiException,
+  ForbiddenApiException,
   NotFoundApiException,
   UnauthorizedApiException,
 } from "@/common/exceptions/api.exception";
@@ -127,6 +128,19 @@ export class AuthService {
       throw new UnauthorizedApiException(
         "Invalid email or password",
         ErrorCode.INVALID_CREDENTIALS,
+      );
+    }
+    // Unlike isPaused below, a ban DOES block sign-in — there's no
+    // "reactivate anytime" self-service path for it, only an admin lifting
+    // it (AdminService.updateUser). Checked after the password compare
+    // above (not before, e.g. via a single combined query) so a banned
+    // user gets the same INVALID_CREDENTIALS response as a wrong password
+    // when they mistype it — banned status is only revealed once they've
+    // proven they're really the account owner.
+    if (user.bannedAt) {
+      throw new ForbiddenApiException(
+        "This account has been banned",
+        ErrorCode.ACCOUNT_BANNED,
       );
     }
     // Deliberately does NOT block sign-in: the reference design's copy for
@@ -529,5 +543,16 @@ export class AuthService {
       currentSessionId,
     );
     return { revokedCount };
+  }
+
+  // Called by AdminService.updateUser on ban/role-change — the mechanism
+  // behind "JWT role never re-validated" in the audit: rather than reading
+  // role/bannedAt fresh from the DB on every request (an extra query on
+  // every hot path), every existing session is force-revoked the moment
+  // either changes, and JwtStrategy's per-request revocation check (already
+  // a DB read on every request, for this exact reason) is what closes the
+  // stale-privilege window on the next request either way.
+  async revokeAllSessionsForUser(userId: string): Promise<number> {
+    return this.authRepository.revokeAllSessions(userId);
   }
 }

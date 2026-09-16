@@ -1,12 +1,16 @@
 import { Injectable, Logger } from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
 import { AdminRepository } from "./admin.repository";
 import { EmployerService } from "@/modules/employer/employer.service";
 import { JobsService } from "@/modules/jobs/jobs.service";
 import { JobReportsService } from "@/modules/job-reports/job-reports.service";
+import { AuthService } from "@/modules/auth/auth.service";
 import type { ListEmployersDto } from "./dto/list-employers.dto";
 import type { UpdateEmployerDto } from "./dto/update-employer.dto";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
 import type { ReviewJobDto } from "./dto/review-job.dto";
+import type { ListUsersDto } from "./dto/list-users.dto";
+import type { UpdateUserDto } from "./dto/update-user.dto";
 import type { ListJobReportsDto } from "@/modules/job-reports/dto/list-job-reports.dto";
 import type { ResolveJobReportDto } from "@/modules/job-reports/dto/resolve-job-report.dto";
 import type { ListAuditLogDto } from "./dto/list-audit-log.dto";
@@ -43,6 +47,7 @@ export class AdminService {
     private readonly employerService: EmployerService,
     private readonly jobsService: JobsService,
     private readonly jobReportsService: JobReportsService,
+    private readonly authService: AuthService,
     private readonly emailService: EmailService,
     private readonly auditLogService: AuditLogService,
   ) {}
@@ -253,5 +258,97 @@ export class AdminService {
     );
 
     return { entries, pagination: buildPagination(page, limit, total) };
+  }
+
+  async listUsers(query: ListUsersDto) {
+    const { role, banned, q, page, limit } = query;
+    const skip = paginationSkip(page, limit);
+    const where: Prisma.UserWhereInput = {
+      ...(role && { role }),
+      ...(banned !== undefined && {
+        bannedAt: banned === "true" ? { not: null } : null,
+      }),
+      ...(q && {
+        OR: [
+          { email: { contains: q, mode: "insensitive" } },
+          { name: { contains: q, mode: "insensitive" } },
+        ],
+      }),
+    };
+
+    const [users, total] = await this.adminRepository.findUsers(
+      where,
+      skip,
+      limit,
+    );
+
+    return { users, pagination: buildPagination(page, limit, total) };
+  }
+
+  async updateUser(
+    id: string,
+    dto: UpdateUserDto,
+    admin: AuthenticatedUser,
+  ): Promise<{ success: true }> {
+    const user = await this.adminRepository.findUserById(id);
+    if (!user) {
+      throw new NotFoundApiException(
+        "User not found",
+        ErrorCode.USER_NOT_FOUND,
+      );
+    }
+    // An admin banning/demoting themselves would immediately revoke their
+    // own session (see below) mid-request — locking every admin out the
+    // moment the last one did this to themselves, with no other admin
+    // account able to undo it except by going straight to the database.
+    if (id === admin.id) {
+      throw new BadRequestApiException(
+        "You can't change your own role or ban your own account",
+        ErrorCode.CANNOT_MODIFY_OWN_ACCOUNT,
+      );
+    }
+
+    const before = { role: user.role, bannedAt: user.bannedAt };
+    let after: { role?: string; bannedAt: Date | null };
+    let action: "USER_BANNED" | "USER_UNBANNED" | "USER_ROLE_CHANGED";
+
+    if (dto.action === "ban") {
+      await this.adminRepository.updateUserRoleOrBan(id, {
+        bannedAt: new Date(),
+      });
+      after = { bannedAt: new Date() };
+      action = "USER_BANNED";
+    } else if (dto.action === "unban") {
+      await this.adminRepository.updateUserRoleOrBan(id, { bannedAt: null });
+      after = { bannedAt: null };
+      action = "USER_UNBANNED";
+    } else {
+      // dto.role is guaranteed by updateUserSchema's refine() for this branch.
+      await this.adminRepository.updateUserRoleOrBan(id, { role: dto.role });
+      after = { role: dto.role, bannedAt: user.bannedAt };
+      action = "USER_ROLE_CHANGED";
+    }
+
+    // Both a ban and a role change invalidate every existing session for
+    // this user — see AuthService.revokeAllSessionsForUser's own comment
+    // for why this (not a per-request DB re-check of role/bannedAt) is the
+    // fix for "JWT role never re-validated." Unbanning doesn't need this:
+    // it only restores access, so there's no stale privilege to close.
+    if (dto.action !== "unban") {
+      await this.authService.revokeAllSessionsForUser(id);
+    }
+
+    await this.auditLogService.record({
+      adminId: admin.id,
+      adminEmail: admin.email,
+      action,
+      targetType: "USER",
+      targetId: id,
+      targetLabel: user.email,
+      before,
+      after,
+    });
+
+    return { success: true };
   }
 }

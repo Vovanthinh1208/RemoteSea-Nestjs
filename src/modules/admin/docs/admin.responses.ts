@@ -3,6 +3,7 @@ import {
   EmployerNotFoundExample,
   JobNotFoundExample,
   ReportNotFoundExample,
+  UserNotFoundExample,
   ValidationErrorExample,
 } from "./admin.examples";
 
@@ -31,4 +32,9 @@ export const ReportNotFoundResponse = ApiNotFoundResponse({
 export const ReportAlreadyResolvedResponse = ApiBadRequestResponse({
   description: "The report is no longer OPEN (already resolved or dismissed)",
   schema: { example: { error: "Report is already resolved" } },
+});
+
+export const UserNotFoundResponse = ApiNotFoundResponse({
+  description: "No User with that id",
+  schema: { example: UserNotFoundExample },
 });

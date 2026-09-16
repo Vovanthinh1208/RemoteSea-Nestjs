@@ -214,6 +214,43 @@ export const ApiListRecentApplications = () =>
     InternalServerErrorApiResponse,
   );
 
+export const ApiGetHiringFunnel = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Hiring funnel dashboard chart",
+      description:
+        "Aggregates every ApplicationStatusEvent across the caller's company into pipeline-stage counts (Applied → Reviewing → Shortlisted → Interview → Offered → Hired) with conversion rates, plus a separate rejected/withdrawn/offer-declined drop-off breakdown. Each stage counts DISTINCT applications that ever reached it at least once — not a live snapshot of Application.status — so an application moved back a stage isn't double-counted. Requires the EMPLOYER role; company membership and role are resolved the same way as GET /employer/applications/recent.",
+    }),
+    ApiOkResponse({
+      description: "Funnel stages and drop-off counts",
+      schema: {
+        example: {
+          stages: [
+            {
+              status: "PENDING",
+              label: "Applied",
+              count: 120,
+              conversionFromFirst: 100,
+              conversionFromPrevious: 100,
+            },
+            {
+              status: "OFFER_ACCEPTED",
+              label: "Hired",
+              count: 6,
+              conversionFromFirst: 5,
+              conversionFromPrevious: 60,
+            },
+          ],
+          dropOff: [{ status: "REJECTED", label: "Rejected", count: 80 }],
+        },
+      },
+    }),
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
+    InternalServerErrorApiResponse,
+  );
+
 export const ApiBulkUpdateApplications = () =>
   applyDecorators(
     ApiBearerAuth("bearer"),

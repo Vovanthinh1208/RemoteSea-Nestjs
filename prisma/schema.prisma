@@ -135,6 +135,16 @@ model User {
   twoFactorEnabled     Boolean   @default(false)
   twoFactorSecret      String?
   twoFactorBackupCodes String[]  @default([])
+  // Platform-wide ban (ADMIN only, AdminService.updateUser). Unlike isPaused
+  // (self-service, reversible, does NOT block sign-in) this DOES block
+  // sign-in (AuthService.validateCredentials) — a suspended/paused account
+  // can still log back in to undo it, a banned one cannot. Setting this
+  // (or changing `role`) revokes every active Session for the user in the
+  // same transaction (AdminService.updateUser) so JwtStrategy's per-request
+  // revocation check — not a fresh per-request role/ban read — is what
+  // actually closes the stale-privilege window; see that guard's own
+  // comment for why re-validating role on every request was rejected.
+  bannedAt             DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
@@ -897,12 +907,16 @@ enum AdminAuditAction {
   JOB_REJECTED
   JOB_REPORT_RESOLVED
   JOB_REPORT_DISMISSED
+  USER_BANNED
+  USER_UNBANNED
+  USER_ROLE_CHANGED
 }
 
 enum AdminAuditTargetType {
   EMPLOYER
   JOB
   JOB_REPORT
+  USER
 }
 
 // Durable record of every admin moderation action (who / what / when /

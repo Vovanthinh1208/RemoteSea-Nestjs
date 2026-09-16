@@ -17,6 +17,7 @@ import {
   ADMIN_AUDIT_TARGET_TYPE_VALUES,
   JOB_REPORT_STATUS_VALUES,
   JOB_STATUS_VALUES,
+  USER_ROLE_VALUES,
 } from "@/common/constants/enum-values.constants";
 import {
   ListAuditLogResponseDto,
@@ -50,6 +51,7 @@ import {
   JobNotFoundResponse,
   ReportAlreadyResolvedResponse,
   ReportNotFoundResponse,
+  UserNotFoundResponse,
   ValidationErrorResponse,
 } from "./admin.responses";
 
@@ -227,6 +229,76 @@ export const ApiResolveReport = () =>
     ForbiddenApiResponse,
     ReportNotFoundResponse,
     ReportAlreadyResolvedResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiListUsers = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "List users for moderation",
+      description:
+        "Lists platform users (any role), filterable by role/banned status, searchable by email/name substring, paginated. Requires ADMIN role.",
+    }),
+    ApiQuery({ name: "role", required: false, enum: USER_ROLE_VALUES }),
+    ApiQuery({
+      name: "banned",
+      required: false,
+      enum: ["true", "false"],
+      description: "Filters on User.bannedAt",
+    }),
+    ApiQuery({
+      name: "q",
+      required: false,
+      type: String,
+      description: "Case-insensitive substring match on email or name",
+    }),
+    ApiQuery({ name: "page", required: false, type: Number, example: 1 }),
+    ApiQuery({ name: "limit", required: false, type: Number, example: 20 }),
+    ApiOkResponse({
+      description: "Paginated user list",
+      schema: {
+        example: {
+          users: [
+            {
+              id: "clx1",
+              email: "talent@example.com",
+              name: "Jane Doe",
+              role: "TALENT",
+              bannedAt: null,
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+          pagination: { page: 1, limit: 20, total: 1, pages: 1 },
+        },
+      },
+    }),
+    ValidationErrorResponse,
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiUpdateUser = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "Ban, unban, or change the role of a user",
+      description:
+        "Banning blocks sign-in immediately (AuthService.validateCredentials) and, like a role change, revokes every one of that user's active sessions — closing the stale-privilege window a JWT's baked-in role would otherwise leave open until it expires. Unbanning does not force a re-login. An admin cannot act on their own account. Requires ADMIN role.",
+    }),
+    ApiParam({ name: "id", description: "User id" }),
+    ApiBody({
+      schema: {
+        example: { action: "ban" },
+      },
+    }),
+    ApiOkResponse({
+      description: "User updated",
+      schema: { example: { success: true } },
+    }),
+    ValidationErrorResponse,
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
+    UserNotFoundResponse,
     InternalServerErrorApiResponse,
   );
 

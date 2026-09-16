@@ -18,6 +18,8 @@ import {
 } from "./dto/update-employer.dto";
 import { listJobsSchema, type ListJobsDto } from "./dto/list-jobs.dto";
 import { reviewJobSchema, type ReviewJobDto } from "./dto/review-job.dto";
+import { listUsersSchema, type ListUsersDto } from "./dto/list-users.dto";
+import { updateUserSchema, type UpdateUserDto } from "./dto/update-user.dto";
 import {
   listAuditLogSchema,
   type ListAuditLogDto,
@@ -43,9 +45,11 @@ import {
   ApiListEmployers,
   ApiListJobs,
   ApiListReports,
+  ApiListUsers,
   ApiResolveReport,
   ApiReviewJob,
   ApiUpdateEmployer,
+  ApiUpdateUser,
 } from "./docs/admin.swagger";
 
 @ApiAdminTag()
@@ -123,5 +127,23 @@ export class AdminController {
     @Query(new ZodValidationPipe(listAuditLogSchema)) query: ListAuditLogDto,
   ) {
     return this.adminService.listAuditLog(query);
+  }
+
+  @ApiListUsers()
+  @Get("users")
+  async listUsers(
+    @Query(new ZodValidationPipe(listUsersSchema)) query: ListUsersDto,
+  ) {
+    return this.adminService.listUsers(query);
+  }
+
+  @ApiUpdateUser()
+  @Patch("users/:id")
+  async updateUser(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(updateUserSchema)) body: UpdateUserDto,
+    @CurrentUser() admin: AuthenticatedUser,
+  ) {
+    return this.adminService.updateUser(id, body, admin);
   }
 }

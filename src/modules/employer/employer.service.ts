@@ -57,6 +57,7 @@ import {
   OWNER_ONLY,
   requireCompanyRole,
 } from "@/common/authorization/company-role.util";
+import { buildHiringFunnel } from "./funnel.util";
 
 // Below this many responded applications, a public "responds within ~Xh"
 // figure is more noise than signal (and trivially gameable by an employer
@@ -420,6 +421,19 @@ export class EmployerService {
         membership.employerId,
       );
     return { applications };
+  }
+
+  // Hiring funnel dashboard chart: aggregates every ApplicationStatusEvent
+  // across this employer's jobs into pipeline-stage counts + conversion
+  // rates (see funnel.util.ts). Same role gate as the applications list
+  // this is derived from — anyone who can review applications can see the
+  // funnel built from them.
+  async getHiringFunnel(userId: string) {
+    const membership = await this.requireRole(userId, APPLICATION_REVIEW_ROLES);
+    const counts = await this.employerRepository.getApplicationFunnelCounts(
+      membership.employerId,
+    );
+    return buildHiringFunnel(counts);
   }
 
   async updateApplication(

@@ -78,6 +78,7 @@ import {
   ApiCreateEmployerProfile,
   ApiEmployerTag,
   ApiGetEmployerProfile,
+  ApiGetHiringFunnel,
   ApiListEmployerJobs,
   ApiListJobApplications,
   ApiListRecentApplications,
@@ -195,6 +196,14 @@ export class EmployerController {
   @Roles("EMPLOYER")
   listRecentApplications(@CurrentUser() user: AuthenticatedUser) {
     return this.employerService.getRecentApplications(user.id);
+  }
+
+  @ApiGetHiringFunnel()
+  @Get("analytics/funnel")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("EMPLOYER")
+  getHiringFunnel(@CurrentUser() user: AuthenticatedUser) {
+    return this.employerService.getHiringFunnel(user.id);
   }
 
   // Registered before "applications/:id" — Nest/Express match routes in

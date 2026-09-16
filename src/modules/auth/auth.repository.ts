@@ -288,4 +288,15 @@ export class AuthRepository {
     });
     return count;
   }
+
+  // Unlike revokeOtherSessions, excludes nothing — called when the user
+  // themselves is no longer trusted (banned, or role changed by an admin),
+  // not when they're clearing their own other devices.
+  async revokeAllSessions(userId: string): Promise<number> {
+    const { count } = await this.prisma.session.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    return count;
+  }
 }

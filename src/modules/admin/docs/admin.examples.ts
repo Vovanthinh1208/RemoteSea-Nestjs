@@ -21,6 +21,8 @@ export const UpdateEmployerResponseExample = { success: true };
 
 export const EmployerNotFoundExample = { error: "Employer not found" };
 
+export const UserNotFoundExample = { error: "User not found" };
+
 export const ListJobsResponseExample = {
   jobs: [
     {
