@@ -14,6 +14,9 @@ const makeService = (
     findProfileFileUrls: jest
       .fn()
       .mockResolvedValue({ resumeUrl: null, logoUrl: null }),
+    countTeamObligations: jest
+      .fn()
+      .mockResolvedValue({ members: 0, pendingInvitations: 0 }),
     ...repoOverrides,
   } as unknown as UsersRepository;
   const uploadsService = {
@@ -49,6 +52,46 @@ describe("UsersService.deleteAccount", () => {
     expect(error).toBeInstanceOf(ConflictApiException);
     expect((error as ConflictApiException).getResponse()).toMatchObject({
       code: ErrorCode.ACTIVE_JOBS_PREVENT_DELETION,
+    });
+    expect(usersRepository.deleteUser).not.toHaveBeenCalled();
+  });
+
+  it("blocks deletion and never calls deleteUser when the account's company has other active team members", async () => {
+    const { service, usersRepository } = makeService({
+      countEmployerJobs: jest.fn().mockResolvedValue(0),
+      countTeamObligations: jest
+        .fn()
+        .mockResolvedValue({ members: 2, pendingInvitations: 0 }),
+      deleteUser: jest.fn(),
+    });
+
+    const error = await service
+      .deleteAccount("user-1")
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ConflictApiException);
+    expect((error as ConflictApiException).getResponse()).toMatchObject({
+      code: ErrorCode.ACTIVE_TEAM_PREVENTS_DELETION,
+    });
+    expect(usersRepository.deleteUser).not.toHaveBeenCalled();
+  });
+
+  it("blocks deletion when the account's company has pending team invitations", async () => {
+    const { service, usersRepository } = makeService({
+      countEmployerJobs: jest.fn().mockResolvedValue(0),
+      countTeamObligations: jest
+        .fn()
+        .mockResolvedValue({ members: 0, pendingInvitations: 1 }),
+      deleteUser: jest.fn(),
+    });
+
+    const error = await service
+      .deleteAccount("user-1")
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ConflictApiException);
+    expect((error as ConflictApiException).getResponse()).toMatchObject({
+      code: ErrorCode.ACTIVE_TEAM_PREVENTS_DELETION,
     });
     expect(usersRepository.deleteUser).not.toHaveBeenCalled();
   });

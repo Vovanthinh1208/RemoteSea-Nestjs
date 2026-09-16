@@ -78,4 +78,18 @@ export class BillingRepository {
       include: jobPaidAndSubmittedInclude,
     });
   }
+
+  // Backs BillingService.reconcileStuckJobs — a job that's still
+  // PENDING_REVIEW well after markJobPaidAndSubmitted flipped planPaid true
+  // can only mean the conditional approveForReview call after it never ran
+  // (process crash, thrown error, ...) or genuinely isn't auto-approval-
+  // eligible; the cron re-evaluates eligibility fresh rather than trusting
+  // any persisted flag, so re-checking a correctly-still-pending job here is
+  // always a safe no-op.
+  findStuckPaidJobs(olderThan: Date): Promise<JobPaidAndSubmitted[]> {
+    return this.prisma.job.findMany({
+      where: { planPaid: true, status: "PENDING_REVIEW", paidAt: { lt: olderThan } },
+      include: jobPaidAndSubmittedInclude,
+    });
+  }
 }

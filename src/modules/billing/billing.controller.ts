@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Post, Req, UseGuards } from "@nestjs/common";
 import type { RawBodyRequest } from "@nestjs/common";
 import type { Request } from "express";
 import { BillingService } from "./billing.service";
@@ -6,6 +6,7 @@ import { checkoutSchema, type CheckoutDto } from "./dto/checkout.dto";
 import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
+import { CronSecretGuard } from "@/modules/alerts/guards/cron-secret.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import { CurrentResource } from "@/common/authorization/current-resource.decorator";
 import { RateLimitService } from "@/common/services/rate-limit.service";
@@ -16,7 +17,12 @@ import {
   JobPayerOwnershipGuard,
   type JobPayer,
 } from "./guards/job-payer-ownership.guard";
-import { ApiBillingTag, ApiCheckout, ApiWebhook } from "./docs/billing.swagger";
+import {
+  ApiBillingTag,
+  ApiCheckout,
+  ApiReconcileStuckJobs,
+  ApiWebhook,
+} from "./docs/billing.swagger";
 
 @ApiBillingTag()
 @Controller("billing")
@@ -55,5 +61,14 @@ export class BillingController {
       );
     }
     return this.billingService.handleWebhookEvent(req.rawBody, signature);
+  }
+
+  // External scheduler only (CronSecretGuard, same as the other cron
+  // endpoints) — never a user JWT.
+  @ApiReconcileStuckJobs()
+  @Get("cron/reconcile")
+  @UseGuards(CronSecretGuard)
+  reconcileStuckJobs() {
+    return this.billingService.reconcileStuckJobs();
   }
 }

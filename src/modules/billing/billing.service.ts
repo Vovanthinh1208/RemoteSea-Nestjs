@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Stripe from "stripe";
 import { BillingRepository } from "./billing.repository";
-import { STRIPE_CLIENT } from "./constants";
+import { STRIPE_CLIENT, STUCK_JOB_GRACE_MS } from "./constants";
 import type { CheckoutSessionResult } from "./interfaces";
 import {
   BadRequestApiException,
@@ -36,6 +36,13 @@ export class BillingService {
     BREAKER_FAILURE_THRESHOLD,
     BREAKER_COOLDOWN_MS,
   );
+
+  // Same reasoning as AlertsService.dispatchInProgress / ApplicationsService.
+  // dispatchInProgress — guards against two overlapping reconciliation runs
+  // re-querying the same stuck jobs; process-local only, not a cross-replica
+  // lock. approveForReview's own CAS is what actually prevents a double-
+  // approve, this just avoids redundant work on this instance.
+  private reconcileInProgress = false;
 
   constructor(
     @Inject(STRIPE_CLIENT) private readonly stripe: Stripe,
@@ -184,5 +191,68 @@ export class BillingService {
     }
 
     return { received: true };
+  }
+
+  // Cron-triggered (GET /billing/cron/reconcile, CronSecretGuard — same
+  // external-scheduler shape as ApplicationsService.dispatchBacklogReminders
+  // and JobsService.expireStaleJobs). Closes the gap where
+  // markJobPaidAndSubmitted and the conditional approveForReview above are
+  // two separate, non-atomic writes: if the process dies (or approveForReview
+  // throws) between them, the webhook's own idempotency guard means a Stripe
+  // retry sees planPaid already true and skips the whole block forever —
+  // the job is stuck paid but never activated, with nothing to notice. This
+  // re-evaluates auto-approval eligibility fresh for every job that's been
+  // PENDING_REVIEW-with-planPaid-true for too long and completes it.
+  async reconcileStuckJobs(): Promise<{ checked: number; approved: number }> {
+    if (this.reconcileInProgress) {
+      this.logger.warn(
+        "Skipped reconcileStuckJobs: a previous run on this instance is still in progress.",
+      );
+      return { checked: 0, approved: 0 };
+    }
+
+    this.reconcileInProgress = true;
+    const start = Date.now();
+    try {
+      const cutoff = new Date(Date.now() - STUCK_JOB_GRACE_MS);
+      const stuckJobs = await this.billingRepository.findStuckPaidJobs(cutoff);
+
+      let approved = 0;
+      for (const job of stuckJobs) {
+        const eligible = isEligibleForAutoApproval(
+          {
+            description: job.description,
+            salaryMin: job.salaryMin,
+            categoryCount: job.categories.length,
+          },
+          job.employer.isVerified,
+        );
+        if (!eligible) continue;
+
+        // Conditioned on status === PENDING_REVIEW (jobs.repository.ts's
+        // approveJob) — null here means something else already moved this
+        // job on since findStuckPaidJobs read it a moment ago, not an error.
+        const result = await this.jobsService.approveForReview(job.id);
+        if (!result) continue;
+
+        approved += 1;
+        runInBackground(
+          this.emailService.sendJobLiveEmail(
+            job.employer.user.email,
+            job.title,
+            job.slug,
+          ),
+          this.logger,
+          `Failed to send job-live email for reconciled job ${job.id}`,
+        );
+      }
+
+      this.logger.log(
+        `reconcileStuckJobs finished: checked ${stuckJobs.length} stuck job(s), approved ${approved} in ${Date.now() - start}ms`,
+      );
+      return { checked: stuckJobs.length, approved };
+    } finally {
+      this.reconcileInProgress = false;
+    }
   }
 }

@@ -753,6 +753,12 @@ const expectations: ControllerExpectation[] = [
         // No JwtAuthGuard: Stripe calls this directly. Authenticity comes
         // from the webhook signature check inside BillingService, not a guard.
       },
+      {
+        method: "reconcileStuckJobs",
+        httpMethod: "GET",
+        path: "cron/reconcile",
+        guards: ["CronSecretGuard"],
+      },
     ],
   },
   {

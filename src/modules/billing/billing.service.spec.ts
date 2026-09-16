@@ -183,3 +183,112 @@ describe("BillingService.handleWebhookEvent auto-approval", () => {
     expect(emailService.sendJobSubmittedEmail).not.toHaveBeenCalled();
   });
 });
+
+// Covers the gap where markJobPaidAndSubmitted and the conditional
+// approveForReview in handleWebhookEvent above are two separate, non-atomic
+// writes — a crash (or thrown error) between them leaves a job stuck
+// planPaid:true, status:PENDING_REVIEW forever, since a Stripe retry's
+// markJobPaidAndSubmitted call sees planPaid already true and no-ops.
+describe("BillingService.reconcileStuckJobs", () => {
+  const stuckJob = {
+    id: "job-1",
+    title: "Backend Engineer",
+    slug: "backend-engineer",
+    description: "x".repeat(100),
+    salaryMin: 1000,
+    categories: [{ categoryId: "cat-1" }],
+    employer: { isVerified: true, user: { email: "employer@acme.com" } },
+  };
+
+  const makeService = ({
+    stuckJobs,
+    approveForReview = jest.fn().mockResolvedValue({ status: "ACTIVE" }),
+  }: {
+    stuckJobs: (typeof stuckJob)[];
+    approveForReview?: jest.Mock;
+  }) => {
+    const billingRepository = {
+      findStuckPaidJobs: jest.fn().mockResolvedValue(stuckJobs),
+    };
+    const emailService = {
+      sendJobLiveEmail: jest.fn().mockResolvedValue(undefined),
+    };
+    const jobsService = { approveForReview };
+    const service = new BillingService(
+      {} as never,
+      billingRepository as never,
+      emailService as never,
+      { get: jest.fn() } as never,
+      jobsService as never,
+    );
+    return { service, billingRepository, jobsService, emailService };
+  };
+
+  it("approves an eligible stuck job and sends the live email", async () => {
+    const { service, jobsService, emailService } = makeService({
+      stuckJobs: [stuckJob],
+    });
+
+    const result = await service.reconcileStuckJobs();
+
+    expect(jobsService.approveForReview).toHaveBeenCalledWith("job-1");
+    expect(emailService.sendJobLiveEmail).toHaveBeenCalledWith(
+      "employer@acme.com",
+      "Backend Engineer",
+      "backend-engineer",
+    );
+    expect(result).toEqual({ checked: 1, approved: 1 });
+  });
+
+  it("leaves a stuck job alone (and never calls approveForReview) when it isn't actually auto-approval-eligible", async () => {
+    const { service, jobsService, emailService } = makeService({
+      stuckJobs: [{ ...stuckJob, employer: { ...stuckJob.employer, isVerified: false } }],
+    });
+
+    const result = await service.reconcileStuckJobs();
+
+    expect(jobsService.approveForReview).not.toHaveBeenCalled();
+    expect(emailService.sendJobLiveEmail).not.toHaveBeenCalled();
+    expect(result).toEqual({ checked: 1, approved: 0 });
+  });
+
+  it("skips the email when approveForReview's own CAS finds the job already moved on", async () => {
+    const { service, emailService } = makeService({
+      stuckJobs: [stuckJob],
+      approveForReview: jest.fn().mockResolvedValue(null),
+    });
+
+    const result = await service.reconcileStuckJobs();
+
+    expect(emailService.sendJobLiveEmail).not.toHaveBeenCalled();
+    expect(result).toEqual({ checked: 1, approved: 0 });
+  });
+
+  it("skips a run that starts while a previous one on this instance is still in progress", async () => {
+    let resolveFindStuckPaidJobs!: (jobs: (typeof stuckJob)[]) => void;
+    const billingRepository = {
+      findStuckPaidJobs: jest.fn(
+        () =>
+          new Promise<(typeof stuckJob)[]>((resolve) => {
+            resolveFindStuckPaidJobs = resolve;
+          }),
+      ),
+    };
+    const service = new BillingService(
+      {} as never,
+      billingRepository as never,
+      { sendJobLiveEmail: jest.fn() } as never,
+      { get: jest.fn() } as never,
+      { approveForReview: jest.fn() } as never,
+    );
+
+    const first = service.reconcileStuckJobs();
+    const secondResult = await service.reconcileStuckJobs();
+
+    expect(secondResult).toEqual({ checked: 0, approved: 0 });
+    expect(billingRepository.findStuckPaidJobs).toHaveBeenCalledTimes(1);
+
+    resolveFindStuckPaidJobs([]);
+    await expect(first).resolves.toEqual({ checked: 0, approved: 0 });
+  });
+});

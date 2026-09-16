@@ -4,8 +4,10 @@ import {
   ApiBody,
   ApiCreatedResponse,
   ApiHeader,
+  ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import {
   InternalServerErrorApiResponse,
@@ -81,5 +83,25 @@ export const ApiWebhook = () =>
     }),
     MissingSignatureResponse,
     InvalidSignatureResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiReconcileStuckJobs = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "Cron-triggered reconciliation of stuck paid jobs",
+      description:
+        "Finds jobs that are still PENDING_REVIEW well after planPaid flipped true — the webhook's own idempotency guard means a process crash (or a thrown error) between marking a job paid and its conditional auto-approval leaves it stuck forever with no automatic recovery. Re-evaluates auto-approval eligibility fresh for each and completes it if eligible. Meant for an external scheduler, not browser clients. " +
+        "**Auth**: not JWT — requires the exact header `Authorization: Bearer <CRON_SECRET>`, same as `GET /jobs/cron/expire`.",
+    }),
+    ApiOkResponse({
+      description: "Reconciliation summary",
+      schema: { example: { checked: 1, approved: 1 } },
+    }),
+    ApiUnauthorizedResponse({
+      description:
+        "Missing or incorrect Authorization header (expected `Authorization: Bearer <CRON_SECRET>`)",
+      schema: { example: { error: "Unauthorized" } },
+    }),
     InternalServerErrorApiResponse,
   );

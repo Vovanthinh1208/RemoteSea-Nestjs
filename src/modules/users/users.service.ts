@@ -47,6 +47,26 @@ export class UsersService {
       );
     }
 
+    // Same Restrict-style guard as jobCount above, for the same reason:
+    // CompanyMember/TeamInvitation cascade from EmployerProfile, which
+    // cascades from User — without this check, deleting the account that
+    // created a company with zero job postings but active teammates or
+    // pending invites would silently delete every one of those other users'
+    // seats and invites along with it.
+    const { members, pendingInvitations } =
+      await this.usersRepository.countTeamObligations(userId);
+    if (members > 0 || pendingInvitations > 0) {
+      const parts: string[] = [];
+      if (members > 0) parts.push(`${members} active team member(s)`);
+      if (pendingInvitations > 0) {
+        parts.push(`${pendingInvitations} pending invitation(s)`);
+      }
+      throw new ConflictApiException(
+        `Cannot delete account with ${parts.join(" and ")} — remove them first`,
+        ErrorCode.ACTIVE_TEAM_PREVENTS_DELETION,
+      );
+    }
+
     // Read before the cascade-delete below removes the only DB record of
     // these keys (see findProfileFileUrls); cleanup itself runs after the
     // delete commits, best-effort — bare void is safe here because

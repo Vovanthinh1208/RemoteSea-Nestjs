@@ -204,6 +204,37 @@ export class UsersRepository {
     return this.prisma.job.count({ where: { employer: { userId } } });
   }
 
+  // Same reasoning as countEmployerJobs above, for the same reason
+  // Job.employerId is Restrict: CompanyMember.employer and
+  // TeamInvitation.employer are both ON DELETE CASCADE from EmployerProfile,
+  // which is itself Cascade from User — so deleting the user who *created*
+  // the company (EmployerProfile.userId; always also that same user's own
+  // OWNER CompanyMember row, see EmployerRepository.createProfileForUser)
+  // would otherwise silently delete every other teammate's seat and every
+  // pending invite along with it. Returns zeros for a user with no
+  // EmployerProfile (a TALENT, or an EMPLOYER who only ever joined someone
+  // else's company via a team invite — CompanyMember.userId is @unique, so
+  // that user never owns an EmployerProfile of their own to cascade from).
+  async countTeamObligations(
+    userId: string,
+  ): Promise<{ members: number; pendingInvitations: number }> {
+    const profile = await this.prisma.employerProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!profile) return { members: 0, pendingInvitations: 0 };
+
+    const [members, pendingInvitations] = await Promise.all([
+      this.prisma.companyMember.count({
+        where: { employerId: profile.id, userId: { not: userId } },
+      }),
+      this.prisma.teamInvitation.count({
+        where: { employerId: profile.id, status: "PENDING" },
+      }),
+    ]);
+    return { members, pendingInvitations };
+  }
+
   findPasswordHash(id: string): Promise<Pick<User, "passwordHash"> | null> {
     return this.prisma.user.findUnique({
       where: { id },
