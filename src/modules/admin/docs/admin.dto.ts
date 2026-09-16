@@ -111,7 +111,7 @@ export class ListJobsQueryDto {
     default: "PENDING_REVIEW",
     example: "PENDING_REVIEW",
   })
-  status?: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED";
+  status?: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED" | "EXPIRED";
 
   @ApiPropertyOptional({ minimum: 1, default: 1, example: 1 })
   page?: number;
@@ -153,7 +153,21 @@ export class JobListItemDto {
   slug!: string;
 
   @ApiProperty({ enum: JOB_STATUS_VALUES, example: "PENDING_REVIEW" })
-  status!: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED";
+  status!:
+    | "DRAFT"
+    | "PENDING_REVIEW"
+    | "ACTIVE"
+    | "CLOSED"
+    | "REJECTED"
+    | "EXPIRED";
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: "2026-07-02T09:00:00.000Z",
+    description:
+      "When the job's plan was paid. Always set once a job reaches PENDING_REVIEW — that transition only happens via payment — so the PENDING_REVIEW queue is ordered by this instead of createdAt (time-since-paid, not time-since-drafted).",
+  })
+  paidAt!: string | null;
 
   @ApiProperty({
     type: JobListItemEmployerDto,
@@ -194,7 +208,7 @@ export class ReviewJobResponseDto {
     description:
       "Intentionally partial response — the repository only selects `status` and `publishedAt`, not a full Job object",
   })
-  status!: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED";
+  status!: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED" | "EXPIRED";
 
   @ApiPropertyOptional({ nullable: true, example: "2026-07-02T10:05:00.000Z" })
   publishedAt!: string | null;
@@ -348,7 +362,7 @@ class ReportJobSummaryDto {
   slug!: string;
 
   @ApiProperty({ enum: JOB_STATUS_VALUES, example: "ACTIVE" })
-  status!: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED";
+  status!: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED" | "EXPIRED";
 
   @ApiProperty({ type: ReportJobEmployerDto })
   employer!: ReportJobEmployerDto;

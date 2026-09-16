@@ -584,10 +584,16 @@ model Job {
   // the plain employerId index only covered the filter half, forcing a
   // separate sort on every employer's job-list page.
   @@index([employerId, createdAt])
-  // AdminRepository.findJobs filters status and orders by createdAt asc —
-  // distinct from the publishedAt-ordered indexes above (the moderation
-  // queue sorts oldest-pending-first, not by publish date).
+  // AdminRepository.findJobs filters status and orders by createdAt asc for
+  // every status except PENDING_REVIEW (see the next index) — distinct from
+  // the publishedAt-ordered indexes above (the moderation queue sorts
+  // oldest-first, not by publish date).
   @@index([status, createdAt])
+  // AdminRepository.findJobs orders the PENDING_REVIEW moderation queue by
+  // paidAt specifically, not createdAt — PENDING_REVIEW is only ever reached
+  // via payment (BillingRepository.markJobPaidAndSubmitted), so "how long
+  // has this been waiting on us" is time-since-paid, not time-since-drafted.
+  @@index([status, paidAt])
   @@index([planPaid, paidAt])
   // Covers GET /jobs?country=... and the timezone-bucket filters (job-search.util.ts's
   // tzCondition) — country equality combined with the status filter every search

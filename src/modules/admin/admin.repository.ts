@@ -1,5 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import type { EmployerProfile, Job, JobStatus, PlanType } from "@prisma/client";
+import type {
+  EmployerProfile,
+  Job,
+  JobStatus,
+  PlanType,
+} from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 
 type EmployerListItem = Pick<
@@ -17,7 +23,6 @@ type JobListItem = Omit<
   | "reviewNote"
   | "responsibilities"
   | "applicationUrl"
-  | "paidAt"
   | "rejectedAt"
 > & {
   employer: { companyName: string; isVerified: boolean; slug: string };
@@ -86,12 +91,26 @@ export class AdminRepository {
     skip: number,
     take: number,
   ): Promise<[JobListItem[], number]> {
+    // The PENDING_REVIEW queue is a moderation queue, and PENDING_REVIEW is
+    // only ever reached via payment (BillingRepository.markJobPaidAndSubmitted
+    // — see the enum-values audit trail), so paidAt is always set here.
+    // createdAt (first drafted) is the wrong signal for "how long has this
+    // been waiting on us": a job drafted weeks ago but only paid and
+    // submitted today would sort as if it were the oldest thing in the
+    // queue, while one paid weeks ago would sort as if brand new. Every
+    // other status view keeps createdAt, where paidAt may be null (DRAFT)
+    // or just isn't the meaningful ordering (ACTIVE/REJECTED/EXPIRED).
+    const orderBy: Prisma.JobOrderByWithRelationInput =
+      where.status === "PENDING_REVIEW"
+        ? { paidAt: "asc" }
+        : { createdAt: "asc" };
+
     const [jobs, total] = await Promise.all([
       this.prisma.job.findMany({
         where,
         skip,
         take,
-        orderBy: { createdAt: "asc" },
+        orderBy,
         select: {
           id: true,
           employerId: true,
@@ -110,6 +129,7 @@ export class AdminRepository {
           status: true,
           planType: true,
           planPaid: true,
+          paidAt: true,
           benefits: true,
           vnHireCount: true,
           isFeatured: true,
