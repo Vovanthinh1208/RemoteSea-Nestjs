@@ -111,7 +111,8 @@ export class ListJobsQueryDto {
     default: "PENDING_REVIEW",
     example: "PENDING_REVIEW",
   })
-  status?: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED" | "EXPIRED";
+  status?:
+    "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED" | "EXPIRED";
 
   @ApiPropertyOptional({ minimum: 1, default: 1, example: 1 })
   page?: number;
@@ -154,12 +155,7 @@ export class JobListItemDto {
 
   @ApiProperty({ enum: JOB_STATUS_VALUES, example: "PENDING_REVIEW" })
   status!:
-    | "DRAFT"
-    | "PENDING_REVIEW"
-    | "ACTIVE"
-    | "CLOSED"
-    | "REJECTED"
-    | "EXPIRED";
+    "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED" | "EXPIRED";
 
   @ApiPropertyOptional({
     nullable: true,
@@ -208,7 +204,8 @@ export class ReviewJobResponseDto {
     description:
       "Intentionally partial response — the repository only selects `status` and `publishedAt`, not a full Job object",
   })
-  status!: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED" | "EXPIRED";
+  status!:
+    "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED" | "EXPIRED";
 
   @ApiPropertyOptional({ nullable: true, example: "2026-07-02T10:05:00.000Z" })
   publishedAt!: string | null;
@@ -362,7 +359,8 @@ class ReportJobSummaryDto {
   slug!: string;
 
   @ApiProperty({ enum: JOB_STATUS_VALUES, example: "ACTIVE" })
-  status!: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED" | "EXPIRED";
+  status!:
+    "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSED" | "REJECTED" | "EXPIRED";
 
   @ApiProperty({ type: ReportJobEmployerDto })
   employer!: ReportJobEmployerDto;

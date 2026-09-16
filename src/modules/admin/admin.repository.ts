@@ -1,10 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type {
-  EmployerProfile,
-  Job,
-  JobStatus,
-  PlanType,
-} from "@prisma/client";
+import type { EmployerProfile, Job, JobStatus, PlanType } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 
