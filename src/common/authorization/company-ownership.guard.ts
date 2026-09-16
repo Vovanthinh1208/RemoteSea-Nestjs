@@ -93,10 +93,23 @@ export abstract class CompanyOwnershipGuardBase<T> implements CanActivate {
     const companyId = this.getCompanyId(resource);
     const membership = await this.prisma.companyMember.findUnique({
       where: { userId: request.user.id },
-      select: { employerId: true, role: true },
+      select: {
+        employerId: true,
+        role: true,
+        employer: { select: { suspendedAt: true } },
+      },
     });
 
     const isSameCompany = membership?.employerId === companyId;
+    // Checked ahead of role/assignment below — a suspended company's own
+    // assigned INTERVIEWER shouldn't retain access just because they're not
+    // gated by allowedRoles the same way OWNER/RECRUITER/HIRING_MANAGER are.
+    if (isSameCompany && membership.employer.suspendedAt) {
+      throw new ForbiddenApiException(
+        "Your company's account has been suspended. Contact support for help.",
+        ErrorCode.COMPANY_SUSPENDED,
+      );
+    }
     const hasBaselineAccess =
       isSameCompany && this.allowedRoles.includes(membership.role);
     const isAssigned =
@@ -113,7 +126,16 @@ export abstract class CompanyOwnershipGuardBase<T> implements CanActivate {
     }
 
     request[OWNED_RESOURCE_REQUEST_KEY] = resource;
-    if (membership) request[COMPANY_MEMBERSHIP_REQUEST_KEY] = membership;
+    if (membership) {
+      // Reaching here means the suspension check above already passed (it
+      // throws otherwise), so this is always null — flattened to match
+      // CompanyMembership's shape for CurrentCompanyMembership consumers.
+      request[COMPANY_MEMBERSHIP_REQUEST_KEY] = {
+        employerId: membership.employerId,
+        role: membership.role,
+        suspendedAt: membership.employer.suspendedAt,
+      };
+    }
     return true;
   }
 }

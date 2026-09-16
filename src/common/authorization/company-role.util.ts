@@ -50,6 +50,15 @@ export const requireCompanyRole = (
       ErrorCode.COMPANY_MEMBERSHIP_REQUIRED,
     );
   }
+  // Checked before the role check below — a suspended OWNER should see
+  // "your company was suspended," not a role-specific message that implies
+  // a different seat on the same company would still work.
+  if (membership.suspendedAt) {
+    throw new ForbiddenApiException(
+      "Your company's account has been suspended. Contact support for help.",
+      ErrorCode.COMPANY_SUSPENDED,
+    );
+  }
   if (!allowedRoles.includes(membership.role)) {
     throw new ForbiddenApiException(
       forbiddenMessage,

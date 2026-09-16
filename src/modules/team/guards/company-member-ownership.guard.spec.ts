@@ -14,10 +14,20 @@ const makeContext = (
 
 const makeGuard = (
   targetMember: unknown,
-  callerMembership: { employerId: string; role: string } | null,
+  callerMembership: {
+    employerId: string;
+    role: string;
+    suspendedAt?: Date | null;
+  } | null,
 ) => {
   const findMemberById = jest.fn().mockResolvedValue(targetMember);
-  const findUnique = jest.fn().mockResolvedValue(callerMembership);
+  const findUnique = jest.fn().mockResolvedValue(
+    callerMembership && {
+      employerId: callerMembership.employerId,
+      role: callerMembership.role,
+      employer: { suspendedAt: callerMembership.suspendedAt ?? null },
+    },
+  );
   const prisma = {
     companyMember: { findUnique },
   } as unknown as PrismaService;

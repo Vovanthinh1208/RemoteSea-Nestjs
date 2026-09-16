@@ -14,10 +14,20 @@ const makeContext = (
 
 const makeGuard = (
   job: unknown,
-  membership: { employerId: string; role: string } | null,
+  membership: {
+    employerId: string;
+    role: string;
+    suspendedAt?: Date | null;
+  } | null,
 ) => {
   const findById = jest.fn().mockResolvedValue(job);
-  const findUnique = jest.fn().mockResolvedValue(membership);
+  const findUnique = jest.fn().mockResolvedValue(
+    membership && {
+      employerId: membership.employerId,
+      role: membership.role,
+      employer: { suspendedAt: membership.suspendedAt ?? null },
+    },
+  );
   const prisma = {
     companyMember: { findUnique },
   } as unknown as PrismaService;
@@ -68,5 +78,34 @@ describe("JobOwnershipGuard", () => {
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
       ForbiddenApiException,
     );
+  });
+
+  // CompanyOwnershipGuardBase's suspension check — covers every subclass
+  // (job/employer-job/application/company-member/job-payer ownership), only
+  // exercised here to avoid duplicating the same base-class test five times.
+  it("forbids an OWNER of a suspended company, even though OWNER is normally allowed", async () => {
+    const guard = makeGuard(job, {
+      employerId: "company-1",
+      role: "OWNER",
+      suspendedAt: new Date(),
+    });
+
+    const context = makeContext({ id: "owner-1", role: "EMPLOYER" });
+    const error = await guard.canActivate(context).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ForbiddenApiException);
+    expect((error as ForbiddenApiException).getResponse()).toMatchObject({
+      code: "COMPANY_SUSPENDED",
+    });
+  });
+
+  it("still allows ADMIN to access a job at a suspended company", async () => {
+    const guard = makeGuard(job, {
+      employerId: "company-1",
+      role: "OWNER",
+      suspendedAt: new Date(),
+    });
+
+    const context = makeContext({ id: "admin-1", role: "ADMIN" });
+    await expect(guard.canActivate(context)).resolves.toBe(true);
   });
 });

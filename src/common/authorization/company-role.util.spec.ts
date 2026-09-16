@@ -16,7 +16,7 @@ describe("hasCompanyRole", () => {
   it("is false when the membership's role isn't in the allowed set", () => {
     expect(
       hasCompanyRole(
-        { employerId: "c1", role: "INTERVIEWER" },
+        { employerId: "c1", role: "INTERVIEWER", suspendedAt: null },
         JOB_MANAGEMENT_ROLES,
       ),
     ).toBe(false);
@@ -25,7 +25,7 @@ describe("hasCompanyRole", () => {
   it("is true when the membership's role is in the allowed set", () => {
     expect(
       hasCompanyRole(
-        { employerId: "c1", role: "HIRING_MANAGER" },
+        { employerId: "c1", role: "HIRING_MANAGER", suspendedAt: null },
         APPLICATION_REVIEW_ROLES,
       ),
     ).toBe(true);
@@ -53,7 +53,7 @@ describe("requireCompanyRole", () => {
     const error = (() => {
       try {
         requireCompanyRole(
-          { employerId: "c1", role: "INTERVIEWER" },
+          { employerId: "c1", role: "INTERVIEWER", suspendedAt: null },
           JOB_MANAGEMENT_ROLES,
         );
         return undefined;
@@ -68,8 +68,33 @@ describe("requireCompanyRole", () => {
     });
   });
 
+  // Checked ahead of the role check above — a suspended OWNER must not slip
+  // through just because OWNER is in every allowed-roles set.
+  it("throws COMPANY_SUSPENDED before the role check, even for an OWNER", () => {
+    const error = (() => {
+      try {
+        requireCompanyRole(
+          { employerId: "c1", role: "OWNER", suspendedAt: new Date() },
+          OWNER_ONLY,
+        );
+        return undefined;
+      } catch (e) {
+        return e;
+      }
+    })();
+
+    expect(error).toBeInstanceOf(ForbiddenApiException);
+    expect((error as ForbiddenApiException).getResponse()).toMatchObject({
+      code: ErrorCode.COMPANY_SUSPENDED,
+    });
+  });
+
   it("returns the membership unchanged when the role is allowed", () => {
-    const membership = { employerId: "c1", role: "RECRUITER" } as const;
+    const membership = {
+      employerId: "c1",
+      role: "RECRUITER",
+      suspendedAt: null,
+    } as const;
     expect(requireCompanyRole(membership, JOB_MANAGEMENT_ROLES)).toBe(
       membership,
     );

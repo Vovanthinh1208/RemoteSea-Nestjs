@@ -230,8 +230,16 @@ export class EmployerRepository {
       where: { id },
       // Only stamps verifiedAt when actually becoming verified — the
       // suspend() path below is the one dedicated route to isVerified=false
-      // today, and it stamps its own suspendedAt instead.
-      data: { isVerified, ...(isVerified && { verifiedAt: new Date() }) },
+      // today, and it stamps its own suspendedAt instead. Re-verifying also
+      // clears suspendedAt: "verify" is the only admin action that flips
+      // isVerified back to true, so it has to double as "un-suspend" too —
+      // suspendedAt now actually gates every company-role guard/check
+      // (CompanyOwnershipGuardBase, requireCompanyRole), so leaving it set
+      // here would make a suspension permanent with no way to lift it.
+      data: {
+        isVerified,
+        ...(isVerified && { verifiedAt: new Date(), suspendedAt: null }),
+      },
     });
   }
 

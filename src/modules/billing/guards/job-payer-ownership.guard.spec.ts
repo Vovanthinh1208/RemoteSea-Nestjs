@@ -14,10 +14,20 @@ const makeContext = (
 
 const makeGuard = (
   job: unknown,
-  membership: { employerId: string; role: string } | null,
+  membership: {
+    employerId: string;
+    role: string;
+    suspendedAt?: Date | null;
+  } | null,
 ) => {
   const findJobWithEmployer = jest.fn().mockResolvedValue(job);
-  const findUnique = jest.fn().mockResolvedValue(membership);
+  const findUnique = jest.fn().mockResolvedValue(
+    membership && {
+      employerId: membership.employerId,
+      role: membership.role,
+      employer: { suspendedAt: membership.suspendedAt ?? null },
+    },
+  );
   const prisma = {
     companyMember: { findUnique },
   } as unknown as PrismaService;
@@ -33,9 +43,11 @@ describe("JobPayerOwnershipGuard", () => {
     const findJobWithEmployer = jest.fn().mockResolvedValue(job);
     const prisma = {
       companyMember: {
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({ employerId: "company-1", role: "OWNER" }),
+        findUnique: jest.fn().mockResolvedValue({
+          employerId: "company-1",
+          role: "OWNER",
+          employer: { suspendedAt: null },
+        }),
       },
     } as unknown as PrismaService;
     const guard = new JobPayerOwnershipGuard(prisma, {
@@ -75,5 +87,23 @@ describe("JobPayerOwnershipGuard", () => {
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
       NotFoundApiException,
     );
+  });
+
+  it("blocks checkout for the OWNER of a suspended company, with a clear reason (not the existence-hiding NotFound)", async () => {
+    const guard = makeGuard(job, {
+      employerId: "company-1",
+      role: "OWNER",
+      suspendedAt: new Date(),
+    });
+
+    const context = makeContext(
+      { id: "owner-1", role: "EMPLOYER" },
+      { jobId: "job-1" },
+    );
+    const error = await guard.canActivate(context).catch((e: unknown) => e);
+    expect(error).not.toBeInstanceOf(NotFoundApiException);
+    expect((error as { getResponse: () => unknown }).getResponse()).toMatchObject({
+      code: "COMPANY_SUSPENDED",
+    });
   });
 });

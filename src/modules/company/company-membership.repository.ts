@@ -6,10 +6,20 @@ import type { CompanyMembership } from "./company-membership.interfaces";
 export class CompanyMembershipRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findMembership(userId: string): Promise<CompanyMembership | null> {
-    return this.prisma.companyMember.findUnique({
+  async findMembership(userId: string): Promise<CompanyMembership | null> {
+    const row = await this.prisma.companyMember.findUnique({
       where: { userId },
-      select: { employerId: true, role: true },
+      select: {
+        employerId: true,
+        role: true,
+        employer: { select: { suspendedAt: true } },
+      },
     });
+    if (!row) return null;
+    return {
+      employerId: row.employerId,
+      role: row.role,
+      suspendedAt: row.employer.suspendedAt,
+    };
   }
 }

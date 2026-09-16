@@ -19,6 +19,7 @@ import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.i
 import { CompanyMembershipService } from "@/modules/company/company-membership.service";
 import type { CompanyMembership } from "@/modules/company/company-membership.interfaces";
 import {
+  ALL_COMPANY_ROLES,
   OWNER_ONLY,
   requireCompanyRole,
 } from "@/common/authorization/company-role.util";
@@ -44,14 +45,17 @@ export class TeamService {
   }
 
   async listMembers(userId: string): Promise<TeamMember[]> {
-    const membership =
+    const rawMembership =
       await this.companyMembershipService.resolveMembership(userId);
-    if (!membership) {
-      throw new ForbiddenApiException(
-        "Company membership required",
-        ErrorCode.COMPANY_MEMBERSHIP_REQUIRED,
-      );
-    }
+    // ALL_COMPANY_ROLES, not a real role restriction (every seat may view the
+    // roster) — routed through requireCompanyRole instead of a bare
+    // null-check so a suspended company's own members lose this too, same as
+    // requireOwner's other team-management calls below.
+    const membership = requireCompanyRole(
+      rawMembership,
+      ALL_COMPANY_ROLES,
+      "Your role doesn't allow viewing the team",
+    );
     return this.teamRepository.findMembersByCompany(membership.employerId);
   }
 
