@@ -249,7 +249,10 @@ export class ApplicationsService {
   // updateApplication, but with a fixed target status (WITHDRAWN) and its
   // own eligibility rule (WITHDRAWABLE_STATUSES) instead of the employer's
   // ALLOWED_TRANSITIONS table.
-  async withdraw(userId: string, applicationId: string): Promise<OwnApplication> {
+  async withdraw(
+    userId: string,
+    applicationId: string,
+  ): Promise<OwnApplication> {
     const talent =
       await this.applicationsRepository.findTalentIdByUserId(userId);
     if (!talent) {
@@ -365,9 +368,7 @@ export class ApplicationsService {
           userId: parties.job.employer.userId,
           type: status,
           title:
-            status === "OFFER_ACCEPTED"
-              ? "Offer accepted!"
-              : "Offer declined",
+            status === "OFFER_ACCEPTED" ? "Offer accepted!" : "Offer declined",
           body:
             status === "OFFER_ACCEPTED"
               ? `${talentName} accepted your offer for ${parties.job.title}.`

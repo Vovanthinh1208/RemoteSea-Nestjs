@@ -98,9 +98,7 @@ export class AlertsService {
     const digestEnabled =
       alert.frequency === "WEEKLY"
         ? await this.alertsRepository.weeklyDigestEnabled(alert.userId)
-        : await this.alertsRepository.instantMatchAlertsEnabled(
-            alert.userId,
-          );
+        : await this.alertsRepository.instantMatchAlertsEnabled(alert.userId);
     if (!digestEnabled) {
       return false;
     }

@@ -13,7 +13,9 @@ const makeService = (
 ) => {
   const repo = { ...repoOverrides } as unknown as ApplicationsRepository;
   const email = { ...emailOverrides } as unknown as EmailService;
-  const notifications = { create: jest.fn() } as unknown as NotificationsService;
+  const notifications = {
+    create: jest.fn(),
+  } as unknown as NotificationsService;
   return new ApplicationsService(repo, email, notifications, {} as never);
 };
 
