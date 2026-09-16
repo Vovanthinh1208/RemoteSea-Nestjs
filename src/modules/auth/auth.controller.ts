@@ -174,10 +174,17 @@ export class AuthController {
   @Post("2fa/verify")
   @UseGuards(JwtAuthGuard)
   async verifyTwoFactorSetup(
+    @Req() req: Request,
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(verifyTwoFactorSetupSchema))
     body: VerifyTwoFactorSetupDto,
   ) {
+    this.rateLimitService.enforce(
+      `2fa-verify:${user.id}`,
+      RATE_LIMITS.TWO_FACTOR_VERIFY.limit,
+      RATE_LIMITS.TWO_FACTOR_VERIFY.windowMs,
+      req,
+    );
     return this.authService.verifyTwoFactorSetup(user.id, body.token);
   }
 
@@ -185,10 +192,17 @@ export class AuthController {
   @Post("2fa/disable")
   @UseGuards(JwtAuthGuard)
   async disableTwoFactor(
+    @Req() req: Request,
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(disableTwoFactorSchema))
     body: DisableTwoFactorDto,
   ) {
+    this.rateLimitService.enforce(
+      `2fa-disable:${user.id}`,
+      RATE_LIMITS.TWO_FACTOR_DISABLE.limit,
+      RATE_LIMITS.TWO_FACTOR_DISABLE.windowMs,
+      req,
+    );
     await this.authService.disableTwoFactor(user.id, body.password);
     return { message: "Two-factor authentication disabled" };
   }

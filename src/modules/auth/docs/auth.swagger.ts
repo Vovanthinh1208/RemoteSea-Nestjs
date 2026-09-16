@@ -197,6 +197,7 @@ export const ApiVerifyTwoFactorSetup = () =>
     TwoFactorSetupRequiredResponse,
     InvalidTwoFactorCodeResponse,
     UnauthorizedApiResponse,
+    rateLimitResponse("10 req/5min per user"),
     InternalServerErrorApiResponse,
   );
 
@@ -219,6 +220,7 @@ export const ApiDisableTwoFactor = () =>
     ValidationErrorResponse,
     IncorrectPasswordResponse,
     UnauthorizedApiResponse,
+    rateLimitResponse("5 req/5min per user"),
     InternalServerErrorApiResponse,
   );
 
