@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Patch,
@@ -54,6 +55,11 @@ import {
   createScorecardSchema,
   type CreateScorecardDto,
 } from "@/modules/scorecards/dto/create-scorecard.dto";
+import {
+  createCommentSchema,
+  type CreateCommentDto,
+} from "@/modules/comments/dto/create-comment.dto";
+import { RATE_LIMITS as COMMENT_RATE_LIMITS } from "@/modules/comments/constants";
 import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
@@ -77,6 +83,7 @@ import {
   ApiConfirmVerification,
   ApiCreateEmployerProfile,
   ApiEmployerTag,
+  ApiExportJobApplicants,
   ApiGetEmployerProfile,
   ApiGetHiringFunnel,
   ApiListEmployerJobs,
@@ -87,6 +94,10 @@ import {
   ApiUpdateEmployerProfile,
 } from "./docs/employer.swagger";
 import {
+  ApiCreateComment,
+  ApiListComments,
+} from "@/modules/comments/docs/comments.swagger";
+import {
   ApiListMessages,
   ApiSendMessage,
 } from "@/modules/messages/docs/messages.swagger";
@@ -94,6 +105,7 @@ import { RATE_LIMITS as MESSAGE_RATE_LIMITS } from "@/modules/messages/constants
 import {
   ApiCancelInterview,
   ApiGetInterview,
+  ApiGetInterviewIcs,
   ApiListUpcomingInterviews,
   ApiProposeInterview,
 } from "@/modules/interviews/docs/interviews.swagger";
@@ -184,6 +196,16 @@ export class EmployerController {
     query: ListJobApplicationsDto,
   ) {
     return this.employerService.listJobApplications(job.id, query);
+  }
+
+  @ApiExportJobApplicants()
+  @Get("jobs/:id/applications/export")
+  @UseGuards(JwtAuthGuard, RolesGuard, EmployerJobOwnershipGuard)
+  @Roles("EMPLOYER")
+  @Header("Content-Type", "text/csv; charset=utf-8")
+  @Header("Content-Disposition", 'attachment; filename="applicants.csv"')
+  async exportJobApplicants(@CurrentResource() job: JobOwnerOnly) {
+    return this.employerService.exportJobApplicantsCsv(job.id);
   }
 
   // Static route, registered ahead of the dynamic ones below for the same
@@ -288,6 +310,18 @@ export class EmployerController {
     return this.employerService.getApplicationInterview(application);
   }
 
+  @ApiGetInterviewIcs()
+  @Get("applications/:id/interview/ics")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
+  @Roles("EMPLOYER")
+  @Header("Content-Type", "text/calendar; charset=utf-8")
+  @Header("Content-Disposition", 'attachment; filename="interview.ics"')
+  getApplicationInterviewIcs(
+    @CurrentResource() application: ApplicationWithJobOwner,
+  ) {
+    return this.employerService.getApplicationInterviewIcs(application);
+  }
+
   @ApiProposeInterview()
   @Post("applications/:id/interview")
   @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
@@ -371,6 +405,41 @@ export class EmployerController {
       SCORECARD_RATE_LIMITS.CREATE_SCORECARD.windowMs,
     );
     return this.employerService.submitApplicationScorecard(
+      application,
+      user.id,
+      body,
+    );
+  }
+
+  // ApplicationAccessGuard, same access as the scorecard routes above —
+  // internal discussion is open to any team member with access to this
+  // application, not just review-tier roles.
+  @ApiListComments()
+  @Get("applications/:id/comments")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
+  @Roles("EMPLOYER")
+  listApplicationComments(
+    @CurrentResource() application: ApplicationWithJobOwner,
+  ) {
+    return this.employerService.listApplicationComments(application);
+  }
+
+  @ApiCreateComment()
+  @Post("applications/:id/comments")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
+  @Roles("EMPLOYER")
+  @HttpCode(HttpStatus.CREATED)
+  addApplicationComment(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentResource() application: ApplicationWithJobOwner,
+    @Body(new ZodValidationPipe(createCommentSchema)) body: CreateCommentDto,
+  ) {
+    this.rateLimitService.enforce(
+      `add-comment:${user.id}`,
+      COMMENT_RATE_LIMITS.CREATE_COMMENT.limit,
+      COMMENT_RATE_LIMITS.CREATE_COMMENT.windowMs,
+    );
+    return this.employerService.addApplicationComment(
       application,
       user.id,
       body,

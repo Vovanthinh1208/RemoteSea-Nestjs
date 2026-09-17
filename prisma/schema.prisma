@@ -165,6 +165,7 @@ model User {
   teamInvitationsSent    TeamInvitation[]        @relation("TeamInvitationsSent")
   assignedInterviews     Interview[]             @relation("AssignedInterviews")
   scorecardsWritten      InterviewScorecard[]
+  applicationComments    ApplicationComment[]
 
   @@map("users")
 }
@@ -697,6 +698,7 @@ model Application {
   interview    Interview?
   reviews      Review[]
   scorecards   InterviewScorecard[]
+  comments     ApplicationComment[]
   cvAnalysis   CvAnalysis?
 
   @@unique([jobId, talentId])
@@ -1034,6 +1036,31 @@ model InterviewScorecard {
   @@unique([authorId, applicationId])
   @@index([applicationId])
   @@map("interview_scorecards")
+}
+
+// Internal candidate discussion thread — a company's own team members
+// (any APPLICATION_REVIEW_ROLES seat, or an assigned INTERVIEWER, same
+// access as InterviewScorecard above) leaving notes on an application for
+// each other. Never surfaced to the talent — there is no talent-facing
+// route anywhere that reads this table. Append-only: no update/delete
+// endpoint, deliberately, the same way ApplicationStatusEvent is a log, not
+// an editable record — a discussion thread should read as what was
+// actually said in order, not something anyone can quietly rewrite after
+// the fact. Unlike InterviewScorecard there's no @@unique on
+// (authorId, applicationId): this is a real multi-comment thread, not a
+// one-verdict-per-person form.
+model ApplicationComment {
+  id            String   @id @default(cuid())
+  applicationId String
+  authorId      String
+  body          String   @db.Text
+  createdAt     DateTime @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  author      User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+  @@map("application_comments")
 }
 
 // AI-generated CV fit analysis, cached 1:1 with Application — see

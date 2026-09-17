@@ -413,6 +413,13 @@ const expectations: ControllerExpectation[] = [
         roles: ["EMPLOYER"],
       },
       {
+        method: "exportJobApplicants",
+        httpMethod: "GET",
+        path: "jobs/:id/applications/export",
+        guards: ["JwtAuthGuard", "RolesGuard", "EmployerJobOwnershipGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
         method: "bulkUpdateApplications",
         httpMethod: "PATCH",
         path: "applications/bulk",
@@ -448,6 +455,13 @@ const expectations: ControllerExpectation[] = [
         roles: ["EMPLOYER"],
       },
       {
+        method: "getApplicationInterviewIcs",
+        httpMethod: "GET",
+        path: "applications/:id/interview/ics",
+        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationAccessGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
         method: "proposeInterview",
         httpMethod: "POST",
         path: "applications/:id/interview",
@@ -479,6 +493,20 @@ const expectations: ControllerExpectation[] = [
         method: "submitApplicationScorecard",
         httpMethod: "POST",
         path: "applications/:id/scorecards",
+        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationAccessGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
+        method: "listApplicationComments",
+        httpMethod: "GET",
+        path: "applications/:id/comments",
+        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationAccessGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
+        method: "addApplicationComment",
+        httpMethod: "POST",
+        path: "applications/:id/comments",
         guards: ["JwtAuthGuard", "RolesGuard", "ApplicationAccessGuard"],
         roles: ["EMPLOYER"],
       },

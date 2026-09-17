@@ -10,6 +10,7 @@ import type {
 import type { ProposeInterviewDto } from "./dto/propose-interview.dto";
 import type { ConfirmInterviewDto } from "./dto/confirm-interview.dto";
 import { isInterviewComplete } from "./interview-eligibility.util";
+import { buildInterviewIcs } from "./ics.util";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { runInBackground } from "@/common/utils/background-task.util";
 import {
@@ -97,6 +98,38 @@ export class InterviewsService {
       employerName: parties.job.employer.companyName,
       talentName: parties.talent.user.name,
     };
+  }
+
+  // Backs GET .../interview/ics on both the talent and employer sides
+  // (same underlying data as get() above, reused rather than re-queried).
+  // Only ever callable once the interview is actually CONFIRMED — there's
+  // nothing meaningful to put on a calendar before a slot exists.
+  async getIcsFile(parties: ApplicationParties): Promise<string> {
+    const header = await this.get(parties);
+    if (!header.interview) {
+      throw new NotFoundApiException(
+        "No interview exists for this application",
+        ErrorCode.INTERVIEW_NOT_FOUND,
+      );
+    }
+    if (
+      header.interview.status !== "CONFIRMED" ||
+      !header.interview.confirmedSlot
+    ) {
+      throw new BadRequestApiException(
+        "This interview doesn't have a confirmed time yet",
+        ErrorCode.INTERVIEW_NOT_CONFIRMED,
+      );
+    }
+    return buildInterviewIcs({
+      interviewId: header.interview.id,
+      jobTitle: header.jobTitle,
+      employerName: header.employerName,
+      talentName: header.talentName,
+      confirmedSlot: header.interview.confirmedSlot,
+      durationMinutes: header.interview.durationMinutes,
+      meetingUrl: header.interview.meetingUrl,
+    });
   }
 
   async propose(parties: ApplicationParties, dto: ProposeInterviewDto) {

@@ -26,6 +26,7 @@ import type { BulkUpdateApplicationsDto } from "./dto/bulk-update-applications.d
 import type { SubmitVerificationDto } from "./dto/submit-verification.dto";
 import type { ConfirmVerificationDto } from "./dto/confirm-verification.dto";
 import { domainMatches } from "./verification.util";
+import { buildApplicantsCsv } from "./applicant-csv.util";
 import { slugify, withUniqueSuffix } from "@/common/utils/slugify";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 import { assertFound } from "@/common/utils/assert-found";
@@ -39,6 +40,8 @@ import type { SendMessageDto } from "@/modules/messages/dto/send-message.dto";
 import { InterviewsService } from "@/modules/interviews/interviews.service";
 import type { ProposeInterviewDto } from "@/modules/interviews/dto/propose-interview.dto";
 import { ScorecardsService } from "@/modules/scorecards/scorecards.service";
+import { CommentsService } from "@/modules/comments/comments.service";
+import type { CreateCommentDto } from "@/modules/comments/dto/create-comment.dto";
 import type { CreateScorecardDto } from "@/modules/scorecards/dto/create-scorecard.dto";
 import { CvAnalysisService } from "@/modules/cv-analysis/cv-analysis.service";
 import { runInBackground } from "@/common/utils/background-task.util";
@@ -65,6 +68,10 @@ import { buildHiringFunnel } from "./funnel.util";
 // showing a misleadingly precise number.
 const MIN_RESPONDED_APPLICATIONS_FOR_PUBLIC_STAT = 3;
 const PUBLIC_RESPONSE_STATS_CACHE_TTL_MS = 300_000;
+// High enough that no single job's applicant pool realistically exceeds it
+// — a CSV export has no real pagination UX, so this is a safety cap, not a
+// page size.
+const APPLICANTS_CSV_EXPORT_CAP = 5000;
 
 @Injectable()
 export class EmployerService {
@@ -79,6 +86,7 @@ export class EmployerService {
     private readonly messagesService: MessagesService,
     private readonly interviewsService: InterviewsService,
     private readonly scorecardsService: ScorecardsService,
+    private readonly commentsService: CommentsService,
     private readonly cvAnalysisService: CvAnalysisService,
     private readonly companyMembershipService: CompanyMembershipService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
@@ -408,6 +416,22 @@ export class EmployerService {
     };
   }
 
+  // CSV export of every applicant for one job — the same select
+  // listJobApplications already uses (findApplicationsForJob), just with no
+  // status filter and a cap high enough that "paginated" never matters in
+  // practice for a single job's applicant pool.
+  async exportJobApplicantsCsv(jobId: string): Promise<string> {
+    const { applications } =
+      await this.employerRepository.findApplicationsForJob(
+        jobId,
+        undefined,
+        0,
+        APPLICANTS_CSV_EXPORT_CAP,
+      );
+    const frontendUrl = this.config.get("FRONTEND_URL", { infer: true });
+    return buildApplicantsCsv(applications, frontendUrl);
+  }
+
   // Backs the dashboard's "Recent applicants" panel — replaces what used to
   // be one listJobApplications() call per job (fired client-side via
   // useQueries) with the single company-wide query this delegates to. Same
@@ -638,6 +662,10 @@ export class EmployerService {
     return this.interviewsService.get(application);
   }
 
+  getApplicationInterviewIcs(application: ApplicationWithJobOwner) {
+    return this.interviewsService.getIcsFile(application);
+  }
+
   // Company-wide, not per-application — open to any seat (ALL_COMPANY_ROLES),
   // unlike the per-application interview routes above, which are gated by
   // ApplicationOwnershipGuard/ApplicationAccessGuard on APPLICATION_REVIEW_ROLES
@@ -678,5 +706,17 @@ export class EmployerService {
     dto: CreateScorecardDto,
   ) {
     return this.scorecardsService.create(application.id, authorId, dto);
+  }
+
+  listApplicationComments(application: ApplicationWithJobOwner) {
+    return this.commentsService.list(application.id);
+  }
+
+  addApplicationComment(
+    application: ApplicationWithJobOwner,
+    authorId: string,
+    dto: CreateCommentDto,
+  ) {
+    return this.commentsService.create(application.id, authorId, dto);
   }
 }

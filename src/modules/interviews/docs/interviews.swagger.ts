@@ -32,6 +32,7 @@ import {
   ApplicationAccessDeniedResponse,
   ApplicationNotFoundResponse,
   InterviewAlreadyConfirmedResponse,
+  InterviewNotConfirmedResponse,
   InterviewNotFoundResponse,
   InvalidSlotResponse,
   NotAtInterviewStageResponse,
@@ -54,6 +55,28 @@ export const ApiGetInterview = () =>
       type: InterviewWithHeaderResponseDto,
       schema: { example: InterviewWithHeaderExample },
     }),
+    ApplicationNotFoundResponse,
+    ApplicationAccessDeniedResponse,
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiGetInterviewIcs = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Download a .ics calendar file for a confirmed interview",
+      description:
+        "Only available once the interview is CONFIRMED. Returns a raw text/calendar body (not JSON) with a stable per-interview UID, so re-downloading after a reschedule updates the same calendar entry in any RFC 5545-compliant calendar app rather than creating a duplicate.",
+    }),
+    ApiParam({ name: "id", description: "Application id" }),
+    ApiOkResponse({
+      description: "RFC 5545 .ics file",
+      content: { "text/calendar": { schema: { type: "string" } } },
+    }),
+    InterviewNotFoundResponse,
+    InterviewNotConfirmedResponse,
     ApplicationNotFoundResponse,
     ApplicationAccessDeniedResponse,
     UnauthorizedApiResponse,

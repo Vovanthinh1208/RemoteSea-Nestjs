@@ -197,6 +197,29 @@ export const ApiListJobApplications = () =>
     InternalServerErrorApiResponse,
   );
 
+export const ApiExportJobApplicants = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Export every applicant for a job as CSV",
+      description:
+        "Same underlying data as GET .../applications (no status filter, no pagination — capped at 5000 rows). Returns a raw text/csv body (not JSON), RFC 4180 quoted, CRLF line endings. Requires the EMPLOYER role; company membership and role are enforced by EmployerJobOwnershipGuard, same as the list endpoint.",
+    }),
+    ApiParam({
+      name: "id",
+      description: "Job id",
+      example: "cljob1a2b3c4d5e6f7g8h9i0",
+    }),
+    ApiOkResponse({
+      description: "RFC 4180 CSV file",
+      content: { "text/csv": { schema: { type: "string" } } },
+    }),
+    UnauthorizedApiResponse,
+    NotOwningEmployerResponse,
+    JobNotFoundResponse,
+    InternalServerErrorApiResponse,
+  );
+
 export const ApiListRecentApplications = () =>
   applyDecorators(
     ApiBearerAuth("bearer"),

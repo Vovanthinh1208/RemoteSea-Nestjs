@@ -54,3 +54,10 @@ export const InterviewAlreadyConfirmedResponse = ApiConflictResponse({
     "The interview is already confirmed and can no longer be revised",
   schema: { example: { error: "This interview is already confirmed" } },
 });
+
+export const InterviewNotConfirmedResponse = ApiBadRequestResponse({
+  description: "The interview doesn't have a confirmed time yet",
+  schema: {
+    example: { error: "This interview doesn't have a confirmed time yet" },
+  },
+});

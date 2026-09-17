@@ -1,4 +1,11 @@
-import { Body, Controller, Get, Patch, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Patch,
+  UseGuards,
+} from "@nestjs/common";
 import { InterviewsService } from "./interviews.service";
 import {
   confirmInterviewSchema,
@@ -20,6 +27,7 @@ import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.i
 import {
   ApiConfirmInterview,
   ApiGetInterview,
+  ApiGetInterviewIcs,
   ApiInterviewsTag,
 } from "./docs/interviews.swagger";
 
@@ -37,6 +45,18 @@ export class InterviewsController {
   @Get(":id/interview")
   get(@CurrentResource() application: TalentApplicationOwner) {
     return this.interviewsService.get(application);
+  }
+
+  // Registered after ":id/interview" — Nest matches routes in declaration
+  // order and both are static suffixes off the same dynamic :id segment, so
+  // this would never be shadowed either way, but keeping the plain GET
+  // first mirrors every other controller's convention in this codebase.
+  @ApiGetInterviewIcs()
+  @Get(":id/interview/ics")
+  @Header("Content-Type", "text/calendar; charset=utf-8")
+  @Header("Content-Disposition", 'attachment; filename="interview.ics"')
+  getIcs(@CurrentResource() application: TalentApplicationOwner) {
+    return this.interviewsService.getIcsFile(application);
   }
 
   @ApiConfirmInterview()

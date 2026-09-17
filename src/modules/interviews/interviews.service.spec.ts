@@ -358,3 +358,57 @@ describe("InterviewsService.listUpcomingForCompany", () => {
     expect(interviews[0]?.interviewerName).toBeNull();
   });
 });
+
+describe("InterviewsService.getIcsFile", () => {
+  it("rejects when no interview has been proposed yet", async () => {
+    const { service } = makeService({
+      findByApplicationId: jest.fn().mockResolvedValue(null),
+    });
+
+    const error = await service.getIcsFile(parties).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(NotFoundApiException);
+    expect((error as NotFoundApiException).getResponse()).toMatchObject({
+      code: ErrorCode.INTERVIEW_NOT_FOUND,
+    });
+  });
+
+  it("rejects a PENDING (not yet confirmed) interview", async () => {
+    const { service } = makeService({
+      findByApplicationId: jest.fn().mockResolvedValue({
+        id: "intv-1",
+        status: "PENDING",
+        confirmedSlot: null,
+        durationMinutes: 30,
+        meetingUrl: null,
+      }),
+    });
+
+    const error = await service.getIcsFile(parties).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(BadRequestApiException);
+    expect((error as BadRequestApiException).getResponse()).toMatchObject({
+      code: ErrorCode.INTERVIEW_NOT_CONFIRMED,
+    });
+  });
+
+  it("generates an .ics file for a CONFIRMED interview with its confirmedSlot", async () => {
+    const slot = futureSlot();
+    const { service } = makeService({
+      findByApplicationId: jest.fn().mockResolvedValue({
+        id: "intv-1",
+        status: "CONFIRMED",
+        confirmedSlot: slot,
+        durationMinutes: 30,
+        meetingUrl: "https://meet.example.com/room",
+      }),
+    });
+
+    const ics = await service.getIcsFile(parties);
+
+    expect(ics).toContain("BEGIN:VCALENDAR");
+    expect(ics).toContain("interview-intv-1@remotesea.io");
+    expect(ics).toContain(parties.job.title);
+    expect(ics).toContain(parties.job.employer.companyName);
+  });
+});

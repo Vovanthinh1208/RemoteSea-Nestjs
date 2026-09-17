@@ -59,6 +59,7 @@ const makeService = (
   };
   const interviewsService = {
     get: jest.fn(),
+    getIcsFile: jest.fn(),
     propose: jest.fn(),
     listUpcomingForCompany: jest.fn(),
   };
@@ -66,19 +67,28 @@ const makeService = (
     list: jest.fn(),
     create: jest.fn(),
   };
+  const commentsService = {
+    list: jest.fn(),
+    create: jest.fn(),
+  };
+  // Only exportJobApplicantsCsv reads this (FRONTEND_URL, for the public
+  // profile link column) — every other test in this file never touches
+  // config at all, so one fixed fake value is fine as a shared default.
+  const config = { get: jest.fn().mockReturnValue("https://remotesea.io") };
   // No-op cache (always a miss, set() does nothing) — fine for every
   // existing test in this file since none of them exercise the cached
   // getPublicResponseHours path, which builds its own cache stub instead.
   const cache = { get: jest.fn().mockResolvedValue(undefined), set: jest.fn() };
   const service = new EmployerService(
     repo,
-    {} as never,
+    config as never,
     {} as never,
     emailService as never,
     notificationsService as never,
     messagesService as never,
     interviewsService as never,
     scorecardsService as never,
+    commentsService as never,
     {} as never,
     companyMembershipService as never,
     cache as never,
@@ -91,7 +101,9 @@ const makeService = (
     messagesService,
     interviewsService,
     scorecardsService,
+    commentsService,
     companyMembershipService,
+    config,
     cache,
   };
 };
@@ -831,5 +843,83 @@ describe("EmployerService.getHiringFunnel", () => {
     );
 
     await expect(service.getHiringFunnel("interviewer-1")).rejects.toThrow();
+  });
+});
+
+// Pure delegation to CommentsService, same shape as the scorecard/interview
+// delegation tests above — CommentsService's own tests (comments.service.spec.ts)
+// cover the actual behavior.
+describe("EmployerService.listApplicationComments / addApplicationComment", () => {
+  it("delegates listing to CommentsService", async () => {
+    const { service, commentsService } = makeService();
+    commentsService.list.mockResolvedValue({ comments: [] });
+
+    const result = await service.listApplicationComments(application);
+
+    expect(commentsService.list).toHaveBeenCalledWith(application.id);
+    expect(result).toEqual({ comments: [] });
+  });
+
+  it("delegates creating to CommentsService with the author id", async () => {
+    const { service, commentsService } = makeService();
+    commentsService.create.mockResolvedValue({ id: "c1" });
+
+    const result = await service.addApplicationComment(application, "user-1", {
+      body: "Looks strong.",
+    });
+
+    expect(commentsService.create).toHaveBeenCalledWith(
+      application.id,
+      "user-1",
+      { body: "Looks strong." },
+    );
+    expect(result).toEqual({ id: "c1" });
+  });
+});
+
+describe("EmployerService.getApplicationInterviewIcs", () => {
+  it("delegates to InterviewsService.getIcsFile", async () => {
+    const { service, interviewsService } = makeService();
+    interviewsService.getIcsFile.mockResolvedValue("BEGIN:VCALENDAR...");
+
+    const result = await service.getApplicationInterviewIcs(application);
+
+    expect(interviewsService.getIcsFile).toHaveBeenCalledWith(application);
+    expect(result).toBe("BEGIN:VCALENDAR...");
+  });
+});
+
+describe("EmployerService.exportJobApplicantsCsv", () => {
+  it("fetches every applicant for the job (no status filter, no pagination) and serializes them to CSV", async () => {
+    const talentRow = {
+      status: "SHORTLISTED",
+      appliedAt: new Date("2026-01-01T00:00:00.000Z"),
+      resumeUrl: null,
+      coverLetter: null,
+      talent: {
+        slug: "jane-doe",
+        headline: "Engineer",
+        level: "SENIOR",
+        yearsExperience: 5,
+        country: "Vietnam",
+        user: { name: "Jane Doe" },
+      },
+    };
+    const { service, repo } = makeService({
+      findApplicationsForJob: jest
+        .fn()
+        .mockResolvedValue({ applications: [talentRow], total: 1 }),
+    });
+
+    const csv = await service.exportJobApplicantsCsv("job-1");
+
+    expect(repo.findApplicationsForJob).toHaveBeenCalledWith(
+      "job-1",
+      undefined,
+      0,
+      expect.any(Number),
+    );
+    expect(csv).toContain('"Jane Doe"');
+    expect(csv).toContain("https://remotesea.io/talent/jane-doe");
   });
 });

@@ -10,14 +10,17 @@ import { UploadsModule } from "@/modules/uploads/uploads.module";
 import { MessagesModule } from "@/modules/messages/messages.module";
 import { InterviewsModule } from "@/modules/interviews/interviews.module";
 import { ScorecardsModule } from "@/modules/scorecards/scorecards.module";
+import { CommentsModule } from "@/modules/comments/comments.module";
 import { CvAnalysisModule } from "@/modules/cv-analysis/cv-analysis.module";
 import { CompanyModule } from "@/modules/company/company.module";
 
 @Module({
-  // MessagesModule/InterviewsModule/ScorecardsModule/CvAnalysisModule:
-  // EmployerService delegates to their services (listApplicationMessages/
-  // sendApplicationMessage, getApplicationInterview/proposeInterview,
+  // MessagesModule/InterviewsModule/ScorecardsModule/CommentsModule/
+  // CvAnalysisModule: EmployerService delegates to their services
+  // (listApplicationMessages/sendApplicationMessage,
+  // getApplicationInterview/proposeInterview,
   // listApplicationScorecards/submitApplicationScorecard,
+  // listApplicationComments/addApplicationComment,
   // getApplicationCvAnalysis), same shape as AdminModule -> JobReportsModule.
   // CompanyModule: multi-seat company/role resolution
   // (CompanyMembershipService.resolveMembership), used everywhere this
@@ -27,6 +30,7 @@ import { CompanyModule } from "@/modules/company/company.module";
     MessagesModule,
     InterviewsModule,
     ScorecardsModule,
+    CommentsModule,
     CvAnalysisModule,
     CompanyModule,
   ],
