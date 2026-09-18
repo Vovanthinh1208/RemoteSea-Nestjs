@@ -416,15 +416,19 @@ export class EmployerService {
     };
   }
 
-  // CSV export of every applicant for one job — the same select
-  // listJobApplications already uses (findApplicationsForJob), just with no
-  // status filter and a cap high enough that "paginated" never matters in
-  // practice for a single job's applicant pool.
-  async exportJobApplicantsCsv(jobId: string): Promise<string> {
+  // CSV export for one job — the same select and status filter
+  // listJobApplications already uses (findApplicationsForJob), just
+  // unpaginated: it exports every applicant matching that filter, up to a
+  // cap high enough that "paginated" never matters in practice for a single
+  // job's applicant pool.
+  async exportJobApplicantsCsv(
+    jobId: string,
+    status?: ApplicationStatus,
+  ): Promise<string> {
     const { applications } =
       await this.employerRepository.findApplicationsForJob(
         jobId,
-        undefined,
+        status,
         0,
         APPLICANTS_CSV_EXPORT_CAP,
       );

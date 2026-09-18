@@ -8,8 +8,10 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from "@nestjs/common";
+import type { Response } from "express";
 import { EmployerService } from "./employer.service";
 import {
   createEmployerProfileSchema,
@@ -27,6 +29,10 @@ import {
   listJobApplicationsSchema,
   type ListJobApplicationsDto,
 } from "./dto/list-job-applications.dto";
+import {
+  exportJobApplicationsSchema,
+  type ExportJobApplicationsDto,
+} from "./dto/export-job-applications.dto";
 import {
   updateApplicationSchema,
   type UpdateApplicationDto,
@@ -203,9 +209,21 @@ export class EmployerController {
   @UseGuards(JwtAuthGuard, RolesGuard, EmployerJobOwnershipGuard)
   @Roles("EMPLOYER")
   @Header("Content-Type", "text/csv; charset=utf-8")
-  @Header("Content-Disposition", 'attachment; filename="applicants.csv"')
-  async exportJobApplicants(@CurrentResource() job: JobOwnerOnly) {
-    return this.employerService.exportJobApplicantsCsv(job.id);
+  async exportJobApplicants(
+    @CurrentResource() job: JobOwnerOnly,
+    @Query(new ZodValidationPipe(exportJobApplicationsSchema))
+    query: ExportJobApplicationsDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    // Dated per request (not a static @Header(), which can only ever hold a
+    // fixed string) so two exports taken on different days don't collide in
+    // a downloads folder.
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="applicants-${date}.csv"`,
+    );
+    return this.employerService.exportJobApplicantsCsv(job.id, query.status);
   }
 
   // Static route, registered ahead of the dynamic ones below for the same

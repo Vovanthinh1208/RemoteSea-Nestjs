@@ -922,4 +922,33 @@ describe("EmployerService.exportJobApplicantsCsv", () => {
     expect(csv).toContain('"Jane Doe"');
     expect(csv).toContain("https://remotesea.io/talent/jane-doe");
   });
+
+  it("passes an explicit status filter through to the same select listJobApplications uses, still unpaginated", async () => {
+    const { service, repo } = makeService({
+      findApplicationsForJob: jest
+        .fn()
+        .mockResolvedValue({ applications: [], total: 0 }),
+    });
+
+    await service.exportJobApplicantsCsv("job-1", "SHORTLISTED");
+
+    expect(repo.findApplicationsForJob).toHaveBeenCalledWith(
+      "job-1",
+      "SHORTLISTED",
+      0,
+      expect.any(Number),
+    );
+  });
+
+  it("produces a valid header-only CSV when the filter matches no applicants", async () => {
+    const { service } = makeService({
+      findApplicationsForJob: jest
+        .fn()
+        .mockResolvedValue({ applications: [], total: 0 }),
+    });
+
+    const csv = await service.exportJobApplicantsCsv("job-1", "REJECTED");
+
+    expect(csv.slice(1).trim().split("\r\n")).toHaveLength(1);
+  });
 });

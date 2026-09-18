@@ -201,19 +201,26 @@ export const ApiExportJobApplicants = () =>
   applyDecorators(
     ApiBearerAuth("bearer"),
     ApiOperation({
-      summary: "Export every applicant for a job as CSV",
+      summary: "Export applicants for a job as CSV",
       description:
-        "Same underlying data as GET .../applications (no status filter, no pagination — capped at 5000 rows). Returns a raw text/csv body (not JSON), RFC 4180 quoted, CRLF line endings. Requires the EMPLOYER role; company membership and role are enforced by EmployerJobOwnershipGuard, same as the list endpoint.",
+        "Same underlying select and status filter as GET .../applications, just unpaginated — exports every matching applicant, capped at 5000 rows. Returns a raw text/csv body (not JSON), UTF-8 BOM prefixed for Excel, RFC 4180 quoted, CRLF line endings, as attachment 'applicants-YYYY-MM-DD.csv'. Requires the EMPLOYER role; company membership and role are enforced by EmployerJobOwnershipGuard, same as the list endpoint.",
     }),
     ApiParam({
       name: "id",
       description: "Job id",
       example: "cljob1a2b3c4d5e6f7g8h9i0",
     }),
+    ApiQuery({
+      name: "status",
+      required: false,
+      enum: APPLICATION_STATUS_VALUES,
+      description: "Export only applications in this status",
+    }),
     ApiOkResponse({
       description: "RFC 4180 CSV file",
       content: { "text/csv": { schema: { type: "string" } } },
     }),
+    ValidationErrorResponse,
     UnauthorizedApiResponse,
     NotOwningEmployerResponse,
     JobNotFoundResponse,

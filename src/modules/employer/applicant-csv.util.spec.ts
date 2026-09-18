@@ -59,6 +59,56 @@ describe("buildApplicantsCsv", () => {
     expect(csv).toContain('"I said ""hire me"", please.\nThanks!"');
   });
 
+  it("prefixes the output with a UTF-8 BOM so Excel opens it as UTF-8 rather than a legacy codepage", () => {
+    const csv = buildApplicantsCsv([baseRow], "https://remotesea.io");
+    expect(csv.charCodeAt(0)).toBe(0xfeff);
+  });
+
+  it("preserves non-ASCII text (Vietnamese) unmodified", () => {
+    const csv = buildApplicantsCsv(
+      [
+        {
+          ...baseRow,
+          talent: {
+            ...baseRow.talent,
+            headline: "Kỹ sư phần mềm",
+            country: "Việt Nam",
+            user: { name: "Nguyễn Văn A" },
+          },
+        },
+      ],
+      "https://remotesea.io",
+    );
+
+    expect(csv).toContain('"Nguyễn Văn A"');
+    expect(csv).toContain('"Kỹ sư phần mềm"');
+    expect(csv).toContain('"Việt Nam"');
+  });
+
+  it("emits a valid header-only CSV (still BOM-prefixed) for an empty applicant list", () => {
+    const csv = buildApplicantsCsv([], "https://remotesea.io");
+    const lines = csv.slice(1).trim().split("\r\n");
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toBe(
+      '"Name","Profile","Headline","Level","Years experience","Country","Status","Applied at","Resume URL","Cover letter"',
+    );
+  });
+
+  // OWASP CSV injection: talent-supplied free text (headline, cover letter,
+  // name) must not be able to smuggle a spreadsheet formula into an
+  // employer's Excel session just by starting with one of these characters.
+  it.each(["=cmd|'/c calc'!A1", "+1+1", "-1-1", "@SUM(A1:A9)"])(
+    "neutralizes a formula-triggering leading character (%s)",
+    (payload) => {
+      const csv = buildApplicantsCsv(
+        [{ ...baseRow, talent: { ...baseRow.talent, headline: payload } }],
+        "https://remotesea.io",
+      );
+      expect(csv).toContain(`"'${payload}"`);
+    },
+  );
+
   it("produces exactly one CSV row per applicant, in the given order", () => {
     const second: ApplicantCsvRow = {
       ...baseRow,
