@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import type { Request } from "express";
 import { UnauthorizedApiException } from "@/common/exceptions/api.exception";
 import type { EnvConfig } from "@/core/config/env.validation";
+import { timingSafeEqualString } from "@/common/utils/timing-safe-equal.util";
 
 // Same pattern as CronSecretGuard — fails closed (unset secret always
 // 401s) rather than defaulting an ops-only, potentially sensitive endpoint
@@ -16,7 +17,14 @@ export class MetricsSecretGuard implements CanActivate {
     const authHeader = request.headers.authorization;
     const metricsSecret = this.config.get("METRICS_SECRET", { infer: true });
 
-    if (!metricsSecret || authHeader !== `Bearer ${metricsSecret}`) {
+    // timingSafeEqualString, not `!==` — a plain comparison short-circuits
+    // on the first differing byte, letting a network attacker recover
+    // METRICS_SECRET one character at a time from response timing alone.
+    if (
+      !metricsSecret ||
+      typeof authHeader !== "string" ||
+      !timingSafeEqualString(authHeader, `Bearer ${metricsSecret}`)
+    ) {
       throw new UnauthorizedApiException();
     }
 

@@ -22,6 +22,7 @@ const makeService = (overrides?: {
   authRepository?: Partial<AuthRepository>;
   emailService?: Partial<EmailService>;
   jwtService?: { sign: jest.Mock; verify?: jest.Mock };
+  metricsService?: { recordAuthFailure: jest.Mock };
 }) => {
   const authRepository = {
     findUserByEmail: jest.fn(),
@@ -46,13 +47,17 @@ const makeService = (overrides?: {
     sign: jest.fn().mockReturnValue("signed.jwt.token"),
     verify: jest.fn(),
   };
+  const metricsService = overrides?.metricsService ?? {
+    recordAuthFailure: jest.fn(),
+  };
 
   const service = new AuthService(
     authRepository as unknown as AuthRepository,
     jwtService as never,
     emailService as unknown as EmailService,
+    metricsService as never,
   );
-  return { service, authRepository, emailService, jwtService };
+  return { service, authRepository, emailService, jwtService, metricsService };
 };
 
 describe("AuthService.register", () => {
@@ -433,5 +438,106 @@ describe("AuthService.resetPassword", () => {
     await expect(
       service.resetPassword("t1", "newpassword123"),
     ).rejects.toBeInstanceOf(BadRequestApiException);
+  });
+});
+
+describe("AuthService.disableTwoFactor", () => {
+  it("rejects an incorrect password without disabling 2FA or touching sessions, and records the auth-failure metric", async () => {
+    (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+    const { service, authRepository, metricsService } = makeService({
+      authRepository: {
+        findUserById: jest.fn().mockResolvedValue({
+          id: "u1",
+          passwordHash: "hash",
+          twoFactorEnabled: true,
+        }),
+        disableTwoFactor: jest.fn(),
+        revokeAllSessions: jest.fn(),
+      },
+    });
+
+    await expect(
+      service.disableTwoFactor("u1", "wrong-password"),
+    ).rejects.toBeInstanceOf(UnauthorizedApiException);
+    expect(authRepository.disableTwoFactor).not.toHaveBeenCalled();
+    expect(authRepository.revokeAllSessions).not.toHaveBeenCalled();
+    expect(metricsService.recordAuthFailure).toHaveBeenCalledWith(
+      "2fa_disable_invalid_password",
+    );
+  });
+
+  it("rejects a social-only account with no password to check", async () => {
+    const { service, authRepository } = makeService({
+      authRepository: {
+        findUserById: jest.fn().mockResolvedValue({
+          id: "u1",
+          passwordHash: null,
+          twoFactorEnabled: true,
+        }),
+        disableTwoFactor: jest.fn(),
+      },
+    });
+
+    await expect(
+      service.disableTwoFactor("u1", "anything"),
+    ).rejects.toBeInstanceOf(BadRequestApiException);
+    expect(authRepository.disableTwoFactor).not.toHaveBeenCalled();
+  });
+
+  // Idempotency, not an information leak — `userId` is already this
+  // caller's own id (from their JWT), so short-circuiting on their own
+  // current 2FA state discloses nothing about anyone else's account. Also
+  // guards against the session-revocation side effect firing on a no-op.
+  it("rejects (without checking the password) when 2FA is already disabled", async () => {
+    const { service, authRepository } = makeService({
+      authRepository: {
+        findUserById: jest.fn().mockResolvedValue({
+          id: "u1",
+          passwordHash: "hash",
+          twoFactorEnabled: false,
+        }),
+        disableTwoFactor: jest.fn(),
+        revokeAllSessions: jest.fn(),
+      },
+    });
+
+    const error = await service
+      .disableTwoFactor("u1", "correct-password")
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(BadRequestApiException);
+    expect((error as BadRequestApiException).getResponse()).toMatchObject({
+      code: ErrorCode.TWO_FACTOR_NOT_ENABLED,
+    });
+    expect(authRepository.disableTwoFactor).not.toHaveBeenCalled();
+    expect(authRepository.revokeAllSessions).not.toHaveBeenCalled();
+  });
+
+  // Disabling 2FA is a real security-posture downgrade — every live
+  // session (including this request's own) must be forced back through
+  // login afterward, same reasoning as AdminService.updateUser revoking
+  // every session on a ban/role change. Without this, someone who
+  // obtained the password some other way (credential stuffing, a reused
+  // breached password) could disable 2FA and keep a legitimate-looking
+  // session running indefinitely.
+  it("revokes every session for the user once 2FA is disabled", async () => {
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    const { service, authRepository, metricsService } = makeService({
+      authRepository: {
+        findUserById: jest.fn().mockResolvedValue({
+          id: "u1",
+          passwordHash: "hash",
+          twoFactorEnabled: true,
+        }),
+        disableTwoFactor: jest.fn().mockResolvedValue(undefined),
+        revokeAllSessions: jest.fn().mockResolvedValue(3),
+      },
+    });
+
+    await service.disableTwoFactor("u1", "correct-password");
+
+    expect(authRepository.disableTwoFactor).toHaveBeenCalledWith("u1");
+    expect(authRepository.revokeAllSessions).toHaveBeenCalledWith("u1");
+    expect(metricsService.recordAuthFailure).not.toHaveBeenCalled();
   });
 });

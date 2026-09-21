@@ -59,7 +59,11 @@ async function bootstrap(): Promise<void> {
   // process.env reads: correct in a real deployment (env vars are already
   // exported before the process starts), not when running locally off a
   // bare .env file with nothing exporting it into the shell first.
-  initSentry(process.env.SENTRY_DSN);
+  initSentry(
+    process.env.SENTRY_DSN,
+    process.env.NODE_ENV,
+    process.env.RELEASE_VERSION,
+  );
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   // Shared by every `new Logger(X.name)` call site app-wide (Nest's Logger

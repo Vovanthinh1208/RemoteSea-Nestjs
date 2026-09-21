@@ -6,13 +6,14 @@ import {
   Logger,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import type { Response } from "express";
+import type { Request, Response } from "express";
 import {
   ApiException,
   TooManyRequestsApiException,
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { reportException } from "@/core/observability/sentry";
+import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 
 // Falls back to INTERNAL_ERROR for any status this map doesn't cover — those
 // only ever reach here via a framework/library exception this app didn't
@@ -143,8 +144,18 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     // The one place every truly unexpected error in this app converges —
     // everything above this point is a recognized, already-classified
     // condition (an ApiException this app threw itself, a known Prisma
-    // error code, ...). No-op when SENTRY_DSN isn't configured.
-    reportException(exception);
+    // error code, ...). No-op when SENTRY_DSN isn't configured. requestId
+    // ties the Sentry event back to this same request's access-log line
+    // (LoggingInterceptor); userId (only ever an id, see ReportContext) is
+    // whatever JwtAuthGuard/OrchestratorAuthGuard already resolved onto
+    // request.user before this handler ran — nothing new is looked up here.
+    const request = host
+      .switchToHttp()
+      .getRequest<Request & { user?: AuthenticatedUser }>();
+    reportException(exception, {
+      requestId: request.id,
+      userId: request.user?.id,
+    });
     response
       .status(500)
       .json({ error: "Internal server error", code: ErrorCode.INTERNAL_ERROR });

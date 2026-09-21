@@ -2,6 +2,7 @@ import * as crypto from "crypto";
 import type { Request, Response } from "express";
 import { UnauthorizedApiException } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
+import { timingSafeEqualString } from "@/common/utils/timing-safe-equal.util";
 
 const OAUTH_STATE_COOKIE = "oauth_state";
 const OAUTH_STATE_TTL_MS = 5 * 60 * 1000;
@@ -15,12 +16,6 @@ function readCookie(request: Request, name: string): string | undefined {
     .map((part) => part.trim())
     .find((part) => part.startsWith(prefix));
   return match ? decodeURIComponent(match.slice(prefix.length)) : undefined;
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
 }
 
 export function applyOAuthStateCheck(
@@ -51,7 +46,7 @@ export function applyOAuthStateCheck(
   if (
     !cookieNonce ||
     typeof queryState !== "string" ||
-    !timingSafeEqual(queryState, cookieNonce)
+    !timingSafeEqualString(queryState, cookieNonce)
   ) {
     throw new UnauthorizedApiException(
       "OAuth state mismatch — please try signing in again",

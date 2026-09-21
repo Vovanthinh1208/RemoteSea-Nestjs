@@ -8,6 +8,7 @@ import { ConfigService } from "@nestjs/config";
 import { Prisma, PrismaClient } from "@prisma/client";
 import type { EnvConfig } from "@/core/config/env.validation";
 import { withPoolParams } from "./db-url.util";
+import { MetricsService } from "@/modules/metrics/metrics.service";
 
 // Below this, a query is unremarkable and only surfaces in dev's debug log; at
 // or above it, it's logged as a warning in every environment, including
@@ -24,7 +25,10 @@ export class PrismaService
 {
   private readonly logger = new Logger(PrismaService.name);
 
-  constructor(private readonly config: ConfigService<EnvConfig, true>) {
+  constructor(
+    private readonly config: ConfigService<EnvConfig, true>,
+    private readonly metricsService: MetricsService,
+  ) {
     super({
       datasources: {
         db: {
@@ -52,6 +56,12 @@ export class PrismaService
     // event/query params can contain user input (emails, tokens); only the SQL
     // text + duration are logged, never event.params.
     this.$on("query", (event) => {
+      // The only per-query timing signal this app had before was the slow
+      // log line below, gone the moment it scrolls past — this feeds the
+      // same duration into a real histogram (db_query_duration_seconds) so
+      // "are queries getting slower" is a graphable trend, not something
+      // only visible by grepping for warnings after the fact.
+      this.metricsService.recordDbQuery(event.duration / 1000);
       if (event.duration >= SLOW_QUERY_THRESHOLD_MS) {
         this.logger.warn(`Slow query (${event.duration}ms): ${event.query}`);
       } else if (

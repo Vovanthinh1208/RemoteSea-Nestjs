@@ -162,6 +162,7 @@ export class AiOrchestratorService {
     }
 
     const token = await this.mintContextToken(user);
+    const startedAt = Date.now();
     let response: Response;
     try {
       response = await fetch(`${this.aiServiceUrl}${path}`, {
@@ -181,6 +182,17 @@ export class AiOrchestratorService {
     }
 
     const data = await response.json().catch(() => undefined);
+    // Metadata only — userId/method/path/status/latency, never `body` or
+    // `data`. `path` is a fixed route template (`/v1/orchestrator/chat`, not
+    // interpolated with the question), so this can't leak a chat question,
+    // answer, or conversation id into logs the way logging the request/
+    // response payload would. This is the actual cost-visibility half of
+    // "Cost & data exposure" — a rate-limit ceiling bounds the worst case,
+    // but this is what makes normal usage patterns (which user, how often,
+    // how slow) visible at all.
+    this.logger.log(
+      `orchestrator_proxy user=${user.id} method=${method} path=${path} status=${response.status} latencyMs=${Date.now() - startedAt}`,
+    );
     if (!response.ok) {
       throw new HttpException(
         data ?? "AI Orchestrator request failed",

@@ -38,6 +38,7 @@ import type {
 } from "@/common/interfaces/authenticated-user.interface";
 import { parseUserAgent } from "@/common/utils/user-agent.util";
 import { lookupIpLocation } from "@/common/utils/geo-ip.util";
+import { MetricsService } from "@/modules/metrics/metrics.service";
 
 const BACKUP_CODE_COUNT = 8;
 const TWO_FACTOR_CHALLENGE_TTL = "5m";
@@ -59,6 +60,7 @@ export class AuthService {
     private readonly authRepository: AuthRepository,
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
+    private readonly metricsService: MetricsService,
   ) {}
 
   async register(dto: RegisterDto): Promise<RegisteredUser> {
@@ -349,14 +351,42 @@ export class AuthService {
         ErrorCode.SOCIAL_ACCOUNT_NO_PASSWORD,
       );
     }
+    // Checked before the password verification below — this is the
+    // account's own current state, not information a caller could use
+    // against a *different* account (the route already scopes `userId` to
+    // whoever's JWT this is), so short-circuiting here first is a plain
+    // idempotency check, not an information-disclosure tradeoff. Matters in
+    // practice: without it, a second disable call after the first one
+    // already succeeded would re-verify the password, no-op the DB update,
+    // and *still* revoke every session again for no reason.
+    if (!user.twoFactorEnabled) {
+      throw new BadRequestApiException(
+        "Two-factor authentication is already disabled",
+        ErrorCode.TWO_FACTOR_NOT_ENABLED,
+      );
+    }
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
+      // The alertable signal behind "repeated failed password verification"
+      // — see MetricsService.authFailuresTotal. Never logs the password
+      // itself, only that an attempt against this account failed.
+      this.metricsService.recordAuthFailure("2fa_disable_invalid_password");
       throw new UnauthorizedApiException(
         "Incorrect password",
         ErrorCode.INVALID_CREDENTIALS,
       );
     }
     await this.authRepository.disableTwoFactor(userId);
+    // Turning off 2FA is a real security-posture downgrade — same reasoning
+    // as AdminService.updateUser revoking every session on a ban/role
+    // change: if this request came from someone who has the password but
+    // isn't the account owner (credential-stuffing, a shared/reused
+    // password), every *other* live session — including one the real owner
+    // still has open — gets forced back through login instead of silently
+    // trusting whatever session state predates this change. This request's
+    // own session ends too; the client already has its success response by
+    // the time that matters.
+    await this.revokeAllSessionsForUser(userId);
   }
 
   async completeTwoFactorChallenge(

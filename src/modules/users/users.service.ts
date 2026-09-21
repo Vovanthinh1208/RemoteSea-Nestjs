@@ -17,6 +17,8 @@ import { BCRYPT_SALT_ROUNDS } from "@/common/constants/bcrypt.constants";
 import { UploadsService } from "@/modules/uploads/uploads.service";
 import { isOwnedUploadUrl } from "@/modules/uploads/upload-url.util";
 import type { EnvConfig } from "@/core/config/env.validation";
+import { AuthService } from "@/modules/auth/auth.service";
+import { MetricsService } from "@/modules/metrics/metrics.service";
 
 @Injectable()
 export class UsersService {
@@ -24,6 +26,8 @@ export class UsersService {
     private readonly usersRepository: UsersRepository,
     private readonly uploadsService: UploadsService,
     private readonly config: ConfigService<EnvConfig, true>,
+    private readonly authService: AuthService,
+    private readonly metricsService: MetricsService,
   ) {}
 
   updateName(
@@ -95,6 +99,10 @@ export class UsersService {
 
     const valid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
     if (!valid) {
+      // Same alertable signal as AuthService.disableTwoFactor's own —
+      // never the password itself, just that an attempt against this
+      // account failed.
+      this.metricsService.recordAuthFailure("change_password_invalid_password");
       throw new BadRequestApiException(
         "Current password is incorrect",
         ErrorCode.CURRENT_PASSWORD_INCORRECT,
@@ -103,6 +111,13 @@ export class UsersService {
 
     const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_SALT_ROUNDS);
     await this.usersRepository.updatePasswordHash(userId, passwordHash);
+    // Same reasoning as AuthService.disableTwoFactor: a password change is
+    // the textbook case for forcing every other session back through
+    // login — the old password may be exactly what an attacker who's
+    // riding an existing session already knows. This request's own
+    // session ends too; the client already has its success response by
+    // the time that matters.
+    await this.authService.revokeAllSessionsForUser(userId);
 
     return { message: "Password updated" };
   }

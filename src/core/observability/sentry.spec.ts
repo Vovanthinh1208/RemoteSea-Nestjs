@@ -25,6 +25,16 @@ describe("initSentry", () => {
       }),
     );
   });
+
+  it("tags events with environment and release when both are given", () => {
+    initSentry("https://example@sentry.io/1", "production", "abc123");
+    expect(Sentry.init).toHaveBeenCalledWith(
+      expect.objectContaining({
+        environment: "production",
+        release: "abc123",
+      }),
+    );
+  });
 });
 
 describe("reportException", () => {
@@ -40,7 +50,23 @@ describe("reportException", () => {
     (Sentry.isInitialized as jest.Mock).mockReturnValue(true);
     const error = new Error("boom");
     reportException(error);
-    expect(Sentry.captureException).toHaveBeenCalledWith(error);
+    expect(Sentry.captureException).toHaveBeenCalledWith(
+      error,
+      expect.objectContaining({ tags: { requestId: undefined } }),
+    );
+  });
+
+  // Correlates the Sentry event back to the same request's access-log
+  // line and, when known, the account it happened to — never anything
+  // beyond an id (see ReportContext's own comment on why).
+  it("attaches requestId and userId as Sentry tags/user context when given", () => {
+    (Sentry.isInitialized as jest.Mock).mockReturnValue(true);
+    const error = new Error("boom");
+    reportException(error, { requestId: "req-1", userId: "user-1" });
+    expect(Sentry.captureException).toHaveBeenCalledWith(error, {
+      tags: { requestId: "req-1" },
+      user: { id: "user-1" },
+    });
   });
 });
 

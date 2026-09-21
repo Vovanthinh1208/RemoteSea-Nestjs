@@ -43,4 +43,33 @@ describe("MetricsService", () => {
       "text/plain; version=0.0.4; charset=utf-8",
     );
   });
+
+  // The alertable signal behind "repeated authentication/security
+  // failures" — a Prometheus rule watches this series, not a log line.
+  it("counts auth failures by reason", async () => {
+    const service = new MetricsService();
+
+    service.recordAuthFailure("2fa_disable_invalid_password");
+    service.recordAuthFailure("2fa_disable_invalid_password");
+    service.recordAuthFailure("oauth_state_invalid");
+
+    const output = await service.metrics();
+
+    expect(output).toContain(
+      'auth_failures_total{reason="2fa_disable_invalid_password"} 2',
+    );
+    expect(output).toContain(
+      'auth_failures_total{reason="oauth_state_invalid"} 1',
+    );
+  });
+
+  it("exposes recorded DB query durations", async () => {
+    const service = new MetricsService();
+
+    service.recordDbQuery(0.042);
+
+    const output = await service.metrics();
+
+    expect(output).toContain("db_query_duration_seconds");
+  });
 });

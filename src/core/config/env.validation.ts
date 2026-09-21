@@ -65,6 +65,14 @@ const envSchema = z.object({
   // Unset means no error tracking, not a boot failure — same convention as
   // every other optional integration here. See main.ts's Sentry.init call.
   SENTRY_DSN: z.string().optional(),
+  // Tags every Sentry event with a release so a regression can be pinned to
+  // the deploy that introduced it, not just "sometime in production."
+  // Deliberately a free-form string set by the deploy pipeline (e.g. a git
+  // SHA), not derived from package.json here — a build-time value, not a
+  // path this app should be reading its own package.json to reconstruct at
+  // runtime. Unset means events go up without a release tag, same
+  // graceful-degradation convention as every other optional field here.
+  RELEASE_VERSION: z.string().optional(),
   // Gates GET /metrics the same way CRON_SECRET gates the cron endpoints —
   // unset means the route always 401s (fail closed), not "open to anyone".
   METRICS_SECRET: z.string().optional(),

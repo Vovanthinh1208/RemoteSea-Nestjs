@@ -37,6 +37,29 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  // The actual alertable signal for "repeated authentication/security
+  // failures" — a log line is only as useful as whoever's watching it in
+  // real time; this is a series a Prometheus rule can fire
+  // (`rate(auth_failures_total[5m]) > N`) against without any log parsing.
+  // `reason`, never any credential/token value — see each call site.
+  private readonly authFailuresTotal = new Counter({
+    name: "auth_failures_total",
+    help: "Authentication/security-sensitive failures, by reason",
+    labelNames: ["reason"] as const,
+    registers: [this.registry],
+  });
+
+  // Same bucket shape as HTTP duration — this app's queries range from
+  // sub-millisecond indexed lookups to the raw funnel/analytics aggregates,
+  // not from profiling real production percentiles yet (see
+  // PrismaService.SLOW_QUERY_THRESHOLD_MS's own caveat).
+  private readonly dbQueryDurationSeconds = new Histogram({
+    name: "db_query_duration_seconds",
+    help: "Prisma query duration in seconds",
+    buckets: [0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+    registers: [this.registry],
+  });
+
   constructor() {
     // Node/process-level metrics (event loop lag, heap, GC, fd count) —
     // prom-client's own standard collector, not hand-rolled.
@@ -52,6 +75,14 @@ export class MetricsService {
     const labels = { method, route, status: String(status) };
     this.httpRequestsTotal.inc(labels);
     this.httpRequestDurationSeconds.observe(labels, durationSeconds);
+  }
+
+  recordAuthFailure(reason: string): void {
+    this.authFailuresTotal.inc({ reason });
+  }
+
+  recordDbQuery(durationSeconds: number): void {
+    this.dbQueryDurationSeconds.observe(durationSeconds);
   }
 
   metrics(): Promise<string> {
