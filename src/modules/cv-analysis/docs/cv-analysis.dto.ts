@@ -1,4 +1,5 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { CV_RECOMMENDATION_VALUES } from "@/common/constants/enum-values.constants";
 
 /**
  * Swagger-only response shape for the CV Analysis module — no request body
@@ -35,6 +36,21 @@ export class CvAnalysisResponseDto {
     example: ["Have you worked with GraphQL or a similar query layer before?"],
   })
   suggestedQuestions!: string[];
+
+  @ApiPropertyOptional({
+    enum: CV_RECOMMENDATION_VALUES,
+    nullable: true,
+    example: "ADVANCE",
+    description:
+      "Decision support only — the recruiter always makes the actual call. Null for analyses generated before this field existed (never backfilled).",
+  })
+  recommendation!: "ADVANCE" | "HOLD" | "REJECT" | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: "Strong technical overlap outweighs the GraphQL gap.",
+  })
+  recommendationReason!: string | null;
 
   @ApiProperty({ example: "claude-haiku-4-5-20251001" })
   model!: string;

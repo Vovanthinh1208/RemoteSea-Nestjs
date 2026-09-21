@@ -42,3 +42,26 @@ export const ApiGetCvAnalysis = () =>
     rateLimitResponse("20 req/60s per user"),
     InternalServerErrorApiResponse,
   );
+
+export const ApiRegenerateCvAnalysis = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Regenerate the AI fit analysis for this applicant's CV",
+      description:
+        "Unlike the GET above, always calls the LLM and overwrites the cached row — for a recruiter who wants a second opinion, or an analysis generated before a prompt change added a new field. Shares the same per-user rate-limit budget as the GET endpoint. Same eligibility as the GET endpoint.",
+    }),
+    ApiParam({ name: "id", description: "Application id" }),
+    ApiOkResponse({
+      description: "The freshly regenerated analysis",
+      type: CvAnalysisResponseDto,
+    }),
+    NoResumeResponse,
+    CvAnalysisUnavailableResponse,
+    ApplicationNotFoundResponse,
+    ApplicationAccessDeniedResponse,
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
+    rateLimitResponse("20 req/60s per user"),
+    InternalServerErrorApiResponse,
+  );

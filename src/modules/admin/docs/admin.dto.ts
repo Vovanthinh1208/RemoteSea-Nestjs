@@ -3,6 +3,7 @@ import {
   JOB_STATUS_VALUES,
   JOB_REPORT_REASON_VALUES,
   JOB_REPORT_STATUS_VALUES,
+  JOB_MODERATION_RISK_LEVEL_VALUES,
   PLAN_TYPE_VALUES,
   ADMIN_AUDIT_TARGET_TYPE_VALUES,
 } from "@/common/constants/enum-values.constants";
@@ -209,6 +210,36 @@ export class ReviewJobResponseDto {
 
   @ApiPropertyOptional({ nullable: true, example: "2026-07-02T10:05:00.000Z" })
   publishedAt!: string | null;
+}
+
+export class JobModerationFlagResponseDto {
+  @ApiProperty({ example: "jmf1a2b0000ug0h9x1n1a2" })
+  id!: string;
+
+  @ApiProperty({
+    enum: JOB_MODERATION_RISK_LEVEL_VALUES,
+    example: "MEDIUM",
+    description: "Advisory only — never gates approve/reject",
+  })
+  riskLevel!: "LOW" | "MEDIUM" | "HIGH";
+
+  @ApiProperty({
+    type: [String],
+    example: ["Pay is well above market for the stated seniority"],
+  })
+  reasons!: string[];
+
+  @ApiProperty({
+    example:
+      "Mostly reads as a legitimate posting, but the salary range is unusually high for a mid-level role — worth a second look.",
+  })
+  summary!: string;
+
+  @ApiProperty({ example: "claude-haiku-4-5-20251001" })
+  model!: string;
+
+  @ApiProperty({ format: "date-time", example: "2026-08-20T09:12:00.000Z" })
+  createdAt!: string;
 }
 
 export class RevenueMonthBucketDto {

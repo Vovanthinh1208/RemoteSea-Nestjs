@@ -121,7 +121,10 @@ import {
   ApiListScorecards,
 } from "@/modules/scorecards/docs/scorecards.swagger";
 import { RATE_LIMITS as SCORECARD_RATE_LIMITS } from "@/modules/scorecards/constants";
-import { ApiGetCvAnalysis } from "@/modules/cv-analysis/docs/cv-analysis.swagger";
+import {
+  ApiGetCvAnalysis,
+  ApiRegenerateCvAnalysis,
+} from "@/modules/cv-analysis/docs/cv-analysis.swagger";
 import { RATE_LIMITS as CV_ANALYSIS_RATE_LIMITS } from "@/modules/cv-analysis/constants";
 
 @ApiEmployerTag()
@@ -481,6 +484,25 @@ export class EmployerController {
       CV_ANALYSIS_RATE_LIMITS.GET_CV_ANALYSIS.windowMs,
     );
     return this.employerService.getApplicationCvAnalysis(application);
+  }
+
+  // Same guard and rate-limit bucket as the GET above — regenerating is
+  // still just a paid LLM call gated by the same per-user budget, not a
+  // separate allowance to enforce.
+  @ApiRegenerateCvAnalysis()
+  @Post("applications/:id/ai-cv-analysis/regenerate")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
+  @Roles("EMPLOYER")
+  regenerateApplicationCvAnalysis(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentResource() application: ApplicationWithJobOwner,
+  ) {
+    this.rateLimitService.enforce(
+      `cv-analysis:${user.id}`,
+      CV_ANALYSIS_RATE_LIMITS.GET_CV_ANALYSIS.limit,
+      CV_ANALYSIS_RATE_LIMITS.GET_CV_ANALYSIS.windowMs,
+    );
+    return this.employerService.regenerateApplicationCvAnalysis(application);
   }
 
   @ApiSubmitVerification()

@@ -12,6 +12,7 @@ import {
   ForbiddenApiResponse,
   InternalServerErrorApiResponse,
   UnauthorizedApiResponse,
+  rateLimitResponse,
 } from "@/core/swagger/common.responses";
 import {
   ADMIN_AUDIT_TARGET_TYPE_VALUES,
@@ -24,6 +25,7 @@ import {
   ListEmployersResponseDto,
   ListJobsResponseDto,
   ListReportsResponseDto,
+  JobModerationFlagResponseDto,
   ResolveReportRequestDto,
   ResolveReportResponseDto,
   ReviewJobRequestDto,
@@ -48,6 +50,7 @@ import {
 } from "./admin.examples";
 import {
   EmployerNotFoundResponse,
+  JobModerationUnavailableResponse,
   JobNotFoundResponse,
   ReportAlreadyResolvedResponse,
   ReportNotFoundResponse,
@@ -161,6 +164,49 @@ export const ApiReviewJob = () =>
     UnauthorizedApiResponse,
     ForbiddenApiResponse,
     JobNotFoundResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiGetJobModerationFlag = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary:
+        "Get (or lazily generate) an AI scam/quality risk flag for a job",
+      description:
+        "Advisory only — this never gates approve/reject, a human admin always makes that call; it's a signal the queue UI can surface alongside the automated checks. Cached 1:1 per job — the first call for a given job calls the LLM (a few seconds); every call after returns the cached row instantly. Requires ADMIN role.",
+    }),
+    ApiParam({ name: "id", description: "Job id" }),
+    ApiOkResponse({
+      description: "The (possibly freshly generated) risk flag",
+      type: JobModerationFlagResponseDto,
+    }),
+    JobModerationUnavailableResponse,
+    JobNotFoundResponse,
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
+    rateLimitResponse("20 req/60s per admin"),
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiRegenerateJobModerationFlag = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Regenerate the AI scam/quality risk flag for a job",
+      description:
+        "Unlike the GET above, always calls the LLM and overwrites the cached row — for a job that was edited and resubmitted, or a flag an admin wants a second opinion on. Shares the same per-admin rate-limit budget as the GET endpoint. Advisory only, same as the GET endpoint.",
+    }),
+    ApiParam({ name: "id", description: "Job id" }),
+    ApiOkResponse({
+      description: "The freshly regenerated risk flag",
+      type: JobModerationFlagResponseDto,
+    }),
+    JobModerationUnavailableResponse,
+    JobNotFoundResponse,
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
+    rateLimitResponse("20 req/60s per admin"),
     InternalServerErrorApiResponse,
   );
 

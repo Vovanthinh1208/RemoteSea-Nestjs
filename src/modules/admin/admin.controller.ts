@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from "@nestjs/common";
@@ -38,8 +39,12 @@ import { RolesGuard } from "@/core/guards/roles.guard";
 import { Roles } from "@/core/decorators/roles.decorator";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+import { RateLimitService } from "@/common/services/rate-limit.service";
+import { RATE_LIMITS as JOB_MODERATION_RATE_LIMITS } from "@/modules/job-moderation/constants";
 import {
   ApiAdminTag,
+  ApiGetJobModerationFlag,
+  ApiRegenerateJobModerationFlag,
   ApiGetRevenue,
   ApiListAuditLog,
   ApiListEmployers,
@@ -57,7 +62,10 @@ import {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("ADMIN")
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly rateLimitService: RateLimitService,
+  ) {}
 
   @ApiListEmployers()
   @Get("employers")
@@ -93,6 +101,37 @@ export class AdminController {
     @CurrentUser() admin: AuthenticatedUser,
   ) {
     return this.adminService.reviewJob(id, body, admin);
+  }
+
+  @ApiGetJobModerationFlag()
+  @Get("jobs/:id/moderation-flag")
+  getJobModerationFlag(
+    @Param("id") id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+  ) {
+    this.rateLimitService.enforce(
+      `job-moderation:${admin.id}`,
+      JOB_MODERATION_RATE_LIMITS.GET_MODERATION_FLAG.limit,
+      JOB_MODERATION_RATE_LIMITS.GET_MODERATION_FLAG.windowMs,
+    );
+    return this.adminService.getJobModerationFlag(id);
+  }
+
+  // Same rate-limit bucket as the GET above — regenerating is still just a
+  // paid LLM call gated by the same per-admin budget, not a separate
+  // allowance to enforce.
+  @ApiRegenerateJobModerationFlag()
+  @Post("jobs/:id/moderation-flag/regenerate")
+  regenerateJobModerationFlag(
+    @Param("id") id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+  ) {
+    this.rateLimitService.enforce(
+      `job-moderation:${admin.id}`,
+      JOB_MODERATION_RATE_LIMITS.GET_MODERATION_FLAG.limit,
+      JOB_MODERATION_RATE_LIMITS.GET_MODERATION_FLAG.windowMs,
+    );
+    return this.adminService.regenerateJobModerationFlag(id);
   }
 
   @ApiGetRevenue()

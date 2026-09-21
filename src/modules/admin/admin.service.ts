@@ -5,6 +5,7 @@ import { EmployerService } from "@/modules/employer/employer.service";
 import { JobsService } from "@/modules/jobs/jobs.service";
 import { JobReportsService } from "@/modules/job-reports/job-reports.service";
 import { AuthService } from "@/modules/auth/auth.service";
+import { JobModerationService } from "@/modules/job-moderation/job-moderation.service";
 import type { ListEmployersDto } from "./dto/list-employers.dto";
 import type { UpdateEmployerDto } from "./dto/update-employer.dto";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
@@ -50,6 +51,7 @@ export class AdminService {
     private readonly authService: AuthService,
     private readonly emailService: EmailService,
     private readonly auditLogService: AuditLogService,
+    private readonly jobModerationService: JobModerationService,
   ) {}
 
   async listEmployers(query: ListEmployersDto) {
@@ -201,6 +203,23 @@ export class AdminService {
       `Failed to send job-rejected email for job ${id}`,
     );
     return updated;
+  }
+
+  // Advisory only — the AI's opinion never gates approveForReview/
+  // rejectForReview above, it's just a signal an admin can choose to read
+  // before deciding. Generated lazily on first request for a given job
+  // (JobModerationService.getOrCreate), not automatically for every job
+  // that reaches PENDING_REVIEW, so a queue nobody's looked at yet doesn't
+  // rack up LLM calls.
+  getJobModerationFlag(jobId: string) {
+    return this.jobModerationService.getOrCreate(jobId);
+  }
+
+  // Explicit "run this again" action — for a job that was edited and
+  // resubmitted, or a flag an admin just wants a second opinion on. Same
+  // advisory-only guarantee as getJobModerationFlag above.
+  regenerateJobModerationFlag(jobId: string) {
+    return this.jobModerationService.regenerate(jobId);
   }
 
   async getRevenue(): Promise<RevenueSummary> {

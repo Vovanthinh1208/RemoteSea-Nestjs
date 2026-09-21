@@ -4,6 +4,7 @@ import type { EmployerService } from "@/modules/employer/employer.service";
 import type { JobsService } from "@/modules/jobs/jobs.service";
 import type { AuthService } from "@/modules/auth/auth.service";
 import type { AuditLogService } from "@/common/services/audit-log.service";
+import type { JobModerationService } from "@/modules/job-moderation/job-moderation.service";
 import {
   BadRequestApiException,
   NotFoundApiException,
@@ -32,6 +33,7 @@ const makeService = (
     jobsService?: Partial<JobsService>;
     employerService?: Partial<EmployerService>;
     authService?: Partial<AuthService>;
+    jobModerationService?: Partial<JobModerationService>;
   } = {},
 ) => {
   const adminRepository = {
@@ -50,6 +52,10 @@ const makeService = (
     sendJobRejectedEmail: jest.fn().mockResolvedValue(undefined),
   };
   const auditLogService = { record: jest.fn().mockResolvedValue(undefined) };
+  const jobModerationService = {
+    getOrCreate: jest.fn(),
+    ...overrides.jobModerationService,
+  } as unknown as JobModerationService;
   return {
     service: new AdminService(
       adminRepository,
@@ -59,6 +65,7 @@ const makeService = (
       authService,
       emailService as never,
       auditLogService as unknown as AuditLogService,
+      jobModerationService,
     ),
     adminRepository,
     jobsService,
@@ -66,6 +73,7 @@ const makeService = (
     authService,
     emailService,
     auditLogService,
+    jobModerationService,
   };
 };
 
@@ -184,6 +192,27 @@ describe("AdminService.reviewJob", () => {
       before: { status: "PENDING_REVIEW" },
       after: { status: "REJECTED", note: "Missing salary range" },
     });
+  });
+});
+
+describe("AdminService.getJobModerationFlag", () => {
+  it("delegates straight to JobModerationService.getOrCreate — advisory only, no approve/reject side effect", async () => {
+    const flag = {
+      id: "jmf-1",
+      riskLevel: "MEDIUM",
+      reasons: ["Pay unusually high for the stated level"],
+      summary: "Worth a second look.",
+      model: "claude-haiku-4-5-20251001",
+      createdAt: new Date(),
+    };
+    const { service, jobModerationService } = makeService({
+      jobModerationService: { getOrCreate: jest.fn().mockResolvedValue(flag) },
+    });
+
+    const result = await service.getJobModerationFlag("job-1");
+
+    expect(jobModerationService.getOrCreate).toHaveBeenCalledWith("job-1");
+    expect(result).toBe(flag);
   });
 });
 

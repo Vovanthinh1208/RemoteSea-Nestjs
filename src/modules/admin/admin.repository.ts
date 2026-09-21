@@ -29,6 +29,19 @@ type JobListItem = Omit<
 > & {
   employer: { companyName: string; isVerified: boolean; slug: string };
   categories: { category: unknown }[];
+  // null until an admin has actually triggered the AI risk check for this
+  // job (JobModerationService.getOrCreate) — see admin.swagger.ts's
+  // ApiGetJobModerationFlag for why this isn't computed for every row. Same
+  // shape as that endpoint's own response (not a narrower one) so the
+  // frontend can merge either source into one cache entry.
+  moderationFlag: {
+    id: string;
+    riskLevel: string;
+    reasons: string[];
+    summary: string;
+    model: string;
+    createdAt: Date;
+  } | null;
 };
 
 export type PaidJobRevenueRow = Pick<
@@ -150,6 +163,20 @@ export class AdminRepository {
             select: { companyName: true, isVerified: true, slug: true },
           },
           categories: { include: { category: true } },
+          // One extra join, not a new round trip — whatever's already been
+          // computed for this job (via GET .../moderation-flag) rides along
+          // with the list for free; still null for a job no admin has
+          // triggered a check on yet.
+          moderationFlag: {
+            select: {
+              id: true,
+              riskLevel: true,
+              reasons: true,
+              summary: true,
+              model: true,
+              createdAt: true,
+            },
+          },
         },
       }),
       this.prisma.job.count({ where }),

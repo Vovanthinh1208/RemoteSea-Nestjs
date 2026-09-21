@@ -91,6 +91,25 @@ enum JobStatus {
   EXPIRED
 }
 
+// LOW/MEDIUM/HIGH, not a boolean — an admin triaging a queue benefits from
+// severity ordering (skim past LOW, prioritize HIGH) more than a flat
+// flagged/not-flagged split would give them.
+enum JobModerationRiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+// CvAnalysis's advisory next-step signal. Deliberately NOT the same enum as
+// ApplicationStatus — this is a lightweight opinion for the recruiter to
+// weigh, not a hiring-stage value, and nothing transitions
+// Application.status off the back of it.
+enum CvRecommendation {
+  ADVANCE
+  HOLD
+  REJECT
+}
+
 enum PlanType {
   STANDARD
   FEATURED
@@ -580,13 +599,14 @@ model Job {
   // that impossible at the database level: UsersService.deleteAccount now
   // checks for and blocks on existing jobs before attempting the delete,
   // and this constraint is the backstop if that check is ever bypassed.
-  employer     EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Restrict)
-  skills       JobSkill[]
-  applications Application[]
-  invitations  JobInvitation[]
-  categories   JobCategory[]
-  savedBy      SavedJob[]
-  reports      JobReport[]
+  employer       EmployerProfile    @relation(fields: [employerId], references: [id], onDelete: Restrict)
+  skills         JobSkill[]
+  applications   Application[]
+  invitations    JobInvitation[]
+  categories     JobCategory[]
+  savedBy        SavedJob[]
+  reports        JobReport[]
+  moderationFlag JobModerationFlag?
 
   @@index([status, publishedAt])
   @@index([status, isFeatured, publishedAt])
@@ -1070,22 +1090,52 @@ model ApplicationComment {
 // staleness check needed. Never shown to the talent (internal hiring aid,
 // same visibility rule as InterviewScorecard above).
 model CvAnalysis {
-  id                 String   @id @default(cuid())
-  applicationId      String   @unique
-  fitScore           Int
-  summary            String   @db.Text
-  strengths          String[] @default([])
-  gaps               String[] @default([])
-  suggestedQuestions String[] @default([])
+  id                   String            @id @default(cuid())
+  applicationId        String            @unique
+  fitScore             Int
+  summary              String            @db.Text
+  strengths            String[]          @default([])
+  gaps                 String[]          @default([])
+  suggestedQuestions   String[]          @default([])
+  // Lightweight decision-support signal, not a hiring decision — the
+  // recruiter still moves the application through ALLOWED_TRANSITIONS
+  // themselves (see employer/constants.ts); nothing reads this to change
+  // Application.status. Nullable because analyses generated before this
+  // field existed have no value for it and are never regenerated (see this
+  // model's own no-invalidation-path comment above) — the UI treats a null
+  // recommendation as "not available" for those older cached rows.
+  recommendation       CvRecommendation?
+  recommendationReason String?           @db.Text
   // Which model produced this — lets a future prompt/model change
   // distinguish old analyses from new ones instead of treating the table as
   // one undifferentiated cache.
-  model              String
-  createdAt          DateTime @default(now())
+  model                String
+  createdAt            DateTime          @default(now())
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@map("cv_analyses")
+}
+
+// AI-generated advisory scam/quality signal for the admin moderation queue,
+// cached 1:1 with Job — see JobModerationService. Purely advisory: nothing
+// reads this to gate JobsService.approveForReview/rejectForReview, an admin
+// still has to click approve/reject regardless of what this says. Generated
+// lazily (an admin opening the queue triggers it), not for every job on
+// submission, so a queue nobody reviews yet doesn't rack up LLM calls.
+model JobModerationFlag {
+  id        String                 @id @default(cuid())
+  jobId     String                 @unique
+  riskLevel JobModerationRiskLevel
+  reasons   String[]               @default([])
+  summary   String                 @db.Text
+  // Which model produced this — same reasoning as CvAnalysis.model.
+  model     String
+  createdAt DateTime               @default(now())
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("job_moderation_flags")
 }
 
 // Only a real Employer viewing a Talent profile is ever recorded (never a

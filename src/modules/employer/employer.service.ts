@@ -704,6 +704,10 @@ export class EmployerService {
     return this.cvAnalysisService.getOrCreate(application.id);
   }
 
+  regenerateApplicationCvAnalysis(application: ApplicationWithJobOwner) {
+    return this.cvAnalysisService.regenerate(application.id);
+  }
+
   submitApplicationScorecard(
     application: ApplicationWithJobOwner,
     authorId: string,

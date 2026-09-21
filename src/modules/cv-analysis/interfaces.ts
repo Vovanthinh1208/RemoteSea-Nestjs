@@ -7,6 +7,8 @@ export const cvAnalysisSelect = {
   strengths: true,
   gaps: true,
   suggestedQuestions: true,
+  recommendation: true,
+  recommendationReason: true,
   model: true,
   createdAt: true,
 } satisfies Prisma.CvAnalysisSelect;
@@ -22,6 +24,8 @@ export type CreateCvAnalysisInput = {
   strengths: string[];
   gaps: string[];
   suggestedQuestions: string[];
+  recommendation: NonNullable<CvAnalysis["recommendation"]>;
+  recommendationReason: string;
   model: string;
 };
 

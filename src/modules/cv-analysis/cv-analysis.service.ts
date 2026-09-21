@@ -43,7 +43,21 @@ export class CvAnalysisService {
     );
   }
 
-  private async generate(applicationId: string): Promise<CvAnalysis> {
+  // Explicit "run this again" action (e.g. CvAnalysisCard's Regenerate
+  // button) — unlike getOrCreate, never short-circuits on an existing row.
+  // Same SingleFlight key as getOrCreate: a regenerate racing a concurrent
+  // getOrCreate for the same application collapses into one in-flight AI
+  // call rather than paying for two.
+  async regenerate(applicationId: string): Promise<CvAnalysis> {
+    return this.singleFlight.run(applicationId, () =>
+      this.generate(applicationId, { overwrite: true }),
+    );
+  }
+
+  private async generate(
+    applicationId: string,
+    opts?: { overwrite?: boolean },
+  ): Promise<CvAnalysis> {
     if (!this.aiService.isConfigured) {
       throw new ServiceUnavailableApiException(
         "CV analysis is not configured.",
@@ -64,12 +78,11 @@ export class CvAnalysisService {
       source.resumeUrl,
     );
     const { model, ...analysis } = await this.analyze(resumeText, source.job);
+    const input = { applicationId, model, ...analysis };
 
-    return this.cvAnalysisRepository.create({
-      applicationId,
-      model,
-      ...analysis,
-    });
+    return opts?.overwrite
+      ? this.cvAnalysisRepository.replace(input)
+      : this.cvAnalysisRepository.create(input);
   }
 
   private async analyze(
@@ -90,15 +103,29 @@ export class CvAnalysisService {
       maxTokens: CV_ANALYSIS_MAX_TOKENS,
       system:
         "You are a recruiting assistant helping an employer quickly assess a candidate's resume against a specific job. " +
-        "Base every claim strictly on the resume and job text provided — never invent experience, skills, or credentials the resume doesn't state. " +
+        "This is decision support only, not a hiring decision — the recruiter always makes the final call. " +
+        "Base every claim strictly on the resume and job text provided — never invent experience, skills, credentials, or employment history the resume doesn't state. " +
+        "Never factor in or mention protected/sensitive characteristics (age, gender, race, marital/family status, nationality, disability, religion) even if inferable from the resume — evaluate qualifications only. " +
+        "If the resume doesn't give you enough to judge a specific point, say so explicitly rather than guessing. " +
         "Respond with ONLY a single JSON object, no prose outside it, matching exactly: " +
-        '{"fitScore": number 0-100, "summary": "2-3 sentence objective summary", "strengths": string[] (max 4, specific to this job), "gaps": string[] (max 4, specific to this job), "suggestedQuestions": string[] (max 3, interview questions probing the biggest gaps/unknowns)}.',
+        '{"fitScore": number 0-100, "summary": "2-3 sentence objective summary", "strengths": string[] (max 4, specific to this job), "gaps": string[] (max 4, specific to this job), "suggestedQuestions": string[] (max 3, interview questions probing the biggest gaps/unknowns), ' +
+        '"recommendation": "ADVANCE" | "HOLD" | "REJECT" (HOLD when evidence is genuinely mixed or insufficient — never guess toward ADVANCE or REJECT), "recommendationReason": "one sentence, the single biggest factor behind that recommendation"}.',
       prompt,
     });
 
     const parsed = parseCvAnalysisResponse(text);
     if (!parsed) {
-      this.logger.error("Failed to parse CV analysis response", { raw: text });
+      // Not logging `raw: text` here — unlike a truly opaque provider error,
+      // this text is model output *derived from the candidate's resume* (the
+      // parse failure could be a near-miss, e.g. valid JSON with one field
+      // out of shape, still containing paraphrased resume content), so it's
+      // exactly the "raw AI response containing sensitive data" this
+      // feature's logging is required to avoid. The length is enough to
+      // distinguish "empty response" from "malformed JSON" from "wrong
+      // shape" during triage without persisting any of the content itself.
+      this.logger.error("Failed to parse CV analysis response", {
+        length: text.length,
+      });
       throw new ServiceUnavailableApiException(
         "CV analysis returned an unexpected response. Please try again.",
         ErrorCode.CV_ANALYSIS_FAILED,

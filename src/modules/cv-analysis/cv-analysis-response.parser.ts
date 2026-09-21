@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CV_RECOMMENDATION_VALUES } from "@/common/constants/enum-values.constants";
 
 // Mirrors exactly what CvAnalysisService's prompt asks the model for,
 // including the "max N" caps the prompt states but can't itself enforce —
@@ -9,6 +10,7 @@ const MAX_GAPS = 4;
 const MAX_SUGGESTED_QUESTIONS = 3;
 const MIN_FIT_SCORE = 0;
 const MAX_FIT_SCORE = 100;
+const MAX_RECOMMENDATION_REASON_LENGTH = 240;
 
 const rawAnalysisSchema = z.object({
   // Not .min/.max on fitScore itself — an out-of-range number is still a
@@ -20,6 +22,12 @@ const rawAnalysisSchema = z.object({
   strengths: z.array(z.string()).max(MAX_STRENGTHS),
   gaps: z.array(z.string()).max(MAX_GAPS),
   suggestedQuestions: z.array(z.string()).max(MAX_SUGGESTED_QUESTIONS),
+  // Decision-support, not a hiring decision — see CvRecommendation's own
+  // schema comment. Required (not .optional()): a response missing this
+  // entirely is as malformed as one missing `summary`, so it's rejected the
+  // same way rather than silently persisted as a null recommendation.
+  recommendation: z.enum(CV_RECOMMENDATION_VALUES),
+  recommendationReason: z.string().min(1).max(MAX_RECOMMENDATION_REASON_LENGTH),
 });
 
 export type CvAnalysisResult = z.infer<typeof rawAnalysisSchema>;

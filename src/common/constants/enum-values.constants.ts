@@ -19,6 +19,12 @@ export const JOB_STATUS_VALUES = [
   "REJECTED",
   "EXPIRED",
 ] as const;
+export const JOB_MODERATION_RISK_LEVEL_VALUES = [
+  "LOW",
+  "MEDIUM",
+  "HIGH",
+] as const;
+export const CV_RECOMMENDATION_VALUES = ["ADVANCE", "HOLD", "REJECT"] as const;
 export const APPLICATION_STATUS_VALUES = [
   "PENDING",
   "REVIEWING",

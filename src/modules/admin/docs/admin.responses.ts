@@ -1,4 +1,8 @@
-import { ApiBadRequestResponse, ApiNotFoundResponse } from "@nestjs/swagger";
+import {
+  ApiBadRequestResponse,
+  ApiNotFoundResponse,
+  ApiServiceUnavailableResponse,
+} from "@nestjs/swagger";
 import {
   EmployerNotFoundExample,
   JobNotFoundExample,
@@ -37,4 +41,9 @@ export const ReportAlreadyResolvedResponse = ApiBadRequestResponse({
 export const UserNotFoundResponse = ApiNotFoundResponse({
   description: "No User with that id",
   schema: { example: UserNotFoundExample },
+});
+
+export const JobModerationUnavailableResponse = ApiServiceUnavailableResponse({
+  description: "AI provider isn't configured, or the LLM call failed",
+  schema: { example: { error: "AI risk check is not configured." } },
 });
