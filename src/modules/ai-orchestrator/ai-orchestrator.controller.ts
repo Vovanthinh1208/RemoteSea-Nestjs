@@ -72,6 +72,11 @@ export class AiOrchestratorController {
 
   @Get("chat")
   async listConversations(@CurrentUser() user: AuthenticatedUser) {
+    this.rateLimitService.enforce(
+      `ai-chat-list:${user.id}`,
+      RATE_LIMITS.LIST_CONVERSATIONS.limit,
+      RATE_LIMITS.LIST_CONVERSATIONS.windowMs,
+    );
     return this.aiOrchestratorService.proxyToOrchestrator(
       user,
       "GET",
@@ -84,6 +89,11 @@ export class AiOrchestratorController {
     @CurrentUser() user: AuthenticatedUser,
     @Param("id") id: string,
   ) {
+    this.rateLimitService.enforce(
+      `ai-chat-get:${user.id}`,
+      RATE_LIMITS.GET_CONVERSATION.limit,
+      RATE_LIMITS.GET_CONVERSATION.windowMs,
+    );
     return this.aiOrchestratorService.proxyToOrchestrator(
       user,
       "GET",

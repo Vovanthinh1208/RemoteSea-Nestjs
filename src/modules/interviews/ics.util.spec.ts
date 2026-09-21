@@ -1,5 +1,11 @@
 import { buildInterviewIcs, type InterviewIcsInput } from "./ics.util";
 
+// RFC 5545 unfolding: a CRLF immediately followed by exactly one space is a
+// fold point, not a real line break — collapsing it back out lets these
+// tests assert on a property's full logical value without caring where the
+// 75-octet fold boundary happened to land.
+const unfold = (ics: string): string => ics.replace(/\r\n /g, "");
+
 const baseInput: InterviewIcsInput = {
   interviewId: "int-1",
   jobTitle: "Backend Engineer",
@@ -61,19 +67,73 @@ describe("buildInterviewIcs", () => {
 
   it("joins multi-line description parts with an escaped \\n, not a raw newline", () => {
     const ics = buildInterviewIcs(baseInput);
-    const descriptionLine = ics
+    const descriptionLine = unfold(ics)
       .split("\r\n")
       .find((line) => line.startsWith("DESCRIPTION:"));
 
     expect(descriptionLine).toBeDefined();
     expect(descriptionLine).toContain("\\n\\n");
-    // The raw DESCRIPTION *line itself* must stay a single physical line —
-    // an unescaped newline inside it would corrupt the file structure.
+    // The raw DESCRIPTION *logical* line must stay a single line once
+    // unfolded — an unescaped newline inside it would corrupt the file
+    // structure.
     expect(descriptionLine).not.toMatch(/\r|\n$/);
   });
 
   it("falls back gracefully when there's no talent name yet", () => {
     const ics = buildInterviewIcs({ ...baseInput, talentName: null });
     expect(ics).not.toContain("Candidate:");
+  });
+
+  // RFC 5545 §3.1: no physical line may exceed 75 octets. This job title is
+  // long enough that DESCRIPTION (which embeds it twice) would otherwise
+  // produce a single 100+ octet line that Outlook in particular can mangle.
+  it("folds a physical line longer than 75 octets, and unfolding reconstructs it exactly", () => {
+    const longInput: InterviewIcsInput = {
+      ...baseInput,
+      jobTitle:
+        "Senior Staff Backend Engineer for Platform Infrastructure and Reliability",
+    };
+    const ics = buildInterviewIcs(longInput);
+
+    for (const physicalLine of ics.split("\r\n")) {
+      expect(Buffer.byteLength(physicalLine, "utf8")).toBeLessThanOrEqual(75);
+    }
+    // At least one fold actually happened (a continuation line starts with
+    // exactly one space) — otherwise this test would pass vacuously.
+    expect(ics).toMatch(/\r\n /);
+
+    const unfolded = unfold(ics);
+    expect(unfolded).toContain(
+      `Interview for ${longInput.jobTitle} at ${longInput.employerName}`,
+    );
+  });
+
+  // Folding must not split a multi-byte UTF-8 character across two lines —
+  // doing so would produce invalid UTF-8 in whichever fragment lost half a
+  // character. Vietnamese company/candidate names are a realistic case for
+  // this codebase specifically, not a contrived edge case.
+  it("does not split a multi-byte UTF-8 character when folding", () => {
+    const longName = "Cong Ty Cong Nghe Việt Nam ".repeat(6).trim();
+    const ics = buildInterviewIcs({ ...baseInput, employerName: longName });
+
+    for (const physicalLine of ics.split("\r\n")) {
+      // A line ending mid-character decodes to the U+FFFD replacement
+      // character when round-tripped through UTF-8 — a clean split never
+      // produces one.
+      expect(Buffer.from(physicalLine, "utf8").toString("utf8")).not.toContain(
+        "�",
+      );
+    }
+    expect(unfold(ics)).toContain(longName);
+  });
+
+  it("includes a day-before and a 15-minutes-before reminder", () => {
+    const ics = buildInterviewIcs(baseInput);
+    const alarmCount = ics.split("BEGIN:VALARM").length - 1;
+
+    expect(alarmCount).toBe(2);
+    expect(ics).toContain("TRIGGER:-P1D");
+    expect(ics).toContain("TRIGGER:-PT15M");
+    expect(ics).toContain("ACTION:DISPLAY");
   });
 });

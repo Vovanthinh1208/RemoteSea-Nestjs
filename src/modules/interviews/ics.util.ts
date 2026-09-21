@@ -20,6 +20,40 @@ const escapeIcsText = (value: string): string =>
     .replace(/,/g, "\\,")
     .replace(/\n/g, "\\n");
 
+// RFC 5545 §3.1: a content line SHOULD NOT exceed 75 octets (not
+// characters — a company/candidate name with non-ASCII text is multi-byte
+// in UTF-8, so this has to fold on byte boundaries, not string length).
+// Without this, a long job title + description + meeting URL produces a
+// line some calendar clients (Outlook in particular) truncate or refuse to
+// parse rather than just rendering long. Folded per spec: split at 75
+// octets, CRLF, then a single leading space on each continuation line
+// (which every RFC 5545 reader strips back out on unfold).
+const MAX_LINE_OCTETS = 75;
+
+const foldIcsLine = (line: string): string => {
+  const bytes = Buffer.from(line, "utf8");
+  if (bytes.length <= MAX_LINE_OCTETS) return line;
+
+  const parts: string[] = [];
+  let start = 0;
+  let isFirst = true;
+  while (start < bytes.length) {
+    // Continuation lines carry one less octet of real content than the
+    // first line — their leading space counts toward the same 75-octet
+    // physical-line cap as everything else on the line.
+    const budget = isFirst ? MAX_LINE_OCTETS : MAX_LINE_OCTETS - 1;
+    let end = Math.min(start + budget, bytes.length);
+    // Never split inside a multi-byte UTF-8 sequence — back off while the
+    // byte at `end` is a continuation byte (10xxxxxx). `end < bytes.length`
+    // in the loop condition guarantees this index is always in range.
+    while (end < bytes.length && ((bytes.at(end) ?? 0) & 0xc0) === 0x80) end--;
+    parts.push(bytes.subarray(start, end).toString("utf8"));
+    start = end;
+    isFirst = false;
+  }
+  return parts.join("\r\n ");
+};
+
 // YYYYMMDDTHHMMSSZ — the UTC "form 2" date-time from RFC 5545 §3.3.5. Using
 // UTC (not a floating local time) means the event lands at the correct
 // instant in whatever calendar app/timezone opens it, which matters more
@@ -27,6 +61,25 @@ const escapeIcsText = (value: string): string =>
 // frequently in different countries by design (remote hiring).
 const toIcsUtcDateTime = (date: Date): string =>
   `${date.toISOString().replace(/[-:]/g, "").split(".")[0]}Z`;
+
+// Two reminders, not one — this is the entire point of the feature (goal:
+// "reduce missed interviews"), and a single alarm right before the call
+// only helps someone who's already at their desk. A day-before nudge
+// covers "I forgot to block my calendar"; the 15-minute one covers "I
+// forgot it was now." Every mainstream calendar app (Google/Outlook/Apple)
+// imports and honors VALARM triggers from a PUBLISH-method .ics.
+const ALARM_TRIGGERS: { trigger: string; label: string }[] = [
+  { trigger: "-P1D", label: "in 1 day" },
+  { trigger: "-PT15M", label: "in 15 minutes" },
+];
+
+const buildAlarm = (trigger: string, summary: string): string[] => [
+  "BEGIN:VALARM",
+  "ACTION:DISPLAY",
+  `TRIGGER:${trigger}`,
+  `DESCRIPTION:${escapeIcsText(summary)}`,
+  "END:VALARM",
+];
 
 /** Generates an RFC 5545 .ics file for a CONFIRMED interview — the caller
  * (InterviewsService.getIcsFile) is responsible for only calling this once
@@ -65,9 +118,12 @@ export const buildInterviewIcs = (input: InterviewIcsInput): string => {
     ...(input.meetingUrl
       ? [`LOCATION:${escapeIcsText(input.meetingUrl)}`]
       : []),
+    ...ALARM_TRIGGERS.flatMap(({ trigger, label }) =>
+      buildAlarm(trigger, `${summary} — ${label}`),
+    ),
     "END:VEVENT",
     "END:VCALENDAR",
   ];
 
-  return lines.join("\r\n") + "\r\n";
+  return lines.map(foldIcsLine).join("\r\n") + "\r\n";
 };
