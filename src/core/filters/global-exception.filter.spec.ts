@@ -51,6 +51,22 @@ describe("GlobalExceptionFilter", () => {
     });
   });
 
+  it("stamps the request's id onto an ApiException's error body for support/log correlation", () => {
+    const filter = new GlobalExceptionFilter();
+    const { host, response } = makeHost({ id: "req-1" });
+
+    filter.catch(
+      new NotFoundApiException("Job not found", ErrorCode.JOB_NOT_FOUND),
+      host,
+    );
+
+    expect(response.json).toHaveBeenCalledWith({
+      error: "Job not found",
+      code: ErrorCode.JOB_NOT_FOUND,
+      requestId: "req-1",
+    });
+  });
+
   it("sets Retry-After for TooManyRequestsApiException", () => {
     const filter = new GlobalExceptionFilter();
     const { host, response } = makeHost();
@@ -223,6 +239,19 @@ describe("GlobalExceptionFilter", () => {
     expect(response.json).toHaveBeenCalledWith({
       error: "Internal server error",
       code: ErrorCode.INTERNAL_ERROR,
+    });
+  });
+
+  it("includes the request's id in the generic 500 fallback body", () => {
+    const filter = new GlobalExceptionFilter();
+    const { host, response } = makeHost({ id: "req-1" });
+
+    filter.catch(new Error("boom"), host);
+
+    expect(response.json).toHaveBeenCalledWith({
+      error: "Internal server error",
+      code: ErrorCode.INTERNAL_ERROR,
+      requestId: "req-1",
     });
   });
 

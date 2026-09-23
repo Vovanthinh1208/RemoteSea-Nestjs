@@ -37,19 +37,29 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
+    // Resolved once up front (requestIdMiddleware guarantees it's set on
+    // every request, not just the unrecognized-exception path below) so
+    // every branch below can stamp it onto the error body — the frontend
+    // can then hand this back verbatim in a bug report and it's directly
+    // grep-able against this same request's server-side log line.
+    const requestId = host.switchToHttp().getRequest<Request>().id;
 
     if (exception instanceof TooManyRequestsApiException) {
       response
         .status(exception.getStatus())
         .set("Retry-After", String(exception.retryAfter))
-        .json(exception.getResponse());
+        .json({ ...(exception.getResponse() as object), requestId });
       return;
     }
 
     // Every exception application code throws is one of these — already the
-    // { error, code } shape from its own constructor, pass through as-is.
+    // { error, code } shape from its own constructor; requestId is stamped
+    // on here rather than at construction time since exceptions are thrown
+    // deep in services/repositories that never have the request object.
     if (exception instanceof ApiException) {
-      response.status(exception.getStatus()).json(exception.getResponse());
+      response
+        .status(exception.getStatus())
+        .json({ ...(exception.getResponse() as object), requestId });
       return;
     }
 
@@ -77,6 +87,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       response.status(status).json({
         error: message,
         code: FALLBACK_CODE_BY_STATUS[status] ?? ErrorCode.INTERNAL_ERROR,
+        requestId,
       });
       return;
     }
@@ -90,6 +101,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           response.status(409).json({
             error: "Conflict — this record already exists",
             code: ErrorCode.CONFLICT,
+            requestId,
           });
           return;
         // findUniqueOrThrow/findFirstOrThrow/deleteOrThrow-style calls throw this on
@@ -97,13 +109,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         case "P2025":
           response
             .status(404)
-            .json({ error: "Not found", code: ErrorCode.NOT_FOUND });
+            .json({ error: "Not found", code: ErrorCode.NOT_FOUND, requestId });
           return;
         // Foreign key violation — the request references a record that doesn't exist.
         case "P2003":
           response.status(400).json({
             error: "Invalid reference — related record does not exist",
             code: ErrorCode.INVALID_REFERENCE,
+            requestId,
           });
           return;
         // Would violate a required relation (e.g. deleting a record another required
@@ -112,6 +125,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           response.status(409).json({
             error: "Conflict — operation violates a required relation",
             code: ErrorCode.CONFLICT,
+            requestId,
           });
           return;
       }
@@ -136,6 +150,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       response.status(400).json({
         error: "salaryMax must be greater than or equal to salaryMin",
         code: ErrorCode.SALARY_RANGE_INVALID,
+        requestId,
       });
       return;
     }
@@ -153,11 +168,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       .switchToHttp()
       .getRequest<Request & { user?: AuthenticatedUser }>();
     reportException(exception, {
-      requestId: request.id,
+      requestId,
       userId: request.user?.id,
     });
-    response
-      .status(500)
-      .json({ error: "Internal server error", code: ErrorCode.INTERNAL_ERROR });
+    response.status(500).json({
+      error: "Internal server error",
+      code: ErrorCode.INTERNAL_ERROR,
+      requestId,
+    });
   }
 }
