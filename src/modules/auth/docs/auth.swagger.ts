@@ -20,6 +20,7 @@ import {
   ForgotPasswordRequestDto,
   LoginRequestDto,
   MessageResponseDto,
+  OAuthExchangeRequestDto,
   OAuthLinkUrlResponseDto,
   RegisterRequestDto,
   ResetPasswordRequestDto,
@@ -38,6 +39,7 @@ import {
   ForgotPasswordRequestExample,
   ForgotPasswordResponseExample,
   LoginRequestExample,
+  OAuthExchangeRequestExample,
   OAuthLinkUrlExample,
   RegisterRequestExample,
   ResetPasswordRequestExample,
@@ -57,6 +59,7 @@ import {
   IncorrectPasswordResponse,
   InvalidChallengeTokenResponse,
   InvalidCredentialsResponse,
+  InvalidOAuthExchangeCodeResponse,
   InvalidOrExpiredTokenResponse,
   InvalidTwoFactorCodeResponse,
   TwoFactorSetupRequiredResponse,
@@ -133,7 +136,29 @@ export const ApiTwoFactorChallenge = () =>
     ValidationErrorResponse,
     InvalidTwoFactorCodeResponse,
     InvalidChallengeTokenResponse,
-    rateLimitResponse("10 req/5min per IP"),
+    rateLimitResponse("10 req/5min per IP, 10 req/5min per target account"),
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiOAuthExchange = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "Exchange an OAuth callback code for a real access token",
+      description:
+        "The only route that ever accepts the short-lived (60s) `code` from a Google/GitHub/LinkedIn sign-in redirect (`GET /auth/:provider/callback` → `<FRONTEND_URL>/auth/callback?code=...`) — called by the frontend's callback page immediately on landing. Kept out of the redirect URL itself so a real bearer token never sits in browser history or a Referer header.",
+    }),
+    ApiBody({
+      type: OAuthExchangeRequestDto,
+      examples: { default: { value: OAuthExchangeRequestExample } },
+    }),
+    ApiOkResponse({
+      description: "Code verified — real access token issued",
+      type: AuthTokenResponseDto,
+      schema: { example: AuthTokenResponseExample },
+    }),
+    ValidationErrorResponse,
+    InvalidOAuthExchangeCodeResponse,
+    rateLimitResponse("20 req/60s per IP"),
     InternalServerErrorApiResponse,
   );
 
@@ -277,12 +302,12 @@ export const ApiGoogleCallback = () =>
     ApiOperation({
       summary: "Google OAuth callback",
       description:
-        "Google's OAuth redirect target. Looks up or creates the user from the Google profile, issues a JWT, and redirects to `<FRONTEND_URL>/auth/callback?token=<accessToken>`. A profile with no email surfaces as a 500 (raw Error, not an ApiException) rather than a 401.",
+        "Google's OAuth redirect target. Looks up or creates the user from the Google profile, mints a short-lived exchange code, and redirects to `<FRONTEND_URL>/auth/callback?code=<exchangeCode>` — the frontend then calls POST /auth/oauth/exchange to trade it for a real access token. A profile with no email surfaces as a 500 (raw Error, not an ApiException) rather than a 401.",
     }),
     ApiResponse({
       status: 302,
       description:
-        "Redirects to `<FRONTEND_URL>/auth/callback?token=<accessToken>`",
+        "Redirects to `<FRONTEND_URL>/auth/callback?code=<exchangeCode>`",
     }),
     InternalServerErrorApiResponse,
   );
@@ -310,7 +335,7 @@ export const ApiGithubCallback = () =>
     ApiResponse({
       status: 302,
       description:
-        "Redirects to `<FRONTEND_URL>/auth/callback?token=<accessToken>`",
+        "Redirects to `<FRONTEND_URL>/auth/callback?code=<exchangeCode>`",
     }),
     InternalServerErrorApiResponse,
   );
@@ -338,7 +363,7 @@ export const ApiLinkedinCallback = () =>
     ApiResponse({
       status: 302,
       description:
-        "Redirects to `<FRONTEND_URL>/auth/callback?token=<accessToken>`",
+        "Redirects to `<FRONTEND_URL>/auth/callback?code=<exchangeCode>`",
     }),
     InternalServerErrorApiResponse,
   );

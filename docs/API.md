@@ -89,7 +89,7 @@ Base path: `/auth`. Controller: `auth.controller.ts`.
 
 ### POST /auth/register
 
-Creates a new user account (`TALENT` or `EMPLOYER`) with a bcrypt-hashed password; auto-provisions a `TalentProfile` (with a generated slug) for `TALENT` signups; sends a welcome email (no-op without `RESEND_API_KEY`).
+Creates a new user account (`TALENT` or `EMPLOYER`) with a bcrypt-hashed password; auto-provisions a `TalentProfile` (with a generated slug) for `TALENT` signups; sends a welcome email (no-op without `RESEND_API_KEY`); signs the new account in immediately (no separate `POST /auth/login` call needed).
 
 - **Auth**: None
 - **Rate limit**: 5 req / 60s, keyed per IP — `register:<ip>`
@@ -115,10 +115,13 @@ Creates a new user account (`TALENT` or `EMPLOYER`) with a bcrypt-hashed passwor
 
 ```json
 {
-  "id": "cme8f1a2b0000ug0h9x1n1a2",
-  "email": "jane.doe@example.com",
-  "name": "Jane Doe",
-  "role": "TALENT"
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "cme8f1a2b0000ug0h9x1n1a2",
+    "email": "jane.doe@example.com",
+    "name": "Jane Doe",
+    "role": "TALENT"
+  }
 }
 ```
 
@@ -147,7 +150,15 @@ Validates email/password credentials. Issues a signed JWT directly — unless th
 **Success response — `200 OK`** — one of two shapes:
 
 ```json
-{ "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "cme8f1a2b0000ug0h9x1n1a2",
+    "email": "jane.doe@example.com",
+    "name": "Jane Doe",
+    "role": "TALENT"
+  }
+}
 ```
 
 ```json
@@ -172,13 +183,21 @@ Validates email/password credentials. Issues a signed JWT directly — unless th
 Exchanges a `challengeToken` from `POST /auth/login` plus a 6-digit authenticator code (or an unused backup code) for a real access token. This is the only route that ever accepts a challenge token — `JwtStrategy` explicitly rejects one everywhere else.
 
 - **Auth**: None (the challenge token itself is the credential)
-- **Rate limit**: 10 req / 5min per IP — `2fa-challenge:<ip>`
+- **Rate limit**: 10 req / 5min per IP (`2fa-challenge:<ip>`) **and** 10 req / 5min per target account, decoded from `challengeToken` (`2fa-challenge-account:<userId>`) — either can trip first, so a brute force spread across many source IPs still gets throttled per victim account
 - **Body** (`twoFactorChallengeSchema`): `challengeToken` (string, required), `code` (string, 6–32 chars — a TOTP code or a backup code, required)
 
 **Success response — `200 OK`**
 
 ```json
-{ "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "cme8f1a2b0000ug0h9x1n1a2",
+    "email": "jane.doe@example.com",
+    "name": "Jane Doe",
+    "role": "TALENT"
+  }
+}
 ```
 
 **Errors**
@@ -283,7 +302,7 @@ or `{ "user": null }` if the header is missing/invalid/expired.
 
 ### GET /auth/google · GET /auth/google/callback
 
-Redirects to Google's consent screen, then on callback looks up/creates the user, issues a JWT, and redirects to `<FRONTEND_URL>/auth/callback?token=<accessToken>`. Only registered if Google OAuth env vars are set.
+Redirects to Google's consent screen, then on callback looks up/creates the user, mints a short-lived (60s) exchange code, and redirects to `<FRONTEND_URL>/auth/callback?code=<exchangeCode>` — the frontend's callback page immediately calls `POST /auth/oauth/exchange` (below) to trade it for a real access token. The code is never a usable bearer token on its own, and isn't the long-lived access token itself, so it's safe to sit in browser history/Referer headers the way a raw token wouldn't be. Only registered if Google OAuth env vars are set.
 
 - **Auth**: `GoogleAuthGuard` (`AuthGuard("google")`) · **Rate limit**: None
 - **Success response**: `302 Found` redirect (no JSON body)
@@ -300,6 +319,42 @@ Same flow as Google, via `GithubAuthGuard`. Only registered if `AUTH_GITHUB_ID`/
 ### GET /auth/linkedin · GET /auth/linkedin/callback
 
 Same shape as Google/GitHub above, via `LinkedinAuthGuard`. Uses "Sign In with LinkedIn using OpenID Connect" (`scope: openid profile email`, profile fetched from `https://api.linkedin.com/v2/userinfo`) rather than LinkedIn's older v1/v2 REST profile API. Only registered if `AUTH_LINKEDIN_ID`/`AUTH_LINKEDIN_SECRET` are set.
+
+---
+
+### POST /auth/oauth/exchange
+
+The only route that ever accepts the short-lived `?code=` minted by a Google/GitHub/LinkedIn callback redirect above — trades it for a real access token. Called by the frontend's `/auth/callback` page immediately on landing, not something a user or client calls directly.
+
+- **Auth**: None (the code itself is the credential)
+- **Rate limit**: 20 req / 60s per IP — `oauth-exchange:<ip>`
+- **Body**: `code` (string, required)
+
+```json
+{ "code": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
+```
+
+**Success response — `200 OK`**
+
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "cme8f1a2b0000ug0h9x1n1a2",
+    "email": "jane.doe@example.com",
+    "name": "Jane Doe",
+    "role": "TALENT"
+  }
+}
+```
+
+**Errors**
+
+| Status | Body                                                              | Trigger                                                                         |
+| ------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 400    | flattened Zod error                                               | validation failure                                                              |
+| 401    | `{ "error": "This sign-in link has expired — please try again" }` | code missing/expired/invalid, not an exchange code, or account no longer exists |
+| 429    | rate-limit body                                                   | too many requests                                                               |
 
 ---
 

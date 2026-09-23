@@ -69,6 +69,50 @@ export const ListEmployerJobsResponseExample = {
   },
 };
 
+// Composed from the same pieces GET /employer/profile|jobs|applications/
+// recent|analytics/funnel already return individually — see
+// EmployerDashboardResponseDto.
+export const EmployerDashboardResponseExample = {
+  profile: EmployerProfileWithStatsResponseExample,
+  jobs: ListEmployerJobsResponseExample,
+  recentApplications: {
+    applications: [
+      {
+        id: "clapp1a2b3c4d5e6f7g8h9i0",
+        status: "REVIEWING",
+        jobId: "cljob1a2b3c4d5e6f7g8h9i0",
+        jobTitle: "Senior Backend Engineer",
+        appliedAt: "2026-06-10T09:00:00.000Z",
+        talent: {
+          id: "cltal1a2b3c4d5e6f7g8h9i0",
+          name: "Jane Doe",
+          avatarUrl: null,
+          headline: "Senior Backend Engineer",
+        },
+      },
+    ],
+  },
+  funnel: {
+    stages: [
+      {
+        status: "PENDING",
+        label: "Applied",
+        count: 120,
+        conversionFromFirst: 100,
+        conversionFromPrevious: 100,
+      },
+      {
+        status: "OFFER_ACCEPTED",
+        label: "Hired",
+        count: 6,
+        conversionFromFirst: 5,
+        conversionFromPrevious: 60,
+      },
+    ],
+    dropOff: [{ status: "REJECTED", label: "Rejected", count: 80 }],
+  },
+};
+
 export const ListJobApplicationsResponseExample = {
   applications: [
     {

@@ -330,6 +330,12 @@ const expectations: ControllerExpectation[] = [
         guards: ["LinkedinAuthGuard"],
       },
       {
+        method: "oauthExchange",
+        httpMethod: "POST",
+        path: "oauth/exchange",
+        guards: [],
+      },
+      {
         method: "forgotPassword",
         httpMethod: "POST",
         path: "forgot-password",
@@ -380,6 +386,13 @@ const expectations: ControllerExpectation[] = [
         method: "getProfile",
         httpMethod: "GET",
         path: "profile",
+        guards: ["JwtAuthGuard", "RolesGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
+        method: "getDashboard",
+        httpMethod: "GET",
+        path: "dashboard",
         guards: ["JwtAuthGuard", "RolesGuard"],
         roles: ["EMPLOYER"],
       },
@@ -846,6 +859,12 @@ const expectations: ControllerExpectation[] = [
         method: "getOwnProfile",
         httpMethod: "GET",
         path: "me",
+        guards: ["JwtAuthGuard"],
+      },
+      {
+        method: "getDashboard",
+        httpMethod: "GET",
+        path: "me/dashboard",
         guards: ["JwtAuthGuard"],
       },
       {

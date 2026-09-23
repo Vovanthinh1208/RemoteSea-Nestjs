@@ -38,6 +38,18 @@ import { SalaryRange } from "@/modules/jobs/salary-range";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import { ProfileViewsService } from "@/modules/profile-views/profile-views.service";
 import type { ProfileViewAnalytics } from "@/modules/profile-views/interfaces";
+import { ApplicationsService } from "@/modules/applications/applications.service";
+import { SavedService } from "@/modules/saved/saved.service";
+import { AlertsService } from "@/modules/alerts/alerts.service";
+import { InvitationsService } from "@/modules/invitations/invitations.service";
+import { nullOnExpectedError } from "@/common/utils/null-on-expected-error.util";
+
+// Matches the frontend's own DASHBOARD_APPLICATIONS_LIMIT (TalentDashboard.tsx)
+// — the dashboard's applications table/recommendations panel show a complete
+// picture for the vast majority of talents without needing pager UI there;
+// the KPI tiles above them use applicationStats instead, which is accurate
+// beyond this cap.
+const DASHBOARD_APPLICATIONS_LIMIT = 50;
 
 @Injectable()
 export class TalentService {
@@ -49,6 +61,10 @@ export class TalentService {
     private readonly uploadsService: UploadsService,
     private readonly emailService: EmailService,
     private readonly profileViewsService: ProfileViewsService,
+    private readonly applicationsService: ApplicationsService,
+    private readonly savedService: SavedService,
+    private readonly alertsService: AlertsService,
+    private readonly invitationsService: InvitationsService,
   ) {}
 
   async getOwnProfile(userId: string): Promise<OwnTalentProfile> {
@@ -143,6 +159,57 @@ export class TalentService {
     const talent = await this.talentRepository.findTalentIdByUserId(userId);
     if (!talent) return { totalViews: 0, uniqueViewers: 0 };
     return this.profileViewsService.getAnalytics(talent.id);
+  }
+
+  // Backs GET /talent/me/dashboard — one round trip for the whole dashboard
+  // screen instead of the eight separate requests it used to take
+  // (profile, applications, application stats, saved job ids, profile-view
+  // analytics, alerts, invitations, activity — each its own hook/query key
+  // on the frontend). Reuses the exact same methods each piece already has
+  // (this service's own getOwnProfile/getActivity/getProfileViewAnalytics,
+  // plus the injected ApplicationsService/SavedService/AlertsService/
+  // InvitationsService) rather than re-deriving their logic here, so this
+  // can never silently drift from what calling any of them individually
+  // already does. Only getOwnProfile can actually throw for the caller
+  // themselves (no talent profile yet) — every other piece here already
+  // degrades to an empty/zero result on its own for that same case (see
+  // each one's own comment) — but nullOnExpectedError wraps all eight
+  // uniformly anyway, both for symmetry and so a future change to any of
+  // them that starts throwing doesn't silently break this aggregate too.
+  async getDashboard(userId: string) {
+    const [
+      profile,
+      applications,
+      applicationStats,
+      savedJobIds,
+      profileViewAnalytics,
+      alerts,
+      invitations,
+      activity,
+    ] = await Promise.all([
+      this.getOwnProfile(userId).catch(nullOnExpectedError),
+      this.applicationsService
+        .findAllForUser(userId, 1, DASHBOARD_APPLICATIONS_LIMIT)
+        .catch(nullOnExpectedError),
+      this.applicationsService
+        .getStatusCounts(userId)
+        .catch(nullOnExpectedError),
+      this.savedService.findJobIdsForUser(userId).catch(nullOnExpectedError),
+      this.getProfileViewAnalytics(userId).catch(nullOnExpectedError),
+      this.alertsService.listForUser(userId).catch(nullOnExpectedError),
+      this.invitationsService.listForTalent(userId).catch(nullOnExpectedError),
+      this.getActivity(userId).catch(nullOnExpectedError),
+    ]);
+    return {
+      profile,
+      applications,
+      applicationStats,
+      savedJobIds,
+      profileViewAnalytics,
+      alerts,
+      invitations,
+      activity,
+    };
   }
 
   async search(

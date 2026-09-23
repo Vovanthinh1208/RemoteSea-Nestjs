@@ -109,26 +109,35 @@ export function buildJobWhere(query: ListJobsDto): Prisma.JobWhereInput {
 // column or its GIN index without extra preview features, and nothing needs
 // the fluent client for it — so ranked search only ever runs as raw SQL, with
 // the ordered id list threaded back into a normal Prisma `where: { id: { in
-// } } }` for everything else (JobsService.list()). This caps how many
-// candidates the ranking query considers rather than paginating in SQL —
-// reasonable at this app's scale; revisit if that stops holding.
-export const SEARCH_CANDIDATE_LIMIT = 2000;
-
+// } } }` for everything else (JobsService.list()).
+//
+// `ids` is the caller's already-filtered candidate set (JobsService.listBySearch
+// resolves every non-`q` filter — including which jobs count as "live" — via
+// the exact same buildJobWhere() the non-search list path uses, then passes
+// the resulting id list in here). Ranking is scoped to that set instead of a
+// LIMIT-capped scan of the whole table: an earlier version capped the *whole*
+// table scan at a fixed candidate count before any other filter ran, which
+// silently truncated both the results and the reported total whenever `q`
+// alone matched more jobs than the cap — undercounting exactly the kind of
+// broad, high-traffic search term where an accurate total matters most.
+// Filtering first bounds this query by how many jobs are actually live and
+// match the caller's other filters (typically a small fraction of the table),
+// which is also cheaper than ranking indiscriminately across every row.
+//
 // websearch_to_tsquery (not to_tsquery/plainto_tsquery) because it never
 // throws on arbitrary user input — stray `&`, `|`, `:`, or unbalanced
 // parentheses degrade gracefully instead of raising a syntax error the way
 // to_tsquery would.
-export function buildSearchRankedIdsQuery(q: string): Prisma.Sql {
+export function buildSearchRankedIdsQuery(
+  q: string,
+  ids: string[],
+): Prisma.Sql {
   return Prisma.sql`
     SELECT id
     FROM "jobs"
-    WHERE status = 'ACTIVE'
-      AND "publishedAt" IS NOT NULL
-      AND "publishedAt" <= now()
-      AND ("expiresAt" IS NULL OR "expiresAt" > now())
+    WHERE id IN (${Prisma.join(ids)})
       AND "searchVector" @@ websearch_to_tsquery('english', ${q})
     ORDER BY ts_rank_cd("searchVector", websearch_to_tsquery('english', ${q})) DESC
-    LIMIT ${SEARCH_CANDIDATE_LIMIT}
   `;
 }
 

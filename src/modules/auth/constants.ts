@@ -1,5 +1,11 @@
 export const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
+// How long a ?code= from an OAuth redirect stays redeemable at POST
+// /auth/oauth/exchange — the frontend's callback page redeems it within a
+// second or two of landing, so this only needs to survive that brief window,
+// not a real user-facing session length.
+export const OAUTH_EXCHANGE_TTL = "60s";
+
 // otplib's `authenticator.keyuri` issuer label — shown in the user's
 // authenticator app next to the account name.
 export const TWO_FACTOR_ISSUER = "RemoteSEA";
@@ -19,4 +25,8 @@ export const RATE_LIMITS = {
   // an unlimited-guess account-takeover-and-2FA-removal path (a stolen
   // token never expires the account's actual password).
   TWO_FACTOR_DISABLE: { limit: 5, windowMs: 5 * 60_000 },
+  // Generous — this fires automatically right after a normal OAuth
+  // redirect, not something a real user ever calls repeatedly; just basic
+  // abuse protection on a public, unauthenticated endpoint.
+  OAUTH_EXCHANGE: { limit: 20, windowMs: 60_000 },
 } as const;

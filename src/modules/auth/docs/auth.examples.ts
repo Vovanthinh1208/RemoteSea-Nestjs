@@ -40,6 +40,13 @@ export const SessionAuthenticatedExample = {
 
 export const SessionAnonymousExample = { user: null };
 
+export const OAuthExchangeRequestExample = {
+  code: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbWU4ZjFhMmIwMDAwdWcwaDl4MW4xYTIifQ.signature",
+};
+export const InvalidOAuthExchangeCodeExample = {
+  error: "This sign-in link has expired — please try again",
+};
+
 export const ForgotPasswordRequestExample = { email: "jane.doe@example.com" };
 
 export const ForgotPasswordResponseExample = {

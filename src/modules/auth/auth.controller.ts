@@ -23,6 +23,10 @@ import {
 import { registerSchema, type RegisterDto } from "./dto/register.dto";
 import { loginSchema, type LoginDto } from "./dto/login.dto";
 import {
+  oauthExchangeSchema,
+  type OAuthExchangeDto,
+} from "./dto/oauth-exchange.dto";
+import {
   forgotPasswordSchema,
   type ForgotPasswordDto,
 } from "./dto/forgot-password.dto";
@@ -62,6 +66,7 @@ import {
   ApiLinkedinCallback,
   ApiLinkedinLogin,
   ApiLogin,
+  ApiOAuthExchange,
   ApiRegister,
   ApiResetPassword,
   ApiSession,
@@ -149,6 +154,23 @@ export class AuthController {
       RATE_LIMITS.TWO_FACTOR_CHALLENGE.windowMs,
       req,
     );
+    // Same limit, keyed by the target account (decoded from the challenge
+    // token itself) instead of the caller's IP — closes the gap where a TOTP
+    // brute force spread across many source IPs would never trip the per-IP
+    // limiter above. No-op for a token that doesn't decode to a real
+    // challenge — completeTwoFactorChallenge below rejects that on its own,
+    // and the per-IP limiter still applies to it either way.
+    const challengeAccountId = this.authService.decodeTwoFactorChallengeSubject(
+      body.challengeToken,
+    );
+    if (challengeAccountId) {
+      this.rateLimitService.enforce(
+        `2fa-challenge-account:${challengeAccountId}`,
+        RATE_LIMITS.TWO_FACTOR_CHALLENGE.limit,
+        RATE_LIMITS.TWO_FACTOR_CHALLENGE.windowMs,
+        req,
+      );
+    }
     return this.authService.completeTwoFactorChallenge(
       body.challengeToken,
       body.code,
@@ -364,11 +386,29 @@ export class AuthController {
     const user = await this.authService.validateOAuthLogin(
       req.user as OAuthProfile,
     );
-    const { accessToken } = await this.authService.issueToken(
-      user,
-      sessionMeta(req),
+    // A real access token doesn't go in this URL — it would sit in browser
+    // history and get sent in the Referer header of any subsequent cross-
+    // origin navigation from the callback page. This short-lived, single-
+    // purpose code is exchanged for the real token via POST
+    // /auth/oauth/exchange, which the frontend calls immediately on landing.
+    const code = this.authService.createOAuthExchangeCode(user.id);
+    res.redirect(`${frontendUrl}/auth/callback?code=${code}`);
+  }
+
+  @ApiOAuthExchange()
+  @Post("oauth/exchange")
+  @HttpCode(HttpStatus.OK)
+  async oauthExchange(
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(oauthExchangeSchema)) body: OAuthExchangeDto,
+  ) {
+    this.rateLimitService.enforce(
+      `oauth-exchange:${clientIp(req)}`,
+      RATE_LIMITS.OAUTH_EXCHANGE.limit,
+      RATE_LIMITS.OAUTH_EXCHANGE.windowMs,
+      req,
     );
-    res.redirect(`${frontendUrl}/auth/callback?token=${accessToken}`);
+    return this.authService.completeOAuthExchange(body.code, sessionMeta(req));
   }
 
   @ApiForgotPassword()

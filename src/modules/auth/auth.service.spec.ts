@@ -343,6 +343,140 @@ describe("AuthService.verifySession", () => {
   });
 });
 
+describe("AuthService.createOAuthExchangeCode / completeOAuthExchange", () => {
+  it("signs a short-lived, purpose-scoped code rather than a real access token", () => {
+    const sign = jest.fn().mockReturnValue("exchange.code");
+    const { service } = makeService({
+      jwtService: { sign, verify: jest.fn() },
+    });
+
+    const code = service.createOAuthExchangeCode("u1");
+
+    expect(sign).toHaveBeenCalledWith(
+      { sub: "u1", purpose: "oauth_exchange" },
+      { expiresIn: "60s" },
+    );
+    expect(code).toBe("exchange.code");
+  });
+
+  it("rejects an invalid/expired exchange code", async () => {
+    const verify = jest.fn().mockImplementation(() => {
+      throw new Error("jwt expired");
+    });
+    const { service } = makeService({
+      jwtService: { sign: jest.fn(), verify },
+    });
+
+    const error = await service
+      .completeOAuthExchange("bad.code")
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(UnauthorizedApiException);
+    expect((error as UnauthorizedApiException).getResponse()).toMatchObject({
+      code: ErrorCode.INVALID_OAUTH_EXCHANGE_CODE,
+    });
+  });
+
+  it("rejects a token that decodes but isn't an oauth_exchange purpose (e.g. a real access token)", async () => {
+    const verify = jest.fn().mockReturnValue({ sub: "u1" });
+    const { service } = makeService({
+      jwtService: { sign: jest.fn(), verify },
+    });
+
+    const error = await service
+      .completeOAuthExchange("some.access.token")
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(UnauthorizedApiException);
+    expect((error as UnauthorizedApiException).getResponse()).toMatchObject({
+      code: ErrorCode.INVALID_OAUTH_EXCHANGE_CODE,
+    });
+  });
+
+  it("rejects a valid code whose account no longer exists", async () => {
+    const verify = jest
+      .fn()
+      .mockReturnValue({ sub: "u1", purpose: "oauth_exchange" });
+    const { service } = makeService({
+      jwtService: { sign: jest.fn(), verify },
+      authRepository: { findUserById: jest.fn().mockResolvedValue(null) },
+    });
+
+    const error = await service
+      .completeOAuthExchange("good.code")
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(UnauthorizedApiException);
+    expect((error as UnauthorizedApiException).getResponse()).toMatchObject({
+      code: ErrorCode.INVALID_OAUTH_EXCHANGE_CODE,
+    });
+  });
+
+  it("issues a real session for a valid code and existing account", async () => {
+    const verify = jest
+      .fn()
+      .mockReturnValue({ sub: "u1", purpose: "oauth_exchange" });
+    const sign = jest.fn().mockReturnValue("signed.jwt.token");
+    const findUserById = jest.fn().mockResolvedValue({
+      id: "u1",
+      email: "a@b.com",
+      name: "A",
+      role: "TALENT",
+    });
+    const { service } = makeService({
+      jwtService: { sign, verify },
+      authRepository: { findUserById },
+    });
+
+    const result = await service.completeOAuthExchange("good.code", {
+      ip: "1.2.3.4",
+    });
+
+    expect(findUserById).toHaveBeenCalledWith("u1");
+    expect(result).toEqual({
+      accessToken: "signed.jwt.token",
+      user: { id: "u1", email: "a@b.com", name: "A", role: "TALENT" },
+    });
+  });
+});
+
+describe("AuthService.decodeTwoFactorChallengeSubject", () => {
+  it("returns null (not a throw) for an invalid/expired token", () => {
+    const verify = jest.fn().mockImplementation(() => {
+      throw new Error("jwt expired");
+    });
+    const { service } = makeService({
+      jwtService: { sign: jest.fn(), verify },
+    });
+
+    expect(service.decodeTwoFactorChallengeSubject("bad.token")).toBeNull();
+  });
+
+  it("returns null for a token whose purpose isn't 2fa_challenge (e.g. a real access token)", () => {
+    const verify = jest.fn().mockReturnValue({ sub: "u1" });
+    const { service } = makeService({
+      jwtService: { sign: jest.fn(), verify },
+    });
+
+    expect(
+      service.decodeTwoFactorChallengeSubject("some.access.token"),
+    ).toBeNull();
+  });
+
+  it("returns the target account id for a valid challenge token", () => {
+    const verify = jest
+      .fn()
+      .mockReturnValue({ sub: "u1", purpose: "2fa_challenge" });
+    const { service } = makeService({
+      jwtService: { sign: jest.fn(), verify },
+    });
+
+    expect(
+      service.decodeTwoFactorChallengeSubject("good.challenge.token"),
+    ).toBe("u1");
+  });
+});
+
 describe("AuthService.forgotPassword", () => {
   it("is a no-op for an unknown email — no token, no email sent", async () => {
     const { service, authRepository, emailService } = makeService({

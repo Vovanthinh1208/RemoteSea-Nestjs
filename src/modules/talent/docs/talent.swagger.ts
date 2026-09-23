@@ -99,6 +99,66 @@ export const ApiGetProfileViewAnalytics = () =>
     InternalServerErrorApiResponse,
   );
 
+export const ApiGetDashboard = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Talent dashboard, in one request",
+      description:
+        "Combines GET /talent/me, /applications (first page, 50), /applications/stats, /saved/ids, /talent/me/profile-views, /alerts, /invitations, and /talent/me/activity into a single response — the frontend's dashboard screen used to fire all eight as separate requests. `profile` is null for a caller with no talent profile yet (mirrors GET /talent/me's own 404 for that case); every other field already degrades to an empty list/zero-value result on its own for that same case, same as calling each standalone endpoint individually. Never returns a 404 itself for the no-profile case — only for a caller who isn't authenticated.",
+    }),
+    ApiOkResponse({
+      description: "Dashboard data — `profile` may be null",
+      schema: {
+        example: {
+          profile: OwnTalentProfileExample,
+          applications: {
+            applications: [
+              {
+                id: "clapp1a2b3c4d5e6f7g8h9i0",
+                status: "REVIEWING",
+                appliedAt: "2026-06-10T09:00:00.000Z",
+                job: {
+                  id: "cljob1a2b3c4d5e6f7g8h9i0",
+                  title: "Senior Backend Engineer",
+                  employer: { companyName: "RemoteSEA Ltd" },
+                },
+              },
+            ],
+            pagination: { page: 1, limit: 50, total: 1, pages: 1 },
+          },
+          applicationStats: {
+            total: 1,
+            byStatus: { PENDING: 0, REVIEWING: 1, INTERVIEW: 0, OFFERED: 0 },
+          },
+          savedJobIds: ["cljob1a2b3c4d5e6f7g8h9i0"],
+          profileViewAnalytics: ProfileViewAnalyticsExample,
+          alerts: [
+            {
+              id: "clalert1a2b3c4d5e6f7g8h9",
+              name: "Remote React roles",
+              isActive: true,
+            },
+          ],
+          invitations: [
+            {
+              id: "clinv1a2b3c4d5e6f7g8h9i0",
+              status: "PENDING",
+              employer: { companyName: "RemoteSEA Ltd" },
+              job: {
+                id: "cljob1a2b3c4d5e6f7g8h9i0",
+                title: "Senior Backend Engineer",
+              },
+            },
+          ],
+          activity: ListActivityResponseExample.activity,
+        },
+      },
+    }),
+    UnauthorizedApiResponse,
+    InternalServerErrorApiResponse,
+  );
+
 export const ApiUpsertProfile = () =>
   applyDecorators(
     ApiBearerAuth("bearer"),

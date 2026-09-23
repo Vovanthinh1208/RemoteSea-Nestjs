@@ -13,5 +13,8 @@ import { AlertOwnershipGuard } from "./guards/alert-ownership.guard";
     CronSecretGuard,
     AlertOwnershipGuard,
   ],
+  // TalentModule composes listForUser into GET /talent/me/dashboard — see
+  // TalentService.getDashboard.
+  exports: [AlertsService],
 })
 export class AlertsModule {}

@@ -91,11 +91,13 @@ export class JobsRepository {
 
   // Rank isn't a real jobs column, so Prisma's fluent client can't ORDER BY
   // it — the caller (JobsService.listBySearch) re-sorts a normal `findMany`
-  // page using this array's order instead. See buildSearchRankedIdsQuery for
-  // why the match/rank itself is computed here in raw SQL.
-  async findSearchRankedIds(q: string): Promise<string[]> {
+  // page using this array's order instead. `ids` is the already-filtered
+  // candidate set (see buildSearchRankedIdsQuery for why ranking is scoped to
+  // it rather than a LIMIT-capped scan) and the match/rank itself is computed
+  // here in raw SQL.
+  async findSearchRankedIds(q: string, ids: string[]): Promise<string[]> {
     const rows = await this.prisma.$queryRaw<{ id: string }[]>(
-      buildSearchRankedIdsQuery(q),
+      buildSearchRankedIdsQuery(q, ids),
     );
     return rows.map((row) => row.id);
   }

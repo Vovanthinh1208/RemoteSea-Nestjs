@@ -90,6 +90,7 @@ import {
   ApiCreateEmployerProfile,
   ApiEmployerTag,
   ApiExportJobApplicants,
+  ApiGetEmployerDashboard,
   ApiGetEmployerProfile,
   ApiGetHiringFunnel,
   ApiListEmployerJobs,
@@ -166,6 +167,14 @@ export class EmployerController {
     return this.employerService.getProfile(user.id);
   }
 
+  @ApiGetEmployerDashboard()
+  @Get("dashboard")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("EMPLOYER")
+  getDashboard(@CurrentUser() user: AuthenticatedUser) {
+    return this.employerService.getDashboard(user.id);
+  }
+
   @ApiUpdateEmployerProfile()
   @Patch("profile")
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -213,11 +222,20 @@ export class EmployerController {
   @Roles("EMPLOYER")
   @Header("Content-Type", "text/csv; charset=utf-8")
   async exportJobApplicants(
+    @CurrentUser() user: AuthenticatedUser,
     @CurrentResource() job: JobOwnerOnly,
     @Query(new ZodValidationPipe(exportJobApplicationsSchema))
     query: ExportJobApplicationsDto,
     @Res({ passthrough: true }) res: Response,
   ) {
+    // Heavier than a normal read (up to APPLICANTS_CSV_EXPORT_CAP rows with
+    // nested joins) — every other action in this controller is rate-limited,
+    // this shouldn't be the one an abusive caller can hammer for free.
+    this.rateLimitService.enforce(
+      `employer-export-applicants:${user.id}`,
+      RATE_LIMITS.EXPORT_APPLICANTS.limit,
+      RATE_LIMITS.EXPORT_APPLICANTS.windowMs,
+    );
     // Dated per request (not a static @Header(), which can only ever hold a
     // fixed string) so two exports taken on different days don't collide in
     // a downloads folder.

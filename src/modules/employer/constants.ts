@@ -9,6 +9,12 @@ export const RATE_LIMITS = {
   // items, so 10/min comfortably covers clearing out a backlog in a few
   // clicks while still bounding abuse.
   BULK_UPDATE_APPLICATIONS: { limit: 10, windowMs: 60_000 },
+  // Heavier than a normal read (up to APPLICANTS_CSV_EXPORT_CAP rows with
+  // nested talent/skills joins, serialized in-request) — 10/min covers
+  // legitimate re-export-after-a-status-change use without leaving this
+  // the one unrated endpoint in the controller an abusive caller could
+  // hammer for repeated expensive queries.
+  EXPORT_APPLICANTS: { limit: 10, windowMs: 60_000 },
 } as const;
 
 // Defensive cap on a single bulk request — the current UI (the 8-item

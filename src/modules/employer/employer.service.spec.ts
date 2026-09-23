@@ -846,6 +846,123 @@ describe("EmployerService.getHiringFunnel", () => {
   });
 });
 
+describe("EmployerService.getDashboard", () => {
+  it("aggregates profile, jobs, recent applications, and funnel in one call", async () => {
+    const { service } = makeService({
+      findProfileWithJobCount: jest
+        .fn()
+        .mockResolvedValue({ id: "profile-1", companyName: "Acme" }),
+      countApplicationsForOwner: jest.fn().mockResolvedValue(4),
+      findJobsByEmployer: jest.fn().mockResolvedValue([{ id: "job-1" }]),
+      getEmployerJobStats: jest.fn().mockResolvedValue({
+        totalApps: 4,
+        shortlisted: 1,
+        avgTimeToHireInDays: 3,
+        avgFirstResponseHours: 5,
+      }),
+      findRecentApplicationsForCompany: jest
+        .fn()
+        .mockResolvedValue([{ id: "app-1" }]),
+      getApplicationFunnelCounts: jest
+        .fn()
+        .mockResolvedValue([{ status: "PENDING", count: 4 }]),
+    });
+
+    const result = await service.getDashboard("owner-1");
+
+    expect(result.profile).toMatchObject({
+      id: "profile-1",
+      totalApplications: 4,
+    });
+    expect(result.jobs).toEqual({
+      jobs: [{ id: "job-1" }],
+      stats: {
+        totalApps: 4,
+        shortlisted: 1,
+        avgTimeToHireInDays: 3,
+        avgFirstResponseHours: 5,
+      },
+    });
+    expect(result.recentApplications).toEqual({
+      applications: [{ id: "app-1" }],
+    });
+    expect(result.funnel?.stages[0]).toMatchObject({
+      status: "PENDING",
+      count: 4,
+    });
+  });
+
+  it("returns every field as null (not a rejection) for a caller with no company membership", async () => {
+    const { service } = makeService(
+      {},
+      {},
+      { resolveMembership: jest.fn().mockResolvedValue(null) },
+    );
+
+    const result = await service.getDashboard("no-membership-user");
+
+    expect(result).toEqual({
+      profile: null,
+      jobs: null,
+      recentApplications: null,
+      funnel: null,
+    });
+  });
+
+  it("returns the profile but null for jobs/applications/funnel for a role outside APPLICATION_REVIEW_ROLES (e.g. INTERVIEWER, who can view but not review)", async () => {
+    const { service } = makeService(
+      {
+        findProfileWithJobCount: jest
+          .fn()
+          .mockResolvedValue({ id: "profile-1", companyName: "Acme" }),
+        countApplicationsForOwner: jest.fn().mockResolvedValue(0),
+      },
+      {},
+      {
+        resolveMembership: jest.fn().mockResolvedValue({
+          employerId: "owner-1-company",
+          role: "INTERVIEWER",
+        }),
+      },
+    );
+
+    const result = await service.getDashboard("interviewer-1");
+
+    expect(result.profile).toMatchObject({ id: "profile-1" });
+    expect(result.jobs).toBeNull();
+    expect(result.recentApplications).toBeNull();
+    expect(result.funnel).toBeNull();
+  });
+
+  it("still rejects a real failure (not a membership issue) instead of swallowing it to null", async () => {
+    // Every other repo call this pulls in (listJobs/getRecentApplications/
+    // getHiringFunnel all run unconditionally alongside getProfile) has to
+    // stay mocked and resolving here too — leaving one unmocked would throw
+    // its own synchronous TypeError while building that method's internal
+    // Promise.all array, before Promise.all ever runs, orphaning the
+    // already-rejected findProfileWithJobCount promise below with no
+    // attached handler and crashing the test worker on an unhandled
+    // rejection instead of failing this assertion cleanly.
+    const { service } = makeService({
+      findProfileWithJobCount: jest
+        .fn()
+        .mockRejectedValue(new Error("db down")),
+      countApplicationsForOwner: jest.fn().mockResolvedValue(0),
+      findJobsByEmployer: jest.fn().mockResolvedValue([]),
+      getEmployerJobStats: jest.fn().mockResolvedValue({
+        totalApps: 0,
+        shortlisted: 0,
+        avgTimeToHireInDays: 0,
+        avgFirstResponseHours: 0,
+      }),
+      findRecentApplicationsForCompany: jest.fn().mockResolvedValue([]),
+      getApplicationFunnelCounts: jest.fn().mockResolvedValue([]),
+    });
+
+    await expect(service.getDashboard("owner-1")).rejects.toThrow("db down");
+  });
+});
+
 // Pure delegation to CommentsService, same shape as the scorecard/interview
 // delegation tests above — CommentsService's own tests (comments.service.spec.ts)
 // cover the actual behavior.

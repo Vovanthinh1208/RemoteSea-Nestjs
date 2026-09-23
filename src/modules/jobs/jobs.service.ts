@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { CACHE_MANAGER, type Cache } from "@nestjs/cache-manager";
-import type { Job, Prisma } from "@prisma/client";
+import type { Job } from "@prisma/client";
 import { JobsRepository, type PublicJob } from "./jobs.repository";
 import type { JobListItem } from "@/common/types/job-list-item.type";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
@@ -93,48 +93,52 @@ export class JobsService {
 
   // "relevance" (how well a job matches `q`) isn't a jobs column, so it can't
   // be a Prisma `orderBy` — findSearchRankedIds ranks matches in one raw SQL
-  // query, and every other filter (type/level/country/category/timezone/
-  // salary) still runs through the exact same buildJobWhere() the non-search
-  // path uses, just narrowed to `id: { in: rankedIds } }`. An explicit
-  // sort=salary/recent still wins over relevance — a caller who asked for a
-  // specific order gets it even while searching.
+  // query. Every other filter (type/level/country/category/timezone/salary,
+  // plus which jobs count as "live") is resolved *first*, through the exact
+  // same buildJobWhere() the non-search path uses, and only that already-
+  // narrow candidate set is handed to the ranking query — not the other way
+  // around. Filtering before ranking (rather than capping a rank-then-filter
+  // scan, as this used to) is what keeps `total` an accurate count instead of
+  // silently truncating whenever `q` alone matched an unusually large number
+  // of jobs. An explicit sort=salary/recent still wins over relevance — a
+  // caller who asked for a specific order gets it even while searching.
   private async listBySearch(
     query: ListJobsDto,
     q: string,
     skip: number,
     limit: number,
   ): Promise<{ jobs: JobListItem[]; total: number }> {
-    const rankedIds = await this.jobsRepository.findSearchRankedIds(q);
+    const candidateIds = await this.jobsRepository.findIds(
+      buildJobWhere({ ...query, q: undefined }),
+    );
+    if (candidateIds.length === 0) return { jobs: [], total: 0 };
+
+    const rankedIds = await this.jobsRepository.findSearchRankedIds(
+      q,
+      candidateIds,
+    );
     if (rankedIds.length === 0) return { jobs: [], total: 0 };
 
-    const where: Prisma.JobWhereInput = {
-      ...buildJobWhere({ ...query, q: undefined }),
-      id: { in: rankedIds },
-    };
-
     if (query.sort && query.sort !== "relevance") {
-      const [jobs, total] = await Promise.all([
-        this.jobsRepository.findMany(
-          where,
-          skip,
-          limit,
-          buildJobOrderBy(query.sort),
-        ),
-        this.jobsRepository.count(where),
-      ]);
-      return { jobs, total };
+      // rankedIds already *is* the full filtered+matched set (no separate
+      // count query needed — contrast the relevance branch below, which
+      // still has to slice a page out of it in JS instead of letting the DB
+      // do it via skip/take).
+      const jobs = await this.jobsRepository.findMany(
+        { id: { in: rankedIds } },
+        skip,
+        limit,
+        buildJobOrderBy(query.sort),
+      );
+      return { jobs, total: rankedIds.length };
     }
 
     // rankedIds is already ordered best-match-first; findMany has no matching
-    // orderBy to give it. Rather than fetching every surviving match (up to
-    // SEARCH_CANDIDATE_LIMIT) with its full employer/categories/skills joins
-    // just to slice one page out of it in JS, first narrow rankedIds down to
-    // the ids that also satisfy `where` with a cheap id-only query, then only
-    // pay for the joined select on the one page actually being returned.
-    const matchingIds = new Set(await this.jobsRepository.findIds(where));
-    const orderedIds = rankedIds.filter((id) => matchingIds.has(id));
-    const pageIds = orderedIds.slice(skip, skip + limit);
-    if (pageIds.length === 0) return { jobs: [], total: orderedIds.length };
+    // orderBy to give it. Slice the page out of the id list first, then only
+    // pay for the joined select (employer/categories/skills) on the one page
+    // actually being returned, not every ranked match.
+    const pageIds = rankedIds.slice(skip, skip + limit);
+    if (pageIds.length === 0) return { jobs: [], total: rankedIds.length };
 
     const pageJobs = await this.jobsRepository.findMany(
       { id: { in: pageIds } },
@@ -147,7 +151,7 @@ export class JobsService {
     const jobs = [...pageJobs].sort(
       (a, b) => (rankOf.get(a.id) ?? 0) - (rankOf.get(b.id) ?? 0),
     );
-    return { jobs, total: orderedIds.length };
+    return { jobs, total: rankedIds.length };
   }
 
   async getActiveById(id: string) {

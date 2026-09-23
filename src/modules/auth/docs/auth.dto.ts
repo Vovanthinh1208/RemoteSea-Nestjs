@@ -65,6 +65,11 @@ export class AuthTokenResponseDto {
   user!: SessionUserDto;
 }
 
+export class OAuthExchangeRequestDto {
+  @ApiProperty({ example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." })
+  code!: string;
+}
+
 export class ForgotPasswordRequestDto {
   @ApiProperty({ format: "email", example: "jane.doe@example.com" })
   email!: string;

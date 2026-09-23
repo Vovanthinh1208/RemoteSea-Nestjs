@@ -6,6 +6,7 @@ import {
 import {
   IncorrectPasswordExample,
   InvalidChallengeTokenExample,
+  InvalidOAuthExchangeCodeExample,
   InvalidTwoFactorCodeExample,
   TwoFactorSetupRequiredExample,
   ValidationErrorExample,
@@ -48,6 +49,12 @@ export const InvalidChallengeTokenResponse = ApiUnauthorizedResponse({
   description:
     "Challenge token missing/expired/invalid, or not a 2FA challenge",
   schema: { example: InvalidChallengeTokenExample },
+});
+
+export const InvalidOAuthExchangeCodeResponse = ApiUnauthorizedResponse({
+  description:
+    "Exchange code missing/expired/invalid, not an OAuth exchange code, or the account it names no longer exists",
+  schema: { example: InvalidOAuthExchangeCodeExample },
 });
 
 export const IncorrectPasswordResponse = ApiUnauthorizedResponse({

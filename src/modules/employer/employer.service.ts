@@ -50,6 +50,7 @@ import {
   BadRequestApiException,
   ConflictApiException,
 } from "@/common/exceptions/api.exception";
+import { nullOnExpectedError } from "@/common/utils/null-on-expected-error.util";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { ApplicationWithJobOwner } from "./guards/application-ownership.guard";
 import { CompanyMembershipService } from "@/modules/company/company-membership.service";
@@ -462,6 +463,26 @@ export class EmployerService {
       membership.employerId,
     );
     return buildHiringFunnel(counts);
+  }
+
+  // Backs GET /employer/dashboard — one round trip for the whole dashboard
+  // screen instead of the frontend firing getProfile/listJobs/
+  // getRecentApplications/getHiringFunnel as four separate requests (each
+  // independently 403/404-ing the same "no company yet" way, which the
+  // frontend used to catch four times over). Reuses those exact methods
+  // rather than re-deriving their authorization/query logic here, so this
+  // can never silently drift from what each already does on its own —
+  // still four independent DB round trips under the hood (they don't share
+  // one membership lookup), just run concurrently and returned as one HTTP
+  // response instead of four.
+  async getDashboard(userId: string) {
+    const [profile, jobs, recentApplications, funnel] = await Promise.all([
+      this.getProfile(userId).catch(nullOnExpectedError),
+      this.listJobs(userId, {}).catch(nullOnExpectedError),
+      this.getRecentApplications(userId).catch(nullOnExpectedError),
+      this.getHiringFunnel(userId).catch(nullOnExpectedError),
+    ]);
+    return { profile, jobs, recentApplications, funnel };
   }
 
   async updateApplication(

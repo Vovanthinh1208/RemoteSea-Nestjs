@@ -27,6 +27,19 @@ export interface TwoFactorChallengePayload {
   purpose: "2fa_challenge";
 }
 
+// Issued by AuthController.handleOAuthCallback instead of a real access
+// token, carried as `?code=` on the redirect to the frontend's callback
+// page. A real bearer token in that URL sits in browser history and gets
+// sent in the Referer header of any subsequent cross-origin navigation from
+// that page — this is short-lived (60s), single-purpose (POST
+// /auth/oauth/exchange is the only route that ever accepts one — JwtStrategy
+// rejects it everywhere else, same as the other `purpose`-carrying tokens
+// below), and useless as a bearer token in its own right.
+export interface OAuthExchangePayload {
+  sub: string;
+  purpose: "oauth_exchange";
+}
+
 // Carried in the OAuth `state` param for Settings > Connected accounts
 // "Connect" (as opposed to sign-in): GET /auth/:provider/link mints one for
 // the already-authenticated caller, and the shared callback route decodes it

@@ -6,5 +6,8 @@ import { InvitationsRepository } from "./invitations.repository";
 @Module({
   controllers: [InvitationsController],
   providers: [InvitationsService, InvitationsRepository],
+  // TalentModule composes listForTalent into GET /talent/me/dashboard — see
+  // TalentService.getDashboard.
+  exports: [InvitationsService],
 })
 export class InvitationsModule {}

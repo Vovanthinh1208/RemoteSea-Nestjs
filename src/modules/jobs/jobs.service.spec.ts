@@ -173,10 +173,31 @@ describe("JobsService.list", () => {
     // touches the ranking query at all.
   });
 
-  it("with q, returns empty immediately if nothing matches — never calls findMany", async () => {
+  it("with q, returns empty immediately if no job satisfies the other filters — never ranks or fetches", async () => {
+    // findIds resolves every non-`q` filter first (see JobsService.listBySearch)
+    // — an empty result here means there's nothing to rank at all.
+    const findIds = jest.fn().mockResolvedValue([]);
+    const findSearchRankedIds = jest.fn();
+    const findMany = jest.fn();
+    const { service } = makeService({ findIds, findSearchRankedIds, findMany });
+
+    const result = await service.list({
+      page: 1,
+      limit: 20,
+      q: "nonexistent",
+    } as never);
+
+    expect(result.jobs).toEqual([]);
+    expect(result.pagination.total).toBe(0);
+    expect(findSearchRankedIds).not.toHaveBeenCalled();
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it("with q, returns empty if candidates exist but none match the search text", async () => {
+    const findIds = jest.fn().mockResolvedValue(["a", "b"]);
     const findSearchRankedIds = jest.fn().mockResolvedValue([]);
     const findMany = jest.fn();
-    const { service } = makeService({ findSearchRankedIds, findMany });
+    const { service } = makeService({ findIds, findSearchRankedIds, findMany });
 
     const result = await service.list({
       page: 1,
@@ -189,18 +210,17 @@ describe("JobsService.list", () => {
     expect(findMany).not.toHaveBeenCalled();
   });
 
-  it("with q and no explicit sort, re-orders matches by rank (not DB order) and paginates in JS", async () => {
+  it("with q and no explicit sort, ranks only within the ids the other filters already matched, then re-orders matches by rank (not DB order) and paginates in JS", async () => {
+    const findIds = jest.fn().mockResolvedValue(["best", "mid", "worst"]);
     const findSearchRankedIds = jest
       .fn()
       .mockResolvedValue(["best", "mid", "worst"]);
-    // All three ranked candidates also satisfy the other filters.
-    const findIds = jest.fn().mockResolvedValue(["best", "mid", "worst"]);
     // Deliberately returned in a different order than rankedIds, the way an
     // unordered Postgres `id IN (...)` scan would.
     const findMany = jest
       .fn()
       .mockResolvedValue([job("worst"), job("best"), job("mid")]);
-    const { service } = makeService({ findSearchRankedIds, findIds, findMany });
+    const { service } = makeService({ findIds, findSearchRankedIds, findMany });
 
     const result = await service.list({
       page: 1,
@@ -208,6 +228,14 @@ describe("JobsService.list", () => {
       q: "engineer",
     } as never);
 
+    // Ranking is scoped to the pre-filtered candidate set, not a table-wide
+    // scan — see buildSearchRankedIdsQuery for why this ordering fixed the
+    // old undercounted-total bug.
+    expect(findSearchRankedIds).toHaveBeenCalledWith("engineer", [
+      "best",
+      "mid",
+      "worst",
+    ]);
     expect(findMany).toHaveBeenCalledWith(
       { id: { in: ["best", "mid", "worst"] } },
       0,
@@ -217,15 +245,12 @@ describe("JobsService.list", () => {
     expect(result.pagination.total).toBe(3);
   });
 
-  it("with q and no explicit sort, drops ranked candidates that fail the other filters and paginates the survivors", async () => {
-    const findSearchRankedIds = jest
-      .fn()
-      .mockResolvedValue(["best", "mid", "worst"]);
-    // "mid" matched the search but not the other filters (e.g. country) —
-    // findIds is the source of truth for which candidates survive.
-    const findIds = jest.fn().mockResolvedValue(["best", "worst"]);
+  it("with q and no explicit sort, total reflects every ranked match (not a capped scan) and pagination slices the id list before fetching", async () => {
+    const findIds = jest.fn().mockResolvedValue(["best", "mid", "worst"]);
+    // Only 2 of the 3 filter-matching candidates also match the search text.
+    const findSearchRankedIds = jest.fn().mockResolvedValue(["best", "worst"]);
     const findMany = jest.fn().mockResolvedValue([job("best")]);
-    const { service } = makeService({ findSearchRankedIds, findIds, findMany });
+    const { service } = makeService({ findIds, findSearchRankedIds, findMany });
 
     const result = await service.list({
       page: 1,
@@ -238,11 +263,13 @@ describe("JobsService.list", () => {
     expect(result.pagination.total).toBe(2);
   });
 
-  it("with q and an explicit sort=salary, honors the explicit sort over relevance", async () => {
+  it("with q and an explicit sort=salary, honors the explicit sort over relevance and derives total from rankedIds with no separate count query", async () => {
+    const findIds = jest.fn().mockResolvedValue(["a", "b"]);
     const findSearchRankedIds = jest.fn().mockResolvedValue(["a", "b"]);
     const findMany = jest.fn().mockResolvedValue([job("b"), job("a")]);
-    const count = jest.fn().mockResolvedValue(2);
+    const count = jest.fn();
     const { service } = makeService({
+      findIds,
       findSearchRankedIds,
       findMany,
       count,
@@ -258,6 +285,9 @@ describe("JobsService.list", () => {
     // DB-ordered result is trusted as-is (not re-sorted by rank) once an
     // explicit sort is given.
     expect(result.jobs).toEqual([job("b"), job("a")]);
-    expect(count).toHaveBeenCalled();
+    expect(result.pagination.total).toBe(2);
+    // rankedIds is already the full filtered+matched set, so there's nothing
+    // left for a count query to compute — one fewer DB round trip than before.
+    expect(count).not.toHaveBeenCalled();
   });
 });

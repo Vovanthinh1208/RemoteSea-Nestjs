@@ -26,6 +26,7 @@ import {
   ConfirmVerificationRequestDto,
   CreateEmployerProfileRequestDto,
   CreateEmployerProfileResponseDto,
+  EmployerDashboardResponseDto,
   EmployerProfileWithStatsResponseDto,
   EmployerProfileDto,
   ListEmployerJobsResponseDto,
@@ -45,6 +46,7 @@ import {
   ConfirmVerificationResponseExample,
   CreateEmployerProfileRequestExample,
   CreateEmployerProfileResponseExample,
+  EmployerDashboardResponseExample,
   EmployerProfileResponseExample,
   EmployerProfileWithStatsResponseExample,
   ListEmployerJobsResponseExample,
@@ -224,6 +226,7 @@ export const ApiExportJobApplicants = () =>
     UnauthorizedApiResponse,
     NotOwningEmployerResponse,
     JobNotFoundResponse,
+    rateLimitResponse("10 req/60s per employer"),
     InternalServerErrorApiResponse,
   );
 
@@ -275,6 +278,24 @@ export const ApiGetHiringFunnel = () =>
           dropOff: [{ status: "REJECTED", label: "Rejected", count: 80 }],
         },
       },
+    }),
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiGetEmployerDashboard = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Employer dashboard, in one request",
+      description:
+        "Combines GET /employer/profile, /jobs, /applications/recent, and /analytics/funnel into a single response — the frontend's dashboard screen used to fire all four as separate requests, each independently 403/404-ing the same 'no company yet' way. Each field is resolved (and can come back null) independently, mirroring exactly what its standalone endpoint already does — see EmployerDashboardResponseDto. Never returns a 403/404 itself for the no-company case; only for a caller who isn't authenticated or isn't EMPLOYER at all.",
+    }),
+    ApiOkResponse({
+      description: "Dashboard data — any field may be null",
+      type: EmployerDashboardResponseDto,
+      schema: { example: EmployerDashboardResponseExample },
     }),
     UnauthorizedApiResponse,
     ForbiddenApiResponse,

@@ -335,6 +335,36 @@ export class ListRecentApplicationsResponseDto {
   applications!: RecentApplicationListItemDto[];
 }
 
+// GET /employer/dashboard — every field is independently nullable: a caller
+// with no company yet (or a company-member role that can view the profile
+// but not review applications) gets `null` for whichever piece doesn't
+// apply, the same per-field distinction the four underlying endpoints
+// (GET /employer/profile|jobs|applications/recent|analytics/funnel) already
+// make individually — see EmployerService.getDashboard.
+export class EmployerDashboardResponseDto {
+  @ApiPropertyOptional({
+    type: EmployerProfileWithStatsResponseDto,
+    nullable: true,
+  })
+  profile!: EmployerProfileWithStatsResponseDto | null;
+
+  @ApiPropertyOptional({ type: ListEmployerJobsResponseDto, nullable: true })
+  jobs!: ListEmployerJobsResponseDto | null;
+
+  @ApiPropertyOptional({
+    type: ListRecentApplicationsResponseDto,
+    nullable: true,
+  })
+  recentApplications!: ListRecentApplicationsResponseDto | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      "Same shape as GET /employer/analytics/funnel's response — see that route's docs.",
+  })
+  funnel!: object | null;
+}
+
 export class UpdateApplicationRequestDto {
   @ApiProperty({ enum: APPLICATION_STATUS_VALUES, example: "REVIEWING" })
   status!: (typeof APPLICATION_STATUS_VALUES)[number];

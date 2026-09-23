@@ -41,6 +41,7 @@ import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.i
 import {
   ApiConfirmVerification,
   ApiGetActivity,
+  ApiGetDashboard,
   ApiGetOwnProfile,
   ApiGetProfileViewAnalytics,
   ApiGetPublicProfile,
@@ -64,6 +65,13 @@ export class TalentController {
   @UseGuards(JwtAuthGuard)
   async getOwnProfile(@CurrentUser() user: AuthenticatedUser) {
     return this.talentService.getOwnProfile(user.id);
+  }
+
+  @ApiGetDashboard()
+  @Get("me/dashboard")
+  @UseGuards(JwtAuthGuard)
+  getDashboard(@CurrentUser() user: AuthenticatedUser) {
+    return this.talentService.getDashboard(user.id);
   }
 
   @ApiUpsertProfile()

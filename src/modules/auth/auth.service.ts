@@ -11,10 +11,15 @@ import * as QRCode from "qrcode";
 import { Prisma } from "@prisma/client";
 import { AuthRepository, type SessionMeta } from "./auth.repository";
 import { AuthMapper } from "./auth.mapper";
-import { RESET_TOKEN_TTL_MS, TWO_FACTOR_ISSUER } from "./constants";
+import {
+  OAUTH_EXCHANGE_TTL,
+  RESET_TOKEN_TTL_MS,
+  TWO_FACTOR_ISSUER,
+} from "./constants";
 import type { RegisterDto } from "./dto/register.dto";
 import type {
   RegisteredUser,
+  OAuthExchangePayload,
   OAuthLinkIntentPayload,
   OAuthProfile,
   OAuthProviderName,
@@ -220,6 +225,55 @@ export class AuthService {
     return AuthMapper.toAuthenticatedUser(user);
   }
 
+  // AuthController.handleOAuthCallback mints this instead of issuing a real
+  // access token directly into the redirect URL — see OAuthExchangePayload
+  // for why. issueToken (and the Session row it creates) is deferred to
+  // completeOAuthExchange below, once the frontend actually redeems the
+  // code, rather than created here and possibly never claimed.
+  createOAuthExchangeCode(userId: string): string {
+    const payload: OAuthExchangePayload = {
+      sub: userId,
+      purpose: "oauth_exchange",
+    };
+    return this.jwtService.sign(payload, { expiresIn: OAUTH_EXCHANGE_TTL });
+  }
+
+  // POST /auth/oauth/exchange's handler — the frontend's callback page calls
+  // this immediately on landing to swap the short-lived `?code=` for a real
+  // session, the same shape login/register/2FA-challenge already return.
+  async completeOAuthExchange(
+    code: string,
+    sessionMeta: SessionMeta = {},
+  ): Promise<{ accessToken: string; user: AuthenticatedUser }> {
+    let payload: OAuthExchangePayload;
+    try {
+      payload = this.jwtService.verify<
+        OAuthExchangePayload & { purpose?: string }
+      >(code);
+    } catch {
+      throw new UnauthorizedApiException(
+        "This sign-in link has expired — please try again",
+        ErrorCode.INVALID_OAUTH_EXCHANGE_CODE,
+      );
+    }
+    if (payload.purpose !== "oauth_exchange") {
+      throw new UnauthorizedApiException(
+        "This sign-in link has expired — please try again",
+        ErrorCode.INVALID_OAUTH_EXCHANGE_CODE,
+      );
+    }
+
+    const user = await this.authRepository.findUserById(payload.sub);
+    if (!user) {
+      throw new UnauthorizedApiException(
+        "This sign-in link has expired — please try again",
+        ErrorCode.INVALID_OAUTH_EXCHANGE_CODE,
+      );
+    }
+
+    return this.issueToken(AuthMapper.toAuthenticatedUser(user), sessionMeta);
+  }
+
   // Settings > Connected accounts "Connect". Minted by GET /auth/:provider/link
   // (JwtAuthGuard-protected) and carried through the provider's consent screen
   // as the OAuth `state` param — the shared callback route in AuthController
@@ -398,6 +452,26 @@ export class AuthService {
     // own session ends too; the client already has its success response by
     // the time that matters.
     await this.revokeAllSessionsForUser(userId);
+  }
+
+  // Decodes just enough of a 2FA challenge token to rate-limit by target
+  // account before actually attempting the code — AuthController.
+  // twoFactorChallenge calls this ahead of completeTwoFactorChallenge so a
+  // TOTP brute force spread across many source IPs still gets throttled per
+  // victim account, not just per IP. Returns null (never throws) for
+  // anything that isn't a currently-valid challenge token, same as
+  // verifyOAuthLinkIntent above — an invalid/garbage token has no account
+  // to rate-limit by, and still fails completeTwoFactorChallenge's own
+  // verification (and remains covered by the per-IP limiter regardless).
+  decodeTwoFactorChallengeSubject(challengeToken: string): string | null {
+    try {
+      const payload = this.jwtService.verify<
+        TwoFactorChallengePayload & { purpose?: string }
+      >(challengeToken);
+      return payload.purpose === "2fa_challenge" ? payload.sub : null;
+    } catch {
+      return null;
+    }
   }
 
   async completeTwoFactorChallenge(

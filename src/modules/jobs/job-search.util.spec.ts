@@ -7,41 +7,48 @@ import {
   buildJobWhere,
   buildSearchRankedIdsQuery,
   notExpiredCondition,
-  SEARCH_CANDIDATE_LIMIT,
   type FacetCountsRow,
 } from "./job-search.util";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
 
 describe("buildSearchRankedIdsQuery", () => {
   it("parameterizes the search term instead of interpolating it into the SQL text", () => {
-    const query = buildSearchRankedIdsQuery("'; DROP TABLE jobs; --");
+    const query = buildSearchRankedIdsQuery("'; DROP TABLE jobs; --", [
+      "job-1",
+    ]);
 
     expect(query.sql).not.toContain("DROP TABLE");
     // The term appears twice (the @@ match and the ts_rank_cd ORDER BY), plus
-    // SEARCH_CANDIDATE_LIMIT for the LIMIT clause — as bound parameters, not
-    // string-concatenated into the query text.
+    // the candidate id — as bound parameters, not string-concatenated into
+    // the query text.
     expect(query.values).toEqual([
+      "job-1",
       "'; DROP TABLE jobs; --",
       "'; DROP TABLE jobs; --",
-      SEARCH_CANDIDATE_LIMIT,
     ]);
   });
 
-  it("only matches ACTIVE, published jobs via websearch_to_tsquery on searchVector", () => {
-    const query = buildSearchRankedIdsQuery("remote engineer");
+  it("scopes the match to the caller's candidate ids, not a table-wide scan", () => {
+    const query = buildSearchRankedIdsQuery("remote engineer", [
+      "job-1",
+      "job-2",
+    ]);
 
-    expect(query.sql).toContain("status = 'ACTIVE'");
-    expect(query.sql).toContain('"publishedAt" <= now()');
+    // Filtering (status/published/expiry/other query params) is the caller's
+    // job via buildJobWhere — this query only ranks within the id set it's
+    // handed, so there's no separate status/date predicate to assert on here.
+    expect(query.sql).toContain("WHERE id IN (");
+    expect(query.values).toEqual(expect.arrayContaining(["job-1", "job-2"]));
     expect(query.sql).toContain(
       "\"searchVector\" @@ websearch_to_tsquery('english',",
     );
     expect(query.sql).toContain("ORDER BY ts_rank_cd(");
   });
 
-  it("excludes expired listings", () => {
-    const query = buildSearchRankedIdsQuery("remote engineer");
+  it("has no LIMIT — the candidate id list (from buildJobWhere) is already the true bound, so capping here would silently undercount `total` again", () => {
+    const query = buildSearchRankedIdsQuery("remote engineer", ["job-1"]);
 
-    expect(query.sql).toContain('("expiresAt" IS NULL OR "expiresAt" > now())');
+    expect(query.sql).not.toContain("LIMIT");
   });
 });
 

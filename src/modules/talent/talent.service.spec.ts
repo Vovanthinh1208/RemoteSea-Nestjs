@@ -8,10 +8,20 @@ import type { TalentRepository } from "./talent.repository";
 import type { UploadsService } from "@/modules/uploads/uploads.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import type { ProfileViewsService } from "@/modules/profile-views/profile-views.service";
+import type { ApplicationsService } from "@/modules/applications/applications.service";
+import type { SavedService } from "@/modules/saved/saved.service";
+import type { AlertsService } from "@/modules/alerts/alerts.service";
+import type { InvitationsService } from "@/modules/invitations/invitations.service";
 
 const makeService = (
   repoOverrides: Partial<TalentRepository> = {},
   profileViewsOverrides: Partial<ProfileViewsService> = {},
+  crossModuleOverrides: {
+    applicationsService?: Partial<ApplicationsService>;
+    savedService?: Partial<SavedService>;
+    alertsService?: Partial<AlertsService>;
+    invitationsService?: Partial<InvitationsService>;
+  } = {},
 ) => {
   const repo = {
     findUserName: jest.fn().mockResolvedValue({ name: "Ada" }),
@@ -35,6 +45,25 @@ const makeService = (
       .mockResolvedValue({ totalViews: 0, uniqueViewers: 0 }),
     ...profileViewsOverrides,
   } as unknown as ProfileViewsService;
+  const applicationsService = {
+    findAllForUser: jest
+      .fn()
+      .mockResolvedValue({ applications: [], pagination: {} }),
+    getStatusCounts: jest.fn().mockResolvedValue({ total: 0, byStatus: {} }),
+    ...crossModuleOverrides.applicationsService,
+  } as unknown as ApplicationsService;
+  const savedService = {
+    findJobIdsForUser: jest.fn().mockResolvedValue([]),
+    ...crossModuleOverrides.savedService,
+  } as unknown as SavedService;
+  const alertsService = {
+    listForUser: jest.fn().mockResolvedValue([]),
+    ...crossModuleOverrides.alertsService,
+  } as unknown as AlertsService;
+  const invitationsService = {
+    listForTalent: jest.fn().mockResolvedValue([]),
+    ...crossModuleOverrides.invitationsService,
+  } as unknown as InvitationsService;
   return {
     service: new TalentService(
       repo,
@@ -42,10 +71,18 @@ const makeService = (
       {} as UploadsService,
       emailService as never,
       profileViewsService,
+      applicationsService,
+      savedService,
+      alertsService,
+      invitationsService,
     ),
     repo,
     emailService,
     profileViewsService,
+    applicationsService,
+    savedService,
+    alertsService,
+    invitationsService,
   };
 };
 
@@ -338,5 +375,134 @@ describe("TalentService.getProfileViewAnalytics", () => {
 
     expect(result).toEqual({ totalViews: 0, uniqueViewers: 0 });
     expect(profileViewsService.getAnalytics).not.toHaveBeenCalled();
+  });
+});
+
+describe("TalentService.getDashboard", () => {
+  it("aggregates all eight pieces in one call", async () => {
+    const { service, repo } = makeService(
+      {
+        findByUserId: jest
+          .fn()
+          .mockResolvedValue({ id: "profile-1", headline: "Engineer" }),
+        findRecentStatusEvents: jest.fn().mockResolvedValue([]),
+        findRecentMessagesReceived: jest.fn().mockResolvedValue([]),
+        findRecentInterviews: jest.fn().mockResolvedValue([]),
+        findRecentInvitations: jest.fn().mockResolvedValue([]),
+      },
+      {
+        getAnalytics: jest
+          .fn()
+          .mockResolvedValue({ totalViews: 5, uniqueViewers: 2 }),
+      },
+      {
+        applicationsService: {
+          findAllForUser: jest
+            .fn()
+            .mockResolvedValue({
+              applications: [{ id: "app-1" }],
+              pagination: {},
+            }),
+          getStatusCounts: jest
+            .fn()
+            .mockResolvedValue({ total: 1, byStatus: { PENDING: 1 } }),
+        },
+        savedService: {
+          findJobIdsForUser: jest.fn().mockResolvedValue(["job-1"]),
+        },
+        alertsService: {
+          listForUser: jest.fn().mockResolvedValue([{ id: "alert-1" }]),
+        },
+        invitationsService: {
+          listForTalent: jest.fn().mockResolvedValue([{ id: "invite-1" }]),
+        },
+      },
+    );
+
+    const result = await service.getDashboard("talent-user-1");
+
+    expect(repo.findByUserId).toHaveBeenCalledWith("talent-user-1");
+    expect(result.profile).toMatchObject({ id: "profile-1" });
+    expect(result.applications).toEqual({
+      applications: [{ id: "app-1" }],
+      pagination: {},
+    });
+    expect(result.applicationStats).toEqual({
+      total: 1,
+      byStatus: { PENDING: 1 },
+    });
+    expect(result.savedJobIds).toEqual(["job-1"]);
+    expect(result.profileViewAnalytics).toEqual({
+      totalViews: 5,
+      uniqueViewers: 2,
+    });
+    expect(result.alerts).toEqual([{ id: "alert-1" }]);
+    expect(result.invitations).toEqual([{ id: "invite-1" }]);
+    expect(result.activity).toEqual([]);
+  });
+
+  it("returns null for the profile (not a rejection) when the caller has no talent profile yet, while every other piece still resolves normally", async () => {
+    const { service } = makeService(
+      {
+        findByUserId: jest.fn().mockResolvedValue(null),
+        findTalentIdByUserId: jest.fn().mockResolvedValue(null),
+      },
+      {},
+      {
+        applicationsService: {
+          findAllForUser: jest
+            .fn()
+            .mockResolvedValue({ applications: [], pagination: {} }),
+          getStatusCounts: jest
+            .fn()
+            .mockResolvedValue({ total: 0, byStatus: {} }),
+        },
+        savedService: { findJobIdsForUser: jest.fn().mockResolvedValue([]) },
+        alertsService: { listForUser: jest.fn().mockResolvedValue([]) },
+        invitationsService: { listForTalent: jest.fn().mockResolvedValue([]) },
+      },
+    );
+
+    const result = await service.getDashboard("no-profile-user");
+
+    expect(result.profile).toBeNull();
+    expect(result.applications).toEqual({ applications: [], pagination: {} });
+    expect(result.activity).toEqual([]);
+  });
+
+  it("still rejects a real failure (not an expected condition) instead of swallowing it to null", async () => {
+    // findTalentIdByUserId: null short-circuits getActivity/
+    // getProfileViewAnalytics before they'd otherwise reach
+    // findRecentStatusEvents/etc., which aren't stubbed in this test —
+    // calling an unstubbed repo method throws its own synchronous TypeError
+    // while building that method's internal Promise.all array, which would
+    // orphan the already-rejected findByUserId promise below with no
+    // attached handler and crash the test worker on an unhandled rejection
+    // instead of failing this assertion cleanly (same failure mode as the
+    // equivalent EmployerService.getDashboard test).
+    const { service } = makeService(
+      {
+        findByUserId: jest.fn().mockRejectedValue(new Error("db down")),
+        findTalentIdByUserId: jest.fn().mockResolvedValue(null),
+      },
+      {},
+      {
+        applicationsService: {
+          findAllForUser: jest
+            .fn()
+            .mockResolvedValue({ applications: [], pagination: {} }),
+          getStatusCounts: jest
+            .fn()
+            .mockResolvedValue({ total: 0, byStatus: {} }),
+        },
+        savedService: { findJobIdsForUser: jest.fn().mockResolvedValue([]) },
+        alertsService: { listForUser: jest.fn().mockResolvedValue([]) },
+        invitationsService: { listForTalent: jest.fn().mockResolvedValue([]) },
+      },
+    );
+
+    await expect(service.getDashboard("talent-user-1")).rejects.toThrow(
+      "db down",
+    );
   });
 });
