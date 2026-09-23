@@ -162,7 +162,10 @@ describe("AuthService.register", () => {
       role: "TALENT",
     });
 
-    expect(result).toEqual(registered);
+    expect(result).toEqual({
+      user: registered,
+      accessToken: "signed.jwt.token",
+    });
     expect(emailService.sendWelcomeEmail).toHaveBeenCalledWith("a@b.com", "A");
   });
 });
@@ -266,13 +269,14 @@ describe("AuthService.validateCredentials", () => {
 describe("AuthService.issueToken", () => {
   it("signs a JWT payload derived from the authenticated user", async () => {
     const { service, jwtService, authRepository } = makeService();
-
-    const result = await service.issueToken({
+    const user = {
       id: "u1",
       email: "a@b.com",
       name: "A",
       role: "TALENT",
-    });
+    };
+
+    const result = await service.issueToken(user as never);
 
     expect(authRepository.createSession).toHaveBeenCalledWith("u1", {});
     expect(jwtService.sign).toHaveBeenCalledWith({
@@ -282,7 +286,7 @@ describe("AuthService.issueToken", () => {
       role: "TALENT",
       sid: "s1",
     });
-    expect(result).toEqual({ accessToken: "signed.jwt.token" });
+    expect(result).toEqual({ accessToken: "signed.jwt.token", user });
   });
 });
 

@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { CACHE_MANAGER, type Cache } from "@nestjs/cache-manager";
-import type { Prisma } from "@prisma/client";
+import type { Job, Prisma } from "@prisma/client";
 import { JobsRepository, type PublicJob } from "./jobs.repository";
 import type { JobListItem } from "@/common/types/job-list-item.type";
 import type { ListJobsDto } from "./dto/list-jobs.dto";
@@ -229,6 +229,31 @@ export class JobsService {
       throw new ForbiddenApiException(
         "Only draft or rejected jobs can be edited",
         ErrorCode.JOB_NOT_EDITABLE,
+      );
+    }
+    return updated;
+  }
+
+  // Owner- or admin-triggered self-service action — stops a live listing
+  // from taking further applications. Unlike update() above, there's no
+  // admin bypass of the status check: closing only makes sense starting
+  // from ACTIVE regardless of who's asking, so both branches share one
+  // rule instead of update()'s two-tier one.
+  async closeJob(job: JobWithOwner): Promise<Pick<Job, "status">> {
+    if (job.status !== "ACTIVE") {
+      throw new ForbiddenApiException(
+        "Only an active listing can be closed",
+        ErrorCode.JOB_NOT_ACTIVE,
+      );
+    }
+    // Re-checked atomically at write time for the same reason
+    // updateIfEditable is — the read above can go stale (e.g. the listing
+    // expired via the cron between this read and the write).
+    const updated = await this.jobsRepository.closeJob(job.id);
+    if (!updated) {
+      throw new ForbiddenApiException(
+        "Only an active listing can be closed",
+        ErrorCode.JOB_NOT_ACTIVE,
       );
     }
     return updated;

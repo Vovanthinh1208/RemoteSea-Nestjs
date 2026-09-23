@@ -63,7 +63,10 @@ export class AuthService {
     private readonly metricsService: MetricsService,
   ) {}
 
-  async register(dto: RegisterDto): Promise<RegisteredUser> {
+  async register(
+    dto: RegisterDto,
+    sessionMeta: SessionMeta = {},
+  ): Promise<{ user: RegisteredUser; accessToken: string }> {
     const existing = await this.authRepository.findUserIdByEmail(dto.email);
     if (existing) {
       throw new ConflictApiException(
@@ -111,7 +114,12 @@ export class AuthService {
       `Failed to send welcome email for user ${user.id}`,
     );
 
-    return user;
+    // Auto-login on register: a brand-new account never has 2FA enabled, so
+    // this can always issue a real token directly instead of making the
+    // frontend fire a separate POST /auth/login (+ GET /auth/session) right
+    // after this call returns.
+    const { accessToken } = await this.issueToken(user, sessionMeta);
+    return { user, accessToken };
   }
 
   async validateCredentials(
@@ -159,7 +167,7 @@ export class AuthService {
   async issueToken(
     user: AuthenticatedUser,
     sessionMeta: { userAgent?: string; ip?: string } = {},
-  ): Promise<{ accessToken: string }> {
+  ): Promise<{ accessToken: string; user: AuthenticatedUser }> {
     const session = await this.authRepository.createSession(
       user.id,
       sessionMeta,
@@ -171,7 +179,10 @@ export class AuthService {
       role: user.role,
       sid: session.id,
     };
-    return { accessToken: this.jwtService.sign(payload) };
+    // Bundles `user` alongside the token so callers (login, register, 2FA
+    // challenge) can hand the frontend a ready session in one response
+    // instead of forcing an immediate follow-up GET /auth/session.
+    return { accessToken: this.jwtService.sign(payload), user };
   }
 
   // The inverse of issueToken — kept in this service (not AuthController) so
@@ -273,7 +284,7 @@ export class AuthService {
     password: string,
     sessionMeta: SessionMeta = {},
   ): Promise<
-    | { accessToken: string }
+    | { accessToken: string; user: AuthenticatedUser }
     | { twoFactorRequired: true; challengeToken: string }
   > {
     const user = await this.validateCredentials(email, password);
@@ -393,7 +404,7 @@ export class AuthService {
     challengeToken: string,
     code: string,
     sessionMeta: SessionMeta = {},
-  ): Promise<{ accessToken: string }> {
+  ): Promise<{ accessToken: string; user: AuthenticatedUser }> {
     let payload: TwoFactorChallengePayload;
     try {
       payload =

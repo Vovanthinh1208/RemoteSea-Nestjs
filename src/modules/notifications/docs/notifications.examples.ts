@@ -10,6 +10,7 @@ export const NotificationExample = {
 
 export const NotificationsListExample = {
   notifications: [NotificationExample],
+  unreadCount: 3,
   pagination: { page: 1, limit: 20, total: 1, pages: 1 },
 };
 

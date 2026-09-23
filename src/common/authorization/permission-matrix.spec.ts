@@ -155,6 +155,12 @@ const expectations: ControllerExpectation[] = [
         path: ":id",
         guards: ["JwtAuthGuard", "JobOwnershipGuard"],
       },
+      {
+        method: "close",
+        httpMethod: "PATCH",
+        path: ":id/close",
+        guards: ["JwtAuthGuard", "JobOwnershipGuard"],
+      },
     ],
   },
   {

@@ -100,7 +100,7 @@ export class AuthController {
       RATE_LIMITS.REGISTER.windowMs,
       req,
     );
-    return this.authService.register(body);
+    return this.authService.register(body, sessionMeta(req));
   }
 
   @ApiLogin()
@@ -125,7 +125,7 @@ export class AuthController {
       req,
     );
 
-    // Returns either { accessToken } directly, or — if this account has 2FA
+    // Returns { accessToken, user } directly, or — if this account has 2FA
     // enabled — { twoFactorRequired: true, challengeToken } instead, which
     // the frontend must exchange via POST /auth/2fa/challenge.
     return this.authService.loginOrChallenge(

@@ -7,13 +7,6 @@ export const RegisterRequestExample = {
   role: "TALENT",
 };
 
-export const RegisterResponseExample = {
-  id: "cme8f1a2b0000ug0h9x1n1a2",
-  email: "jane.doe@example.com",
-  name: "Jane Doe",
-  role: "TALENT",
-};
-
 export const LoginRequestExample = {
   email: "jane.doe@example.com",
   password: "SuperSecret123",
@@ -22,6 +15,18 @@ export const LoginRequestExample = {
 export const TokenResponseExample = {
   accessToken:
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbWU4ZjFhMmIwMDAwdWcwaDl4MW4xYTIifQ.signature",
+};
+
+// Register/login/2FA-challenge success shape — token + user bundled together.
+export const AuthTokenResponseExample = {
+  accessToken:
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbWU4ZjFhMmIwMDAwdWcwaDl4MW4xYTIifQ.signature",
+  user: {
+    id: "cme8f1a2b0000ug0h9x1n1a2",
+    email: "jane.doe@example.com",
+    name: "Jane Doe",
+    role: "TALENT",
+  },
 };
 
 export const SessionAuthenticatedExample = {

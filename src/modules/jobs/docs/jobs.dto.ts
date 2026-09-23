@@ -101,6 +101,15 @@ export class CreateJobResponseDto {
   status!: (typeof JOB_STATUS_VALUES)[number];
 }
 
+export class CloseJobResponseDto {
+  @ApiProperty({
+    enum: JOB_STATUS_VALUES,
+    example: "CLOSED",
+    description: "Always CLOSED on success — see JobsService.closeJob",
+  })
+  status!: (typeof JOB_STATUS_VALUES)[number];
+}
+
 export class UpdateJobRequestDto {
   @ApiPropertyOptional({
     minLength: 5,

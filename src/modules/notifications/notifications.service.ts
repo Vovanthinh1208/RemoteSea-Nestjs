@@ -19,10 +19,19 @@ export class NotificationsService {
   async listForUser(userId: string, query: ListNotificationsDto) {
     const { page, limit } = query;
     const skip = paginationSkip(page, limit);
-    const [notifications, total] =
-      await this.notificationsRepository.listForUser(userId, skip, limit);
+    // unreadCount rides along with the list so the header badge never needs
+    // its own round trip — GET /notifications/unread-count still exists for
+    // callers (e.g. a poll) that only want the count.
+    const [[notifications, total], unreadCount] = await Promise.all([
+      this.notificationsRepository.listForUser(userId, skip, limit),
+      this.notificationsRepository.unreadCount(userId),
+    ]);
 
-    return { notifications, pagination: buildPagination(page, limit, total) };
+    return {
+      notifications,
+      unreadCount,
+      pagination: buildPagination(page, limit, total),
+    };
   }
 
   unreadCount(userId: string): Promise<number> {

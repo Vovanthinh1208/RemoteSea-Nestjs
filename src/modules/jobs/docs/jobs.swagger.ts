@@ -19,6 +19,7 @@ import {
   EXPERIENCE_LEVEL_VALUES,
 } from "@/common/constants/enum-values.constants";
 import {
+  CloseJobResponseDto,
   CreateJobRequestDto,
   CreateJobResponseDto,
   JobDetailResponseDto,
@@ -36,6 +37,7 @@ import {
   EmployerProfileRequiredResponse,
   InvalidSalaryRangeResponse,
   JobNotFoundResponse,
+  NotOwnerOrNotActiveResponse,
   NotOwnerOrNotEditableResponse,
   ValidationErrorResponse,
 } from "./jobs.responses";
@@ -221,6 +223,30 @@ export const ApiUpdateJob = () =>
     ValidationErrorResponse,
     UnauthorizedApiResponse,
     NotOwnerOrNotEditableResponse,
+    JobNotFoundResponse,
+    InternalServerErrorApiResponse,
+  );
+
+export const ApiCloseJob = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Close an active job listing",
+      description:
+        "Stops an ACTIVE listing from taking further applications (status -> CLOSED). Requires only a valid JWT — company membership/role is enforced by JobOwnershipGuard (ADMIN bypasses ownership but not the ACTIVE-only rule, checked in the service). Not reversible via any other endpoint.",
+    }),
+    ApiParam({
+      name: "id",
+      description: "Job id",
+      example: "cljob1a2b3c4d5e6f7g8h9i0",
+    }),
+    ApiOkResponse({
+      description: "Job closed",
+      type: CloseJobResponseDto,
+      schema: { example: { status: "CLOSED" } },
+    }),
+    UnauthorizedApiResponse,
+    NotOwnerOrNotActiveResponse,
     JobNotFoundResponse,
     InternalServerErrorApiResponse,
   );

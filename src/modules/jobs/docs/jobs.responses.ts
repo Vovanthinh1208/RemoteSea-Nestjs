@@ -48,3 +48,15 @@ export const NotOwnerOrNotEditableResponse = ApiForbiddenResponse({
     },
   },
 });
+
+export const NotOwnerOrNotActiveResponse = ApiForbiddenResponse({
+  description: "Caller isn't ADMIN, doesn't own the job, or it isn't ACTIVE",
+  schema: {
+    examples: {
+      notOwner: { value: { error: "Forbidden" } },
+      notActive: {
+        value: { error: "Only an active listing can be closed" },
+      },
+    },
+  },
+});

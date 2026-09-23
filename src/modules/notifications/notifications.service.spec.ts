@@ -28,17 +28,20 @@ describe("NotificationsService.create", () => {
 });
 
 describe("NotificationsService.listForUser", () => {
-  it("paginates the caller's notifications", async () => {
+  it("paginates the caller's notifications and bundles the unread count", async () => {
     const listForUser = jest
       .fn()
       .mockResolvedValue([[{ id: "n1" }, { id: "n2" }], 2]);
-    const { service } = makeService({ listForUser });
+    const unreadCount = jest.fn().mockResolvedValue(5);
+    const { service } = makeService({ listForUser, unreadCount });
 
     const result = await service.listForUser("user-1", { page: 1, limit: 20 });
 
     expect(listForUser).toHaveBeenCalledWith("user-1", 0, 20);
+    expect(unreadCount).toHaveBeenCalledWith("user-1");
     expect(result).toEqual({
       notifications: [{ id: "n1" }, { id: "n2" }],
+      unreadCount: 5,
       pagination: { page: 1, limit: 20, total: 2, pages: 1 },
     });
   });

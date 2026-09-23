@@ -62,6 +62,13 @@ export class ListNotificationsResponseDto {
   @ApiProperty({ type: [NotificationDto] })
   notifications!: NotificationDto[];
 
+  @ApiProperty({
+    example: 3,
+    description:
+      "Unread count as of this same read — lets the header badge render from this response instead of a separate GET /notifications/unread-count call.",
+  })
+  unreadCount!: number;
+
   @ApiProperty({ type: PaginationDto })
   pagination!: PaginationDto;
 }

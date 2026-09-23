@@ -33,6 +33,7 @@ import {
   type JobWithOwner,
 } from "./guards/job-ownership.guard";
 import {
+  ApiCloseJob,
   ApiCreateJob,
   ApiDispatchExpireJobs,
   ApiGetJobById,
@@ -123,5 +124,26 @@ export class JobsController {
       req,
     );
     return this.jobsService.update(job, user, body);
+  }
+
+  // Separate action route, not a `status` field on the generic PATCH above
+  // — updateJobSchema deliberately has no status field at all (an employer
+  // can't set arbitrary status via a field update), and "close" needs its
+  // own ACTIVE-only rule regardless of caller (see JobsService.closeJob).
+  @ApiCloseJob()
+  @Patch(":id/close")
+  @UseGuards(JwtAuthGuard, JobOwnershipGuard)
+  close(
+    @Req() req: Request,
+    @CurrentResource() job: JobWithOwner,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    this.rateLimitService.enforce(
+      `job-close:${user.id}`,
+      RATE_LIMITS.UPDATE.limit,
+      RATE_LIMITS.UPDATE.windowMs,
+      req,
+    );
+    return this.jobsService.closeJob(job);
   }
 }

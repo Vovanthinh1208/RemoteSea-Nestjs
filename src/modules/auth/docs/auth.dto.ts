@@ -22,20 +22,6 @@ export class RegisterRequestDto {
   role!: "TALENT" | "EMPLOYER";
 }
 
-export class RegisterResponseDto {
-  @ApiProperty({ example: "cme8f1a2b0000ug0h9x1n1a2" })
-  id!: string;
-
-  @ApiProperty({ example: "jane.doe@example.com" })
-  email!: string;
-
-  @ApiProperty({ example: "Jane Doe" })
-  name!: string;
-
-  @ApiProperty({ enum: ["TALENT", "EMPLOYER"], example: "TALENT" })
-  role!: "TALENT" | "EMPLOYER";
-}
-
 export class LoginRequestDto {
   @ApiProperty({ format: "email", example: "jane.doe@example.com" })
   email!: string;
@@ -66,6 +52,17 @@ export class SessionUserDto {
 export class SessionResponseDto {
   @ApiPropertyOptional({ type: SessionUserDto, nullable: true })
   user!: SessionUserDto | null;
+}
+
+// Shared by register/login/2FA-challenge success responses — bundles the
+// access token with the session's user so the frontend never has to follow
+// up with a separate GET /auth/session just to render post-auth.
+export class AuthTokenResponseDto {
+  @ApiProperty({ example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." })
+  accessToken!: string;
+
+  @ApiProperty({ type: SessionUserDto })
+  user!: SessionUserDto;
 }
 
 export class ForgotPasswordRequestDto {

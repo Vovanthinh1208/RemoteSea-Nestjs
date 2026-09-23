@@ -176,6 +176,24 @@ export class JobsRepository {
     return job && omitInternalJobFields(job);
   }
 
+  // Same conditional-updateMany shape as updateIfEditable/approveJob below —
+  // "close" only ever makes sense starting from ACTIVE (closing a DRAFT or
+  // PENDING_REVIEW job isn't "closing a listing," it's withdrawing one,
+  // a different, unrequested action), and the atomic re-check means a job
+  // that expired or got closed a second ago between the caller's read and
+  // this write can't silently re-close.
+  async closeJob(id: string): Promise<Pick<Job, "status"> | null> {
+    const { count } = await this.prisma.job.updateMany({
+      where: { id, status: "ACTIVE" },
+      data: { status: "CLOSED" },
+    });
+    if (count === 0) return null;
+    return this.prisma.job.findUnique({
+      where: { id },
+      select: { status: true },
+    });
+  }
+
   // Conditional updateMany (not a plain update) — re-checks PENDING_REVIEW
   // atomically at write time, same reasoning as updateIfEditable above.
   // Without this, two concurrent admin reviews of the same job (or a review

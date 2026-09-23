@@ -15,16 +15,15 @@ import {
   rateLimitResponse,
 } from "@/core/swagger/common.responses";
 import {
+  AuthTokenResponseDto,
   DisableTwoFactorRequestDto,
   ForgotPasswordRequestDto,
   LoginRequestDto,
   MessageResponseDto,
   OAuthLinkUrlResponseDto,
   RegisterRequestDto,
-  RegisterResponseDto,
   ResetPasswordRequestDto,
   SessionResponseDto,
-  TokenResponseDto,
   TwoFactorChallengeRequestDto,
   TwoFactorMessageResponseDto,
   TwoFactorSetupResponseDto,
@@ -33,6 +32,7 @@ import {
   VerifyTwoFactorSetupResponseDto,
 } from "./auth.dto";
 import {
+  AuthTokenResponseExample,
   DisableTwoFactorRequestExample,
   DisableTwoFactorResponseExample,
   ForgotPasswordRequestExample,
@@ -40,12 +40,10 @@ import {
   LoginRequestExample,
   OAuthLinkUrlExample,
   RegisterRequestExample,
-  RegisterResponseExample,
   ResetPasswordRequestExample,
   ResetPasswordResponseExample,
   SessionAnonymousExample,
   SessionAuthenticatedExample,
-  TokenResponseExample,
   TwoFactorChallengeRequestExample,
   TwoFactorRequiredExample,
   TwoFactorSetupExample,
@@ -72,16 +70,16 @@ export const ApiRegister = () =>
     ApiOperation({
       summary: "Register a new user",
       description:
-        "Creates a TALENT or EMPLOYER account with a bcrypt-hashed password. Auto-provisions a TalentProfile (with a generated slug) for TALENT signups and sends a welcome email (no-op without RESEND_API_KEY).",
+        "Creates a TALENT or EMPLOYER account with a bcrypt-hashed password, auto-provisions a TalentProfile (with a generated slug) for TALENT signups, sends a welcome email (no-op without RESEND_API_KEY), and immediately issues a real access token — the account is signed in on creation, no follow-up POST /auth/login required.",
     }),
     ApiBody({
       type: RegisterRequestDto,
       examples: { default: { value: RegisterRequestExample } },
     }),
     ApiCreatedResponse({
-      description: "User created",
-      type: RegisterResponseDto,
-      schema: { example: RegisterResponseExample },
+      description: "User created and signed in",
+      type: AuthTokenResponseDto,
+      schema: { example: AuthTokenResponseExample },
     }),
     ValidationErrorResponse,
     EmailAlreadyRegisteredResponse,
@@ -102,10 +100,10 @@ export const ApiLogin = () =>
     }),
     ApiOkResponse({
       description:
-        "Login succeeded (TokenResponseDto), or 2FA is required to complete it (TwoFactorRequiredResponseDto) — see the two examples below",
+        "Login succeeded (AuthTokenResponseDto), or 2FA is required to complete it (TwoFactorRequiredResponseDto) — see the two examples below",
       schema: {
         examples: {
-          success: { value: TokenResponseExample },
+          success: { value: AuthTokenResponseExample },
           twoFactorRequired: { value: TwoFactorRequiredExample },
         },
       },
@@ -129,8 +127,8 @@ export const ApiTwoFactorChallenge = () =>
     }),
     ApiOkResponse({
       description: "2FA verified — real access token issued",
-      type: TokenResponseDto,
-      schema: { example: TokenResponseExample },
+      type: AuthTokenResponseDto,
+      schema: { example: AuthTokenResponseExample },
     }),
     ValidationErrorResponse,
     InvalidTwoFactorCodeResponse,

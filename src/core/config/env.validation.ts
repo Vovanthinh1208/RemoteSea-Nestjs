@@ -37,7 +37,12 @@ const envSchema = z.object({
   // the OAuth/email/billing target. Unset = CORS behavior unchanged from
   // before this existed (FRONTEND_URL only).
   ADDITIONAL_CORS_ORIGINS: z.string().optional(),
-  JWT_EXPIRES_IN: z.string().default("30d"),
+  // 7d, not the previous 30d default — there's no refresh-token rotation yet
+  // (the access token itself is the only credential, stored in localStorage
+  // under "remember me"), so its lifetime is directly the window an XSS
+  // token theft stays valid for. Short enough to meaningfully shrink that
+  // window, long enough that most users won't hit a forced re-login weekly.
+  JWT_EXPIRES_IN: z.string().default("7d"),
   // Number of reverse-proxy hops in front of this app (load balancer, CDN, etc.) —
   // passed to Express's `trust proxy` setting so req.ip resolves to the real client
   // IP instead of the last proxy's, which the per-IP rate limiter depends on. Trusting

@@ -123,6 +123,42 @@ describe("JobsService.update", () => {
   });
 });
 
+describe("JobsService.closeJob", () => {
+  it("closes an ACTIVE job", async () => {
+    const activeJob = { ...baseJob, status: "ACTIVE" } as JobWithOwner;
+    const { service, repo } = makeService({
+      closeJob: jest.fn().mockResolvedValue({ status: "CLOSED" }),
+    });
+
+    const result = await service.closeJob(activeJob);
+
+    expect(repo.closeJob).toHaveBeenCalledWith("job-1");
+    expect(result).toEqual({ status: "CLOSED" });
+  });
+
+  // Unlike update(), there's no admin bypass here — closing only makes
+  // sense starting from ACTIVE regardless of who's asking.
+  it("rejects closing a job that isn't ACTIVE, even for an admin caller", async () => {
+    const { service, repo } = makeService({ closeJob: jest.fn() });
+
+    await expect(service.closeJob(baseJob)).rejects.toBeInstanceOf(
+      ForbiddenApiException,
+    );
+    expect(repo.closeJob).not.toHaveBeenCalled();
+  });
+
+  it("throws Forbidden when the atomic re-check finds the job was concurrently made non-active (e.g. expired)", async () => {
+    const activeJob = { ...baseJob, status: "ACTIVE" } as JobWithOwner;
+    const { service } = makeService({
+      closeJob: jest.fn().mockResolvedValue(null),
+    });
+
+    await expect(service.closeJob(activeJob)).rejects.toBeInstanceOf(
+      ForbiddenApiException,
+    );
+  });
+});
+
 describe("JobsService.list", () => {
   it("without q, lists/counts by the normal filter+orderBy path", async () => {
     const findMany = jest.fn().mockResolvedValue([job("a")]);
