@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { ConfigService } from "@nestjs/config";
 import { ExtractJwt, Strategy } from "passport-jwt";
@@ -9,6 +9,7 @@ import type {
 } from "@/common/interfaces/authenticated-user.interface";
 import { AuthMapper } from "../auth.mapper";
 import { AuthRepository } from "../auth.repository";
+import { runInBackground } from "@/common/utils/background-task.util";
 
 // Only bother writing lastSeenAt when it's gone stale by this much — every
 // authenticated request hits this path, so touching it unconditionally would
@@ -17,6 +18,8 @@ const SESSION_TOUCH_THRESHOLD_MS = 5 * 60_000;
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
+  private readonly logger = new Logger(JwtStrategy.name);
+
   constructor(
     config: ConfigService<EnvConfig, true>,
     private readonly authRepository: AuthRepository,
@@ -55,7 +58,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
       // Fire-and-forget: this is a "nice to have" recency signal for the
       // sessions list, not something the response should ever wait on or fail
       // over.
-      void this.authRepository.touchSession(session.id);
+      runInBackground(
+        this.authRepository.touchSession(session.id),
+        this.logger,
+        "Failed to update session activity",
+      );
     }
     return { ...AuthMapper.fromPayload(payload), sid: payload.sid };
   }
