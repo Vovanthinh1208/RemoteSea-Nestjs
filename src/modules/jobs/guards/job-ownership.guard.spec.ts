@@ -49,11 +49,14 @@ describe("JobOwnershipGuard", () => {
     await expect(guard.canActivate(context)).resolves.toBe(true);
   });
 
-  it("allows ADMIN even with no company membership at all", async () => {
+  // PB42 RC3 / PB45 RC3: the self-service edit and close routes are not for ADMIN.
+  it("forbids ADMIN with no company membership (no admin bypass on edit/close)", async () => {
     const guard = makeGuard(job, null);
 
     const context = makeContext({ id: "admin-1", role: "ADMIN" });
-    await expect(guard.canActivate(context)).resolves.toBe(true);
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      ForbiddenApiException,
+    );
   });
 
   it("forbids a same-company HIRING_MANAGER/INTERVIEWER — job editing is OWNER/RECRUITER only", async () => {
@@ -98,7 +101,7 @@ describe("JobOwnershipGuard", () => {
     });
   });
 
-  it("still allows ADMIN to access a job at a suspended company", async () => {
+  it("still forbids ADMIN at a suspended company (company roles decide, not account role)", async () => {
     const guard = makeGuard(job, {
       employerId: "company-1",
       role: "OWNER",
@@ -106,6 +109,8 @@ describe("JobOwnershipGuard", () => {
     });
 
     const context = makeContext({ id: "admin-1", role: "ADMIN" });
-    await expect(guard.canActivate(context)).resolves.toBe(true);
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      ForbiddenApiException,
+    );
   });
 });

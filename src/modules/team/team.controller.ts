@@ -130,11 +130,12 @@ export class TeamController {
   @UseGuards(JwtAuthGuard, RolesGuard, CompanyMemberOwnershipGuard)
   @Roles("EMPLOYER")
   updateMemberRole(
+    @CurrentUser() user: AuthenticatedUser,
     @CurrentResource() member: MemberForOwnership,
     @Body(new ZodValidationPipe(updateMemberRoleSchema))
     body: UpdateMemberRoleDto,
   ) {
-    return this.teamService.updateMemberRole(member, body);
+    return this.teamService.updateMemberRole(member, body, user.id);
   }
 
   @ApiRemoveMember()

@@ -204,14 +204,9 @@ export class JobsService {
     user: AuthenticatedUser,
     dto: UpdateJobDto,
   ): Promise<PublicJob> {
-    // Ownership (or ADMIN membership) is already enforced by JobOwnershipGuard
-    // before this method runs — `job` here is the same row the guard fetched.
-    const isAdmin = user.role === "ADMIN";
-
-    if (isAdmin) {
-      return this.jobsRepository.update(job.id, dto);
-    }
-
+    // Ownership is already enforced by JobOwnershipGuard before this method
+    // runs — `job` here is the same row the guard fetched. ADMIN is not let
+    // through (PB42 RC3), so there is no admin branch here.
     if (job.status !== "DRAFT" && job.status !== "REJECTED") {
       throw new ForbiddenApiException(
         "Only draft or rejected jobs can be edited",

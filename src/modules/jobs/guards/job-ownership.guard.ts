@@ -18,7 +18,9 @@ export class JobOwnershipGuard extends CompanyOwnershipGuardBase<JobWithOwner> {
   // Admins can edit any job regardless of company — JobsService.update still
   // checks user.role itself afterward, since admins also bypass the
   // DRAFT/REJECTED-only editing rule, not just this ownership check.
-  protected override readonly bypassAccountRoles: UserRole[] = ["ADMIN"];
+  // PB42 RC3 / PB45 RC3: ADMIN has no self-service edit or close. Admin
+  // moderation goes through the admin module, not these routes.
+  protected override readonly bypassAccountRoles: UserRole[] = [];
   protected override readonly notFoundCode = ErrorCode.JOB_NOT_FOUND;
   protected override readonly forbiddenCode = ErrorCode.JOB_ACCESS_DENIED;
 

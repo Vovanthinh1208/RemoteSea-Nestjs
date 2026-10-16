@@ -119,6 +119,25 @@ export class ApplicationsService {
       );
     }
 
+    // PB45 AC4 / PB53 precondition: only a live (ACTIVE, not expired) listing
+    // takes applications. Without this a CLOSED, EXPIRED or even DRAFT job
+    // accepted new applications straight through the API.
+    const applyTarget = await this.applicationsRepository.findJobForApply(
+      dto.jobId,
+    );
+    if (!applyTarget) {
+      throw new NotFoundApiException("Job not found", ErrorCode.JOB_NOT_FOUND);
+    }
+    if (
+      applyTarget.status !== "ACTIVE" ||
+      (applyTarget.expiresAt && applyTarget.expiresAt <= new Date())
+    ) {
+      throw new ConflictApiException(
+        "This job is no longer accepting applications",
+        ErrorCode.JOB_NOT_ACTIVE,
+      );
+    }
+
     const existing = await this.applicationsRepository.findByJobAndTalent(
       dto.jobId,
       talent.id,

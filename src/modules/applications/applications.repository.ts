@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type {
   Application,
   ApplicationStatus,
+  JobStatus,
   TalentProfile,
 } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
@@ -100,6 +101,17 @@ export class ApplicationsRepository {
       _count: true,
     });
     return rows.map((row) => ({ status: row.status, count: row._count }));
+  }
+
+  // Only the two fields apply() needs to decide whether the job still takes
+  // applications; absent row and non-ACTIVE/expired row are told apart there.
+  findJobForApply(
+    jobId: string,
+  ): Promise<{ status: JobStatus; expiresAt: Date | null } | null> {
+    return this.prisma.job.findUnique({
+      where: { id: jobId },
+      select: { status: true, expiresAt: true },
+    });
   }
 
   findByJobAndTalent(

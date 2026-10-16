@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import * as crypto from "crypto";
+import * as bcrypt from "bcrypt";
 import { TeamRepository } from "./team.repository";
 import { INVITATION_TOKEN_TTL_MS } from "./constants";
 import type { PendingInvitation, TeamMember } from "./interfaces";
@@ -251,7 +252,32 @@ export class TeamService {
   async updateMemberRole(
     member: { id: string; employerId: string; role: string },
     dto: UpdateMemberRoleDto,
+    actingUserId: string,
   ): Promise<TeamMember> {
+    // Hand-over of the company (PB39 AC3): the acting owner must confirm with
+    // their password, then the chosen member becomes OWNER and the previous
+    // owner steps down to RECRUITER. Accounts that sign in only through OAuth
+    // have no password to re-enter, so for them the explicit request suffices.
+    if (dto.role === "OWNER" && member.role !== "OWNER") {
+      const actor = await this.teamRepository.findPasswordHash(actingUserId);
+      if (actor?.passwordHash) {
+        const valid =
+          !!dto.password &&
+          (await bcrypt.compare(dto.password, actor.passwordHash));
+        if (!valid) {
+          throw new BadRequestApiException(
+            "Current password is incorrect",
+            ErrorCode.CURRENT_PASSWORD_INCORRECT,
+          );
+        }
+      }
+      return this.teamRepository.transferOwnership(
+        member.id,
+        actingUserId,
+        member.employerId,
+      );
+    }
+
     if (member.role === "OWNER" && dto.role !== "OWNER") {
       const ownerCount = await this.teamRepository.countOwners(
         member.employerId,

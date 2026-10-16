@@ -120,8 +120,11 @@ export class EmployerRepository {
   }
 
   findPublicProfileBySlug(slug: string): Promise<PublicCompanyProfile | null> {
-    return this.prisma.employerProfile.findUnique({
-      where: { slug },
+    // findFirst, not findUnique: PB33 serves only an active company, so a
+    // suspended one (suspendedAt set by the admin action) answers 404 like a
+    // slug that doesn't exist.
+    return this.prisma.employerProfile.findFirst({
+      where: { slug, suspendedAt: null },
       select: publicProfileSelect,
     });
   }

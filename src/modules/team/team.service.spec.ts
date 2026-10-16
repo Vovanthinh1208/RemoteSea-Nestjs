@@ -1,3 +1,4 @@
+import * as bcrypt from "bcrypt";
 import { Prisma } from "@prisma/client";
 import { TeamService } from "./team.service";
 import {
@@ -9,6 +10,8 @@ import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { TeamRepository } from "./team.repository";
 import type { CompanyMembershipService } from "@/modules/company/company-membership.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+
+jest.mock("bcrypt");
 
 const makeService = (
   repoOverrides: Partial<TeamRepository> = {},
@@ -28,6 +31,10 @@ const makeService = (
     countOwners: jest.fn().mockResolvedValue(2),
     updateRole: jest.fn(),
     removeMember: jest.fn().mockResolvedValue(undefined),
+    findPasswordHash: jest.fn().mockResolvedValue({ passwordHash: "hash" }),
+    transferOwnership: jest
+      .fn()
+      .mockResolvedValue({ id: "member-2", role: "OWNER" }),
     ...repoOverrides,
   } as unknown as TeamRepository;
   const companyMembershipService = {
@@ -91,6 +98,7 @@ describe("TeamService — owner can manage the team", () => {
     await service.updateMemberRole(
       { id: "member-2", employerId: "company-1", role: "RECRUITER" },
       { role: "HIRING_MANAGER" },
+      "owner-user",
     );
 
     expect(repo.updateRole).toHaveBeenCalledWith("member-2", "HIRING_MANAGER");
@@ -153,6 +161,7 @@ describe("TeamService — cannot strand a company with zero owners", () => {
       service.updateMemberRole(
         { id: "member-1", employerId: "company-1", role: "OWNER" },
         { role: "RECRUITER" },
+        "owner-user",
       ),
     ).rejects.toBeInstanceOf(BadRequestApiException);
   });
@@ -179,6 +188,7 @@ describe("TeamService — cannot strand a company with zero owners", () => {
     await service.updateMemberRole(
       { id: "member-1", employerId: "company-1", role: "OWNER" },
       { role: "RECRUITER" },
+      "owner-user",
     );
 
     expect(repo.updateRole).toHaveBeenCalledWith("member-1", "RECRUITER");
@@ -413,5 +423,55 @@ describe("TeamService — invitation flow", () => {
     await expect(
       service.acceptInvitation(invitedUser, { token: "raced-token" }),
     ).rejects.toBeInstanceOf(BadRequestApiException);
+  });
+});
+
+describe("TeamService — transferring OWNER (PB39 AC3)", () => {
+  const target = { id: "member-2", employerId: "company-1", role: "RECRUITER" };
+
+  it("refuses to promote someone to OWNER without the owner's password", async () => {
+    (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+    const { service, repo } = makeService();
+
+    for (const dto of [
+      { role: "OWNER" as const },
+      { role: "OWNER" as const, password: "wrong" },
+    ]) {
+      const error = await service
+        .updateMemberRole(target, dto, "owner-user")
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestApiException);
+      expect((error as BadRequestApiException).getResponse()).toMatchObject({
+        code: ErrorCode.CURRENT_PASSWORD_INCORRECT,
+      });
+    }
+    expect(repo.transferOwnership).not.toHaveBeenCalled();
+    expect(repo.updateRole).not.toHaveBeenCalled();
+  });
+
+  it("with the right password promotes the member and demotes the previous owner in one repository call", async () => {
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    const { service, repo } = makeService();
+
+    await service.updateMemberRole(
+      target,
+      { role: "OWNER", password: "correct-pw" },
+      "owner-user",
+    );
+
+    expect(repo.transferOwnership).toHaveBeenCalledWith(
+      "member-2",
+      "owner-user",
+      "company-1",
+    );
+    expect(repo.updateRole).not.toHaveBeenCalled();
+  });
+
+  it("lets an OAuth-only owner (no password) hand over without one", async () => {
+    const { service, repo } = makeService({
+      findPasswordHash: jest.fn().mockResolvedValue({ passwordHash: null }),
+    });
+    await service.updateMemberRole(target, { role: "OWNER" }, "owner-user");
+    expect(repo.transferOwnership).toHaveBeenCalled();
   });
 });

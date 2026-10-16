@@ -531,22 +531,15 @@ export class AuthService {
     if (!isValidTotp) {
       // Not a TOTP code — try it as a single-use backup code instead.
       const normalizedCode = code.trim().toUpperCase();
-      let matchedIndex = -1;
-      for (let i = 0; i < user.twoFactorBackupCodes.length; i += 1) {
-        // Sequential, not Promise.all — bcrypt.compare is CPU-bound (libuv
-        // threadpool), and backup codes are consumed one at a time anyway;
-        // no correctness issue either way, just avoids bursting the pool for
-        // what's usually a 1-2 item array.
-        // eslint-disable-next-line no-await-in-loop
-        const matches = await bcrypt.compare(
-          normalizedCode,
-          user.twoFactorBackupCodes[i] as string,
-        );
-        if (matches) {
-          matchedIndex = i;
-          break;
-        }
-      }
+      // PB10 issues 10 codes. Checked one after another, a wrong code cost ten
+      // bcrypt rounds in series (~3.5 s measured); in parallel they spread over
+      // the libuv threadpool (~1 s). Same result, same hash strength.
+      const comparisons = await Promise.all(
+        user.twoFactorBackupCodes.map((hash) =>
+          bcrypt.compare(normalizedCode, hash),
+        ),
+      );
+      const matchedIndex = comparisons.indexOf(true);
       if (matchedIndex === -1) {
         throw new BadRequestApiException(
           "Invalid code",

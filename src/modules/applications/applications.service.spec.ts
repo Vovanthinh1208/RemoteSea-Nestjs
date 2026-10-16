@@ -4,7 +4,10 @@ import type { ApplicationsRepository } from "./applications.repository";
 import type { ApplicationWithJob, BackloggedApplication } from "./interfaces";
 import type { EmailService } from "@/common/services/email.service";
 import type { NotificationsService } from "@/modules/notifications/notifications.service";
-import { ConflictApiException } from "@/common/exceptions/api.exception";
+import {
+  ConflictApiException,
+  NotFoundApiException,
+} from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 
 const makeService = (
@@ -50,6 +53,57 @@ describe("ApplicationsService.findAllForUser", () => {
   });
 });
 
+describe("ApplicationsService.apply — job must be open (PB45 AC4)", () => {
+  const withJob = (job: { status: string; expiresAt: Date | null } | null) => {
+    const createAndIncrementApplyCount = jest.fn();
+    const service = makeService({
+      findTalentWithUserName: jest
+        .fn()
+        .mockResolvedValue({ id: "talent-1", user: { name: "Talent" } }),
+      findJobForApply: jest.fn().mockResolvedValue(job),
+      findByJobAndTalent: jest.fn().mockResolvedValue(null),
+      createAndIncrementApplyCount,
+    });
+    return { service, createAndIncrementApplyCount };
+  };
+
+  it.each(["DRAFT", "PENDING_REVIEW", "REJECTED", "CLOSED", "EXPIRED"])(
+    "refuses an application to a %s job and writes nothing",
+    async (status) => {
+      const { service, createAndIncrementApplyCount } = withJob({
+        status,
+        expiresAt: null,
+      });
+      const error = await service
+        .apply("user-1", { jobId: "job-1" } as never)
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ConflictApiException);
+      expect((error as ConflictApiException).getResponse()).toMatchObject({
+        code: ErrorCode.JOB_NOT_ACTIVE,
+      });
+      expect(createAndIncrementApplyCount).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refuses an ACTIVE job whose expiry date has passed (cron not yet run)", async () => {
+    const { service, createAndIncrementApplyCount } = withJob({
+      status: "ACTIVE",
+      expiresAt: new Date(Date.now() - 60_000),
+    });
+    await expect(
+      service.apply("user-1", { jobId: "job-1" } as never),
+    ).rejects.toBeInstanceOf(ConflictApiException);
+    expect(createAndIncrementApplyCount).not.toHaveBeenCalled();
+  });
+
+  it("answers 404 for a job id that does not exist", async () => {
+    const { service } = withJob(null);
+    await expect(
+      service.apply("user-1", { jobId: "missing" } as never),
+    ).rejects.toBeInstanceOf(NotFoundApiException);
+  });
+});
+
 describe("ApplicationsService.getStatusCounts", () => {
   it("returns all-zero counts when the user has no talent profile", async () => {
     const service = makeService({
@@ -83,6 +137,9 @@ describe("ApplicationsService.apply", () => {
         .mockResolvedValue({ id: "talent-1", user: { name: "Talent" } }),
       // Fast path sees no existing row — a concurrent duplicate request
       // still races past this and hits the DB constraint below.
+      findJobForApply: jest
+        .fn()
+        .mockResolvedValue({ status: "ACTIVE", expiresAt: null }),
       findByJobAndTalent: jest.fn().mockResolvedValue(null),
       createAndIncrementApplyCount: jest.fn().mockRejectedValue(
         new Prisma.PrismaClientKnownRequestError("duplicate", {

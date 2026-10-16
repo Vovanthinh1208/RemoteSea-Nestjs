@@ -43,6 +43,35 @@ export class TeamRepository {
     });
   }
 
+  findPasswordHash(
+    userId: string,
+  ): Promise<{ passwordHash: string | null } | null> {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true },
+    });
+  }
+
+  // PB39 AC3.3: one transaction, so the company can never be seen with zero or
+  // two owners half-way through a hand-over.
+  async transferOwnership(
+    targetMemberId: string,
+    previousOwnerUserId: string,
+    employerId: string,
+  ): Promise<TeamMember> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.companyMember.updateMany({
+        where: { employerId, userId: previousOwnerUserId, role: "OWNER" },
+        data: { role: "RECRUITER" },
+      });
+      return tx.companyMember.update({
+        where: { id: targetMemberId },
+        data: { role: "OWNER" },
+        select: teamMemberSelect,
+      });
+    });
+  }
+
   async removeMember(id: string): Promise<void> {
     await this.prisma.companyMember.delete({ where: { id } });
   }

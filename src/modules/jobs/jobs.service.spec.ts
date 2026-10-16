@@ -72,14 +72,14 @@ const makeService = (repoOverrides: Partial<JobsRepository> = {}) => {
 const job = (id: string) => ({ id }) as never;
 
 describe("JobsService.update", () => {
-  it("admins bypass the DRAFT/REJECTED restriction and write unconditionally", async () => {
-    const { service, repo } = makeService({
-      update: jest.fn().mockResolvedValue({ ...baseJob, status: "ACTIVE" }),
-    });
+  it("does not special-case ADMIN: an ACTIVE job is not editable for anyone (PB42 RC3)", async () => {
+    const { service, repo } = makeService();
     const activeJob = { ...baseJob, status: "ACTIVE" } as JobWithOwner;
 
-    await service.update(activeJob, admin, { title: "New title" });
-    expect(repo.update).toHaveBeenCalledWith("job-1", { title: "New title" });
+    await expect(
+      service.update(activeJob, admin, { title: "New title" }),
+    ).rejects.toBeInstanceOf(ForbiddenApiException);
+    expect(repo.update).not.toHaveBeenCalled();
   });
 
   it("rejects a non-admin editing a job that isn't DRAFT or REJECTED", async () => {
