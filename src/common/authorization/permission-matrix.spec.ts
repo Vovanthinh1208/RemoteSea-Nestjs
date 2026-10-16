@@ -871,7 +871,8 @@ const expectations: ControllerExpectation[] = [
         method: "upsertProfile",
         httpMethod: "PUT",
         path: "me",
-        guards: ["JwtAuthGuard"],
+        guards: ["JwtAuthGuard", "RolesGuard"],
+        roles: ["TALENT"],
       },
       {
         method: "getActivity",

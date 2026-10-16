@@ -397,12 +397,10 @@ describe("TalentService.getDashboard", () => {
       },
       {
         applicationsService: {
-          findAllForUser: jest
-            .fn()
-            .mockResolvedValue({
-              applications: [{ id: "app-1" }],
-              pagination: {},
-            }),
+          findAllForUser: jest.fn().mockResolvedValue({
+            applications: [{ id: "app-1" }],
+            pagination: {},
+          }),
           getStatusCounts: jest
             .fn()
             .mockResolvedValue({ total: 1, byStatus: { PENDING: 1 } }),

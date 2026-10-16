@@ -76,7 +76,8 @@ export class TalentController {
 
   @ApiUpsertProfile()
   @Put("me")
-  @UseGuards(JwtAuthGuard)
+  @Roles("TALENT")
+  @UseGuards(JwtAuthGuard, RolesGuard)
   async upsertProfile(
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(talentProfileSchema)) body: TalentProfileDto,
