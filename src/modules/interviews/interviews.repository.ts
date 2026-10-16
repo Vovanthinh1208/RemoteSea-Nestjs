@@ -81,7 +81,7 @@ export class InterviewsRepository {
     slot: Date,
   ): Promise<InterviewRecord | null> {
     const { count } = await this.prisma.interview.updateMany({
-      where: { applicationId, status: "PENDING" },
+      where: { applicationId, status: "PENDING", proposedSlots: { has: slot } },
       data: { status: "CONFIRMED", confirmedSlot: slot },
     });
     if (count === 0) return null;

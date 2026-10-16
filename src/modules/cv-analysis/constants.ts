@@ -3,6 +3,7 @@ export const RATE_LIMITS = {
   // single "open this applicant" click — a much lower ceiling than a plain
   // CRUD write like CREATE_SCORECARD warrants.
   GET_CV_ANALYSIS: { limit: 20, windowMs: 60_000 },
+  REGENERATE: { limit: 1, windowMs: 30_000 },
 } as const;
 
 // Resumes are capped at upload time (see uploads/constants.ts

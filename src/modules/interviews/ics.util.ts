@@ -18,7 +18,7 @@ const escapeIcsText = (value: string): string =>
     .replace(/\\/g, "\\\\")
     .replace(/;/g, "\\;")
     .replace(/,/g, "\\,")
-    .replace(/\n/g, "\\n");
+    .replace(/\r\n|\r|\n/g, "\\n");
 
 // RFC 5545 §3.1: a content line SHOULD NOT exceed 75 octets (not
 // characters — a company/candidate name with non-ASCII text is multi-byte

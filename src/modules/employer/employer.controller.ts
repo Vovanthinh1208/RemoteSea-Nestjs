@@ -515,6 +515,12 @@ export class EmployerController {
     @CurrentUser() user: AuthenticatedUser,
     @CurrentResource() application: ApplicationWithJobOwner,
   ) {
+    // PB67: one request per application per 30s, shared by company members.
+    this.rateLimitService.enforce(
+      `cv-analysis-regenerate:${application.id}`,
+      CV_ANALYSIS_RATE_LIMITS.REGENERATE.limit,
+      CV_ANALYSIS_RATE_LIMITS.REGENERATE.windowMs,
+    );
     this.rateLimitService.enforce(
       `cv-analysis:${user.id}`,
       CV_ANALYSIS_RATE_LIMITS.GET_CV_ANALYSIS.limit,

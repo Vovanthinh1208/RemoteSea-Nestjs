@@ -17,6 +17,23 @@ const baseInput: InterviewIcsInput = {
 };
 
 describe("buildInterviewIcs", () => {
+  it.each(["\r\n", "\r", "\n"])(
+    "S3-PB63-TC04 escapes user-supplied line endings %j",
+    (newline) => {
+      const ics = buildInterviewIcs({
+        ...baseInput,
+        jobTitle: `Engineer${newline}ATTENDEE:injected`,
+      });
+      expect(ics).not.toMatch(/(?<!\r)\n|\r(?!\n)/);
+      expect(
+        unfold(ics)
+          .split("\r\n")
+          .some((line) => line.startsWith("ATTENDEE:")),
+      ).toBe(false);
+      expect(unfold(ics)).toContain("Engineer\\nATTENDEE:injected");
+    },
+  );
+
   it("uses CRLF line endings throughout, per RFC 5545", () => {
     const ics = buildInterviewIcs(baseInput);
     expect(ics).not.toMatch(/(?<!\r)\n/);

@@ -10,7 +10,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class SendMessageRequestDto {
   @ApiProperty({
-    maxLength: 4000,
+    maxLength: 2000,
     example: "Does 2pm ICT Thursday work for a quick call?",
   })
   body!: string;

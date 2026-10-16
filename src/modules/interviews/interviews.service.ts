@@ -210,6 +210,12 @@ export class InterviewsService {
     }
 
     const slot = new Date(dto.slot);
+    if (!Number.isFinite(slot.getTime()) || slot.getTime() <= Date.now()) {
+      throw new BadRequestApiException(
+        "The selected interview time must still be in the future",
+        ErrorCode.INVALID_INTERVIEW_SLOT,
+      );
+    }
     const isProposedSlot = interview.proposedSlots.some(
       (proposed) => proposed.getTime() === slot.getTime(),
     );

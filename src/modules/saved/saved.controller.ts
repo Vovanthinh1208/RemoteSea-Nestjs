@@ -13,6 +13,8 @@ import {
 import type { Request } from "express";
 import { SavedService } from "./saved.service";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
+import { RolesGuard } from "@/core/guards/roles.guard";
+import { Roles } from "@/core/decorators/roles.decorator";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { RateLimitService } from "@/common/services/rate-limit.service";
@@ -28,7 +30,8 @@ import {
 
 @ApiSavedTag()
 @Controller("saved")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles("TALENT")
 export class SavedController {
   constructor(
     private readonly savedService: SavedService,

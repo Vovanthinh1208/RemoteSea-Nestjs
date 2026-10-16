@@ -148,6 +148,33 @@ describe("InterviewsService.propose", () => {
 });
 
 describe("InterviewsService.confirm", () => {
+  it.each([-1, 0])(
+    "S3-PB61-TC05 rejects an expired proposed slot (offset %d ms) without side effects",
+    async (offset) => {
+      jest.useFakeTimers().setSystemTime(new Date("2026-10-16T08:00:00Z"));
+      try {
+        const slot = new Date(Date.now() + offset);
+        const confirmSlot = jest
+          .fn()
+          .mockResolvedValue({ status: "CONFIRMED" });
+        const { service } = makeService({
+          findByApplicationId: jest.fn().mockResolvedValue({
+            status: "PENDING",
+            proposedSlots: [slot],
+          }),
+          confirmSlot,
+        });
+        await expect(
+          service.confirm(parties, { slot: slot.toISOString() }),
+        ).rejects.toThrow(BadRequestApiException);
+        expect(confirmSlot).not.toHaveBeenCalled();
+        expect(notificationsService.create).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    },
+  );
+
   it("throws INTERVIEW_NOT_FOUND when nothing has been proposed yet", async () => {
     const { service } = makeService({
       findByApplicationId: jest.fn().mockResolvedValue(null),
