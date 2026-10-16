@@ -43,6 +43,8 @@ export function buildTalentSearchWhere(
     // browsing someone who didn't ask to be found would defeat the point of
     // that toggle (see TalentService.search).
     isOpenToWork: true,
+    // PB16 RC1: a paused account's profile drops out of public search.
+    user: { isPaused: false },
     // VERIFIED_EMPLOYERS profiles are included only for a caller whose own
     // employer profile is verified — same rule TalentService.getPublicProfile
     // already enforces for the single-profile route, applied here to the

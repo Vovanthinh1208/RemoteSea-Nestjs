@@ -39,8 +39,10 @@ export class TalentRepository {
   }
 
   findBySlug(slug: string): Promise<PublicTalentProfile | null> {
-    return this.prisma.talentProfile.findUnique({
-      where: { slug },
+    // findFirst, not findUnique: besides the slug it must also exclude a paused
+    // account's profile (PB16 RC1), which isn't part of the unique key.
+    return this.prisma.talentProfile.findFirst({
+      where: { slug, user: { isPaused: false } },
       ...publicProfileArgs,
     });
   }

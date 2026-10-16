@@ -11,6 +11,10 @@ export const updateAccountSchema = z
       .string()
       .trim()
       .max(30)
+      // PB14 RC2: international E.164 (+country code, up to 15 digits) when given.
+      .refine((v) => v.length === 0 || /^\+[1-9]\d{1,14}$/.test(v), {
+        message: "Phone must be in international format, e.g. +84901234567",
+      })
       // Empty string clears the field — treated as "no phone", not stored as "".
       .transform((v) => (v.length === 0 ? null : v))
       .nullable()

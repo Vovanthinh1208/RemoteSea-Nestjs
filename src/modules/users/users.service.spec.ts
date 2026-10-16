@@ -26,7 +26,7 @@ const makeService = (
     countTeamObligations: jest
       .fn()
       .mockResolvedValue({ members: 0, pendingInvitations: 0 }),
-    findPasswordHash: jest.fn(),
+    findPasswordHash: jest.fn().mockResolvedValue({ passwordHash: null }),
     updatePasswordHash: jest.fn().mockResolvedValue(undefined),
     ...repoOverrides,
   } as unknown as UsersRepository;
@@ -39,6 +39,7 @@ const makeService = (
   } as unknown as ConfigService<EnvConfig, true>;
   const authService = {
     revokeAllSessionsForUser: jest.fn().mockResolvedValue(0),
+    revokeOtherSessions: jest.fn().mockResolvedValue({ revokedCount: 0 }),
     ...authOverrides,
   } as unknown as AuthService;
   const metricsService = {
@@ -72,7 +73,7 @@ describe("UsersService.deleteAccount", () => {
     });
 
     const error = await service
-      .deleteAccount("user-1")
+      .deleteAccount("user-1", { confirmation: "DELETE" })
       .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(ConflictApiException);
@@ -92,7 +93,7 @@ describe("UsersService.deleteAccount", () => {
     });
 
     const error = await service
-      .deleteAccount("user-1")
+      .deleteAccount("user-1", { confirmation: "DELETE" })
       .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(ConflictApiException);
@@ -112,7 +113,7 @@ describe("UsersService.deleteAccount", () => {
     });
 
     const error = await service
-      .deleteAccount("user-1")
+      .deleteAccount("user-1", { confirmation: "DELETE" })
       .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(ConflictApiException);
@@ -128,7 +129,7 @@ describe("UsersService.deleteAccount", () => {
       deleteUser: jest.fn().mockResolvedValue(undefined),
     });
 
-    await service.deleteAccount("user-1");
+    await service.deleteAccount("user-1", { confirmation: "DELETE" });
 
     expect(usersRepository.deleteUser).toHaveBeenCalledWith("user-1");
   });
@@ -143,7 +144,7 @@ describe("UsersService.deleteAccount", () => {
       }),
     });
 
-    await service.deleteAccount("user-1");
+    await service.deleteAccount("user-1", { confirmation: "DELETE" });
 
     expect(uploadsService.deleteObjectByUrl).toHaveBeenCalledWith(
       "https://cdn.example.com/uploads/resume-1.pdf",
@@ -161,7 +162,7 @@ describe("UsersService.deleteAccount", () => {
       }),
     });
 
-    await service.deleteAccount("user-1");
+    await service.deleteAccount("user-1", { confirmation: "DELETE" });
 
     expect(uploadsService.deleteObjectByUrl).toHaveBeenCalledWith(
       "https://cdn.example.com/uploads/logo-1.png",
@@ -175,7 +176,7 @@ describe("UsersService.deleteAccount", () => {
       deleteUser: jest.fn().mockResolvedValue(undefined),
     });
 
-    await service.deleteAccount("user-1");
+    await service.deleteAccount("user-1", { confirmation: "DELETE" });
 
     expect(uploadsService.deleteObjectByUrl).not.toHaveBeenCalled();
   });
@@ -188,10 +189,14 @@ describe("UsersService.changePassword", () => {
     });
 
     await expect(
-      service.changePassword("user-1", {
-        currentPassword: "anything",
-        newPassword: "newpassword123",
-      }),
+      service.changePassword(
+        "user-1",
+        {
+          currentPassword: "anything",
+          newPassword: "newpassword123",
+        },
+        "sess-1",
+      ),
     ).rejects.toBeInstanceOf(BadRequestApiException);
     expect(usersRepository.updatePasswordHash).not.toHaveBeenCalled();
   });
@@ -204,10 +209,14 @@ describe("UsersService.changePassword", () => {
       });
 
     const error = await service
-      .changePassword("user-1", {
-        currentPassword: "wrong",
-        newPassword: "newpassword123",
-      })
+      .changePassword(
+        "user-1",
+        {
+          currentPassword: "wrong",
+          newPassword: "newpassword123",
+        },
+        "sess-1",
+      )
       .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(BadRequestApiException);
@@ -215,7 +224,7 @@ describe("UsersService.changePassword", () => {
       code: ErrorCode.CURRENT_PASSWORD_INCORRECT,
     });
     expect(usersRepository.updatePasswordHash).not.toHaveBeenCalled();
-    expect(authService.revokeAllSessionsForUser).not.toHaveBeenCalled();
+    expect(authService.revokeOtherSessions).not.toHaveBeenCalled();
     expect(metricsService.recordAuthFailure).toHaveBeenCalledWith(
       "change_password_invalid_password",
     );
@@ -225,22 +234,100 @@ describe("UsersService.changePassword", () => {
   // session back through login — the old password is exactly what an
   // attacker riding an existing stolen session already knows. Same
   // reasoning as AuthService.disableTwoFactor's own session revocation.
-  it("updates the password hash and revokes every session on success", async () => {
+  it("updates the password hash and revokes every OTHER session, keeping the current one (PB12)", async () => {
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
     (bcrypt.hash as jest.Mock).mockResolvedValue("new-hash");
     const { service, usersRepository, authService } = makeService({
       findPasswordHash: jest.fn().mockResolvedValue({ passwordHash: "hash" }),
     });
 
-    await service.changePassword("user-1", {
-      currentPassword: "correct",
-      newPassword: "newpassword123",
-    });
+    await service.changePassword(
+      "user-1",
+      {
+        currentPassword: "correct",
+        newPassword: "newpassword123",
+      },
+      "sess-1",
+    );
 
     expect(usersRepository.updatePasswordHash).toHaveBeenCalledWith(
       "user-1",
       "new-hash",
     );
+    expect(authService.revokeOtherSessions).toHaveBeenCalledWith(
+      "user-1",
+      "sess-1",
+    );
+    expect(authService.revokeAllSessionsForUser).not.toHaveBeenCalled();
+  });
+
+  it("rejects a new password identical to the current one (PB12 3.2)", async () => {
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    const { service, usersRepository } = makeService({
+      findPasswordHash: jest.fn().mockResolvedValue({ passwordHash: "hash" }),
+    });
+
+    const error = await service
+      .changePassword(
+        "user-1",
+        { currentPassword: "samepassword1", newPassword: "samepassword1" },
+        "sess-1",
+      )
+      .catch((e: unknown) => e);
+
+    expect((error as BadRequestApiException).getResponse()).toMatchObject({
+      code: ErrorCode.NEW_PASSWORD_SAME_AS_CURRENT,
+    });
+    expect(usersRepository.updatePasswordHash).not.toHaveBeenCalled();
+  });
+});
+
+describe("UsersService.deleteAccount confirmation (PB20)", () => {
+  it("refuses an account with a password when the password is missing or wrong, and deletes nothing", async () => {
+    (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+    const deleteUser = jest.fn();
+    const { service } = makeService({
+      findPasswordHash: jest.fn().mockResolvedValue({ passwordHash: "hash" }),
+      deleteUser,
+    });
+
+    await expect(
+      service.deleteAccount("user-1", { confirmation: "DELETE" }),
+    ).rejects.toBeInstanceOf(BadRequestApiException);
+    await expect(
+      service.deleteAccount("user-1", {
+        password: "wrong",
+        confirmation: "DELETE",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestApiException);
+    expect(deleteUser).not.toHaveBeenCalled();
+  });
+
+  it("lets a password-less (social) account delete with only the confirmation", async () => {
+    const deleteUser = jest.fn().mockResolvedValue(undefined);
+    const { service } = makeService({
+      findPasswordHash: jest.fn().mockResolvedValue({ passwordHash: null }),
+      countEmployerJobs: jest.fn().mockResolvedValue(0),
+      deleteUser,
+    });
+
+    await service.deleteAccount("user-1", { confirmation: "DELETE" });
+    expect(deleteUser).toHaveBeenCalled();
+  });
+});
+
+describe("UsersService.pauseAccount (PB16)", () => {
+  it("flags the account paused and signs the user out of every session", async () => {
+    const setPaused = jest.fn().mockResolvedValue({
+      id: "user-1",
+      isPaused: true,
+      pausedAt: new Date(),
+    });
+    const { service, authService } = makeService({ setPaused });
+
+    await service.pauseAccount("user-1");
+
+    expect(setPaused).toHaveBeenCalledWith("user-1", true);
     expect(authService.revokeAllSessionsForUser).toHaveBeenCalledWith("user-1");
   });
 });

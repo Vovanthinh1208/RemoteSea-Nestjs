@@ -5,6 +5,7 @@ import * as bcrypt from "bcrypt";
 import type { NotificationPreference, User } from "@prisma/client";
 import { UsersRepository, type AccountFields } from "./users.repository";
 import type { UpdateUserDto } from "./dto/update-user.dto";
+import type { DeleteAccountDto } from "./dto/delete-account.dto";
 import type { ChangePasswordDto } from "./dto/change-password.dto";
 import type { UpdateAccountDto } from "./dto/update-account.dto";
 import type { UpdateNotificationPreferencesDto } from "./dto/update-notification-preferences.dto";
@@ -37,7 +38,23 @@ export class UsersService {
     return this.usersRepository.updateName(userId, dto.name);
   }
 
-  async deleteAccount(userId: string): Promise<void> {
+  async deleteAccount(userId: string, dto: DeleteAccountDto): Promise<void> {
+    const credentials = await this.usersRepository.findPasswordHash(userId);
+    if (credentials?.passwordHash) {
+      const valid =
+        !!dto.password &&
+        (await bcrypt.compare(dto.password, credentials.passwordHash));
+      if (!valid) {
+        this.metricsService.recordAuthFailure(
+          "delete_account_invalid_password",
+        );
+        throw new BadRequestApiException(
+          "Current password is incorrect",
+          ErrorCode.CURRENT_PASSWORD_INCORRECT,
+        );
+      }
+    }
+
     // jobs.employerId is ON DELETE RESTRICT specifically to make this
     // unconditionally safe — but check first and give a clear, actionable
     // error rather than letting the delete fail with a raw FK-violation.
@@ -88,6 +105,7 @@ export class UsersService {
   async changePassword(
     userId: string,
     dto: ChangePasswordDto,
+    currentSessionId: string,
   ): Promise<{ message: string }> {
     const user = await this.usersRepository.findPasswordHash(userId);
     if (!user?.passwordHash) {
@@ -109,15 +127,19 @@ export class UsersService {
       );
     }
 
+    if (dto.newPassword === dto.currentPassword) {
+      throw new BadRequestApiException(
+        "New password must be different from the current one",
+        ErrorCode.NEW_PASSWORD_SAME_AS_CURRENT,
+      );
+    }
+
     const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_SALT_ROUNDS);
     await this.usersRepository.updatePasswordHash(userId, passwordHash);
-    // Same reasoning as AuthService.disableTwoFactor: a password change is
-    // the textbook case for forcing every other session back through
-    // login — the old password may be exactly what an attacker who's
-    // riding an existing session already knows. This request's own
-    // session ends too; the client already has its success response by
-    // the time that matters.
-    await this.authService.revokeAllSessionsForUser(userId);
+    // PB12: every other device is signed out (the old password may be exactly
+    // what someone riding an existing session already knows); the session that
+    // just proved the current password stays signed in.
+    await this.authService.revokeOtherSessions(userId, currentSessionId);
 
     return { message: "Password updated" };
   }
@@ -199,8 +221,12 @@ export class UsersService {
     return state;
   }
 
-  pauseAccount(userId: string) {
-    return this.usersRepository.setPaused(userId, true);
+  async pauseAccount(userId: string) {
+    const state = await this.usersRepository.setPaused(userId, true);
+    // PB16 step 4: pausing signs the user out everywhere. Sign-in itself stays
+    // allowed so they can reactivate from Settings.
+    await this.authService.revokeAllSessionsForUser(userId);
+    return state;
   }
 
   reactivateAccount(userId: string) {

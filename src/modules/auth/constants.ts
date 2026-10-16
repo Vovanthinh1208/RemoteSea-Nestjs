@@ -1,4 +1,5 @@
-export const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+// PB06: the reset link is valid for at most 15 minutes.
+export const RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 // How long a ?code= from an OAuth redirect stays redeemable at POST
 // /auth/oauth/exchange — the frontend's callback page redeems it within a
@@ -14,6 +15,8 @@ export const RATE_LIMITS = {
   REGISTER: { limit: 5, windowMs: 60_000 },
   LOGIN: { limit: 10, windowMs: 60_000 },
   FORGOT_PASSWORD: { limit: 3, windowMs: 60_000 },
+  // PB06 RC1: at most 3 reset emails per 15 minutes for the same address.
+  FORGOT_PASSWORD_EMAIL: { limit: 3, windowMs: 15 * 60_000 },
   RESET_PASSWORD: { limit: 5, windowMs: 60_000 },
   // Brute-forcing a 6-digit TOTP code is only ~1M guesses — this is the
   // control that actually matters, tighter than plain LOGIN.

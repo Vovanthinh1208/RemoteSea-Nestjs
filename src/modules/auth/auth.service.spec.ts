@@ -1,3 +1,4 @@
+import * as crypto from "crypto";
 import * as bcrypt from "bcrypt";
 import { Prisma } from "@prisma/client";
 import { AuthService } from "./auth.service";
@@ -508,6 +509,31 @@ describe("AuthService.forgotPassword", () => {
       expect.any(String),
     );
   });
+
+  // PB06: the stored token is a hash, the emailed one is the raw secret; the
+  // link is valid for at most 15 minutes.
+  it("stores only a SHA-256 hash of the token and expires it within 15 minutes", async () => {
+    const { service, authRepository, emailService } = makeService({
+      authRepository: {
+        findUserIdByEmail: jest.fn().mockResolvedValue({ id: "u1" }),
+      },
+    });
+    const before = Date.now();
+
+    await service.forgotPassword("a@b.com");
+
+    const [, storedToken, expires] = (
+      authRepository.createVerificationToken as jest.Mock
+    ).mock.calls[0] as [string, string, Date];
+    const [, emailedToken] = (emailService.sendPasswordResetEmail as jest.Mock)
+      .mock.calls[0] as [string, string];
+    expect(emailedToken).toMatch(/^[0-9a-f]{64}$/);
+    expect(storedToken).not.toBe(emailedToken);
+    expect(storedToken).toBe(
+      crypto.createHash("sha256").update(emailedToken).digest("hex"),
+    );
+    expect(expires.getTime() - before).toBeLessThanOrEqual(15 * 60 * 1000 + 50);
+  });
 });
 
 describe("AuthService.resetPassword", () => {
@@ -554,9 +580,11 @@ describe("AuthService.resetPassword", () => {
 
     await service.resetPassword("t1", "newpassword123");
 
+    const t1Hash = crypto.createHash("sha256").update("t1").digest("hex");
+    expect(authRepository.findVerificationToken).toHaveBeenCalledWith(t1Hash);
     expect(authRepository.consumePasswordReset).toHaveBeenCalledWith(
       "a@b.com",
-      "t1",
+      t1Hash,
       "new-hash",
     );
   });

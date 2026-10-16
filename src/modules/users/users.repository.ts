@@ -127,6 +127,13 @@ export class UsersRepository {
           },
         },
         jobAlerts: true,
+        notificationPreference: true,
+        // PB17 step 2: messages the user sent (their own words only — the other
+        // party's messages belong to that person's export).
+        messages: {
+          select: { applicationId: true, body: true, createdAt: true },
+          orderBy: { createdAt: "asc" },
+        },
       },
     });
   }

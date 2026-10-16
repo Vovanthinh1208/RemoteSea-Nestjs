@@ -424,6 +424,14 @@ export class AuthController {
       RATE_LIMITS.FORGOT_PASSWORD.windowMs,
       req,
     );
+    // Keyed on the submitted address, known or not, so the 429 itself never
+    // reveals whether an account exists.
+    this.rateLimitService.enforce(
+      `forgot-email:${body.email.trim().toLowerCase()}`,
+      RATE_LIMITS.FORGOT_PASSWORD_EMAIL.limit,
+      RATE_LIMITS.FORGOT_PASSWORD_EMAIL.windowMs,
+      req,
+    );
     await this.authService.forgotPassword(body.email);
     return { message: "If that email exists, a reset link was sent." };
   }

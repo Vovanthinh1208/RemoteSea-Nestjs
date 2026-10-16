@@ -45,7 +45,12 @@ import { parseUserAgent } from "@/common/utils/user-agent.util";
 import { lookupIpLocation } from "@/common/utils/geo-ip.util";
 import { MetricsService } from "@/modules/metrics/metrics.service";
 
-const BACKUP_CODE_COUNT = 8;
+// SHA-256 is enough here: the token is 256 random bits, not a human secret.
+const hashResetToken = (token: string): string =>
+  crypto.createHash("sha256").update(token).digest("hex");
+
+// PB10: ten single-use recovery codes.
+const BACKUP_CODE_COUNT = 10;
 const TWO_FACTOR_CHALLENGE_TTL = "5m";
 const OAUTH_LINK_INTENT_TTL = "10m";
 
@@ -365,6 +370,15 @@ export class AuthService {
     userId: string,
     email: string,
   ): Promise<{ secret: string; otpauthUrl: string; qrCodeDataUrl: string }> {
+    // Re-running setup while 2FA is active would overwrite the secret the
+    // user's authenticator already holds and lock them out of login.
+    const state = await this.authRepository.findTwoFactorState(userId);
+    if (state?.twoFactorEnabled) {
+      throw new ConflictApiException(
+        "Two-factor authentication is already enabled",
+        ErrorCode.TWO_FACTOR_ALREADY_ENABLED,
+      );
+    }
     const secret = generateSecret();
     await this.authRepository.setTwoFactorSecret(userId, secret);
     const otpauthUrl = generateURI({
@@ -552,9 +566,11 @@ export class AuthService {
     if (!user) return;
 
     const token = crypto.randomBytes(32).toString("hex");
+    // Only the hash is stored: a leaked database row can't be replayed as a
+    // reset link. The raw token travels only in the email.
     await this.authRepository.createVerificationToken(
       email,
-      token,
+      hashResetToken(token),
       new Date(Date.now() + RESET_TOKEN_TTL_MS),
     );
     // Background send: the response no longer waits out the Resend round-trip.
@@ -571,7 +587,8 @@ export class AuthService {
   }
 
   async resetPassword(token: string, password: string): Promise<void> {
-    const record = await this.authRepository.findVerificationToken(token);
+    const tokenHash = hashResetToken(token);
+    const record = await this.authRepository.findVerificationToken(tokenHash);
     if (!record || record.expires < new Date()) {
       throw new BadRequestApiException(
         "Invalid or expired token",
@@ -582,7 +599,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
     const consumed = await this.authRepository.consumePasswordReset(
       record.identifier,
-      token,
+      tokenHash,
       passwordHash,
     );
     // false means a concurrent request already consumed this token between

@@ -26,6 +26,10 @@ import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
+import {
+  deleteAccountSchema,
+  type DeleteAccountDto,
+} from "./dto/delete-account.dto";
 import { CurrentSessionId } from "@/core/decorators/current-session-id.decorator";
 import { RateLimitService } from "@/common/services/rate-limit.service";
 import { AuthService } from "@/modules/auth/auth.service";
@@ -71,8 +75,16 @@ export class UsersController {
 
   @ApiDeleteAccount()
   @Delete()
-  async deleteAccount(@CurrentUser() user: AuthenticatedUser) {
-    await this.usersService.deleteAccount(user.id);
+  async deleteAccount(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(deleteAccountSchema)) body: DeleteAccountDto,
+  ) {
+    this.rateLimitService.enforce(
+      `delete-account:${user.id}`,
+      RATE_LIMITS.CHANGE_PASSWORD.limit,
+      RATE_LIMITS.CHANGE_PASSWORD.windowMs,
+    );
+    await this.usersService.deleteAccount(user.id, body);
     return { success: true };
   }
 
@@ -81,13 +93,14 @@ export class UsersController {
   async changePassword(
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(changePasswordSchema)) body: ChangePasswordDto,
+    @CurrentSessionId() sessionId: string,
   ) {
     this.rateLimitService.enforce(
       `password:${user.id}`,
       RATE_LIMITS.CHANGE_PASSWORD.limit,
       RATE_LIMITS.CHANGE_PASSWORD.windowMs,
     );
-    return this.usersService.changePassword(user.id, body);
+    return this.usersService.changePassword(user.id, body, sessionId);
   }
 
   // Settings > Account (phone/language/region/currency display).
