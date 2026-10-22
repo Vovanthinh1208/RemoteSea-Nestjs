@@ -55,6 +55,10 @@ import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.i
 import { ConflictApiException } from "@/common/exceptions/api.exception";
 import type { OAuthProfile, OAuthProviderName } from "./interfaces";
 import {
+  assertOAuthProviderConfigured,
+  getConfiguredOAuthProviders,
+} from "./oauth-provider-config";
+import {
   ApiAuthTag,
   ApiDisableTwoFactor,
   ApiForgotPassword,
@@ -68,6 +72,7 @@ import {
   ApiLogin,
   ApiMe,
   ApiOAuthExchange,
+  ApiOAuthProviders,
   ApiRegister,
   ApiResetPassword,
   ApiSession,
@@ -247,6 +252,12 @@ export class AuthController {
     return this.authService.getSessionProfile(user.id);
   }
 
+  @ApiOAuthProviders()
+  @Get("providers")
+  oauthProviders(): { providers: OAuthProviderName[] } {
+    return { providers: getConfiguredOAuthProviders(this.config) };
+  }
+
   // Settings > Connected accounts "Connect". Unlike the plain sign-in routes
   // below, this can't be a Passport-guard-driven redirect: the browser's
   // top-level navigation to the provider's consent screen can't carry an
@@ -264,6 +275,7 @@ export class AuthController {
     @Param("provider", new ZodValidationPipe(linkProviderParamSchema))
     provider: LinkProviderParamDto,
   ): { url: string } {
+    assertOAuthProviderConfigured(this.config, provider);
     const state = this.authService.createOAuthLinkIntent(user.id, provider);
     return { url: this.buildAuthorizationUrl(provider, state) };
   }
@@ -339,9 +351,8 @@ export class AuthController {
     await this.handleOAuthCallback("github", req, res);
   }
 
-  // Only registered when AUTH_LINKEDIN_ID/SECRET are configured (see
-  // AuthModule) — hitting these routes with no LinkedIn app configured throws
-  // at the Passport layer, same as the Google/GitHub routes do.
+  // The guard returns a structured 503 when the optional provider integration
+  // is not configured, instead of letting Passport fail with a 500.
   @ApiLinkedinLogin()
   @Get("linkedin")
   @UseGuards(LinkedinAuthGuard)

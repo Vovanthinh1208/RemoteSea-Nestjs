@@ -265,6 +265,19 @@ export const ApiLinkProvider = () =>
     InternalServerErrorApiResponse,
   );
 
+export const ApiOAuthProviders = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "List configured social sign-in providers",
+      description:
+        "Returns provider names only when their client ID, client secret, and callback URL are configured. No credentials are returned.",
+    }),
+    ApiOkResponse({
+      description: "Configured social sign-in providers",
+      schema: { example: { providers: ["google", "github"] } },
+    }),
+  );
+
 export const ApiSession = () =>
   applyDecorators(
     ApiOperation({

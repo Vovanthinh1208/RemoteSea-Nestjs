@@ -36,7 +36,7 @@ src/
 │   └── types/                   # shared response/type shapes
 │
 └── modules/                 # one folder per business domain
-    ├── auth/                  # register, login, OAuth (Google/GitHub), session, password reset
+    ├── auth/                  # register, login, OAuth (Google/GitHub/LinkedIn), session, password reset
     ├── users/                  # account self-service (update name, delete account, change password)
     ├── talent/                 # talent profile (self + public lookup by slug)
     ├── employer/                # employer profile + job/application management dashboard
@@ -62,7 +62,7 @@ Each module follows the same internal layering:
 
 - **Zod instead of class-validator.** The original Next.js app returns `{ error: parsed.error.flatten() }` on invalid input. To keep API consumers working unmodified, every DTO reuses the original Zod schema and a shared `ZodValidationPipe` — not class-validator, which would produce a different error shape.
 - **Custom exception hierarchy.** All thrown errors are `ApiException` subclasses (`UnauthorizedApiException`, `ForbiddenApiException`, `NotFoundApiException`, `ConflictApiException`, `BadRequestApiException`, `ValidationApiException`, `TooManyRequestsApiException`). A `GlobalExceptionFilter` renders every error as `{ error: <string|object> }`, matching the original `NextResponse.json({ error }, { status })` contract exactly.
-- **JWT/Passport instead of NextAuth.** `POST /auth/login` issues a JWT; `GET /auth/google` and `GET /auth/github` (+ `/callback`) replicate OAuth sign-in and only register as routes when their credentials are configured; `GET /auth/session` mirrors reading the current session from a bearer token.
+- **JWT/Passport instead of NextAuth.** `POST /auth/login` issues a JWT; Google, GitHub, and LinkedIn OAuth use Passport strategies and short-lived exchange codes; `GET /auth/providers` reports which providers are configured; `GET /auth/session` mirrors reading the current session from a bearer token.
 - **Repository-owned transactions.** Multi-step atomic writes (e.g. suspending an employer + closing their active jobs, replacing a talent's skill list) live in a single repository method that owns `prisma.$transaction([...])` internally — services never call Prisma directly.
 - **Rate limiting.** Ported from the original in-memory fixed-window limiter (`RateLimitService`), applied to the same endpoints with the same limits (register, login-adjacent flows, password change, job applications, checkout).
 
@@ -82,7 +82,7 @@ Alternatively, this repo has its own `docker-compose.yml` (Postgres + migrate + 
 
 ## Environment variables
 
-See `.env.example` for the full list. Required: `DATABASE_URL`, `AUTH_SECRET`. Everything else (Google/GitHub OAuth, Stripe, SMTP, S3) is optional and the corresponding features degrade gracefully — routes for unconfigured OAuth providers simply aren't registered, and email sends are skipped until SMTP is configured. Configure `MAIL_HOST`, `MAIL_PORT`, `MAIL_SECURE`, optional `MAIL_USER`/`MAIL_PASSWORD`, and `MAIL_FROM` to enable outbound SMTP mail. Port 587 requires STARTTLS; port 465 uses implicit TLS by default. No TLS certificate checks are disabled.
+See `.env.example` for the full list. Required: `DATABASE_URL`, `AUTH_SECRET`. OAuth, Stripe, SMTP, and S3 are optional. To enable an OAuth provider, set its client ID, client secret, and callback URL (`AUTH_GOOGLE_*`, `AUTH_GITHUB_*`, or `AUTH_LINKEDIN_*`). Register the callback URL with that provider as `https://<API_ORIGIN>/auth/<provider>/callback`; for local development the API origin is `http://localhost:4000`. `GET /auth/providers` exposes only enabled provider names, so the web app can hide unavailable sign-in buttons and disable unavailable account-link actions. OAuth routes return a structured 503 while a provider is not configured. Email sends are skipped until SMTP is configured. Configure `MAIL_HOST`, `MAIL_PORT`, `MAIL_SECURE`, optional `MAIL_USER`/`MAIL_PASSWORD`, and `MAIL_FROM` to enable outbound SMTP mail. Port 587 requires STARTTLS; port 465 uses implicit TLS by default. No TLS certificate checks are disabled.
 
 `FRONTEND_URL` must be the public frontend origin only (no path, query, or fragment). Local development defaults to `http://localhost:3000`; production requires a public HTTPS origin. `fly.toml` sets the current Fly app origin (`https://remotesea-web.fly.dev`), which is also used for password-reset emails and OAuth/billing redirects. Keep it aligned with the frontend's public domain; after changing it, deploy the API with `fly deploy` from this repository. The reset email opens `/reset-password?token=[redacted]` directly; verify after deployment with a newly requested test-account reset email and confirm the link loads the reset form before submitting it.
 

@@ -81,6 +81,27 @@ describe("validateEnv", () => {
     expect(config.DATABASE_POOL_TIMEOUT).toBe(20);
   });
 
+  it("normalizes blank OAuth settings and rejects malformed callback URLs", () => {
+    const config = validateEnv({
+      ...validBaseEnv,
+      AUTH_GOOGLE_ID: "   ",
+      AUTH_GOOGLE_SECRET: "",
+      AUTH_GOOGLE_CALLBACK_URL: "http://localhost:4000/auth/google/callback",
+    });
+    expect(config.AUTH_GOOGLE_ID).toBeUndefined();
+    expect(config.AUTH_GOOGLE_SECRET).toBeUndefined();
+    expect(config.AUTH_GOOGLE_CALLBACK_URL).toBe(
+      "http://localhost:4000/auth/google/callback",
+    );
+
+    expect(() =>
+      validateEnv({
+        ...validBaseEnv,
+        AUTH_GOOGLE_CALLBACK_URL: "not-a-url",
+      }),
+    ).toThrow("Must be an absolute HTTP(S) URL");
+  });
+
   it("rejects a zero or negative DATABASE_CONNECTION_LIMIT", () => {
     expect(() =>
       validateEnv({ ...validBaseEnv, DATABASE_CONNECTION_LIMIT: "0" }),

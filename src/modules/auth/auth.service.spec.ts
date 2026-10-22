@@ -468,6 +468,66 @@ describe("AuthService.createOAuthExchangeCode / completeOAuthExchange", () => {
   });
 });
 
+describe("AuthService OAuth account linking", () => {
+  const profile = {
+    provider: "google" as const,
+    providerAccountId: "google-subject",
+    email: "person@example.com",
+    name: "Person",
+    image: null,
+  };
+
+  it("creates a provider connection for the authenticated account", async () => {
+    const createOAuthConnection = jest.fn().mockResolvedValue(undefined);
+    const { service } = makeService({
+      authRepository: {
+        findAccountByProvider: jest.fn().mockResolvedValue(null),
+        createOAuthConnection,
+      },
+    });
+
+    await service.linkOAuthAccount("user-1", profile);
+
+    expect(createOAuthConnection).toHaveBeenCalledWith("user-1", profile);
+  });
+
+  it("does not let a provider account already owned by another user be linked", async () => {
+    const createOAuthConnection = jest.fn();
+    const { service } = makeService({
+      authRepository: {
+        findAccountByProvider: jest
+          .fn()
+          .mockResolvedValue({ userId: "user-2" }),
+        createOAuthConnection,
+      },
+    });
+
+    await expect(
+      service.linkOAuthAccount("user-1", profile),
+    ).rejects.toMatchObject({
+      response: {
+        code: ErrorCode.CONNECTION_ALREADY_LINKED,
+      },
+    });
+    expect(createOAuthConnection).not.toHaveBeenCalled();
+  });
+
+  it("treats an already-linked provider on the same account as a no-op", async () => {
+    const createOAuthConnection = jest.fn();
+    const { service } = makeService({
+      authRepository: {
+        findAccountByProvider: jest
+          .fn()
+          .mockResolvedValue({ userId: "user-1" }),
+        createOAuthConnection,
+      },
+    });
+
+    await service.linkOAuthAccount("user-1", profile);
+    expect(createOAuthConnection).not.toHaveBeenCalled();
+  });
+});
+
 describe("AuthService.decodeTwoFactorChallengeSubject", () => {
   it("returns null (not a throw) for an invalid/expired token", () => {
     const verify = jest.fn().mockImplementation(() => {

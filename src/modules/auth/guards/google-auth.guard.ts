@@ -1,4 +1,5 @@
 import { Injectable, Logger, type ExecutionContext } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { AuthGuard } from "@nestjs/passport";
 import type { Request, Response } from "express";
 import { UnauthorizedApiException } from "@/common/exceptions/api.exception";
@@ -6,6 +7,8 @@ import { ErrorCode } from "@/common/exceptions/error-codes";
 import { applyOAuthStateCheck } from "../oauth-state.util";
 import { AuthService } from "../auth.service";
 import { MetricsService } from "@/modules/metrics/metrics.service";
+import { assertOAuthProviderConfigured } from "../oauth-provider-config";
+import type { EnvConfig } from "@/core/config/env.validation";
 
 @Injectable()
 export class GoogleAuthGuard extends AuthGuard("google") {
@@ -14,8 +17,14 @@ export class GoogleAuthGuard extends AuthGuard("google") {
   constructor(
     private readonly authService: AuthService,
     private readonly metricsService: MetricsService,
+    private readonly config: ConfigService<EnvConfig, true>,
   ) {
     super();
+  }
+
+  override canActivate(context: ExecutionContext) {
+    assertOAuthProviderConfigured(this.config, "google");
+    return super.canActivate(context);
   }
 
   // See oauth-state.util.ts — stateless CSRF protection for this redirect

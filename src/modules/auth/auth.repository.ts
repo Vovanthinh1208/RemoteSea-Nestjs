@@ -226,8 +226,16 @@ export class AuthRepository {
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.upsert({
         where: { email: params.email },
-        create: { email: params.email, name: params.name, image: params.image },
-        update: {},
+        create: {
+          email: params.email,
+          name: params.name,
+          image: params.image,
+          emailVerified: true,
+        },
+        // All OAuthProfile instances are constructed only after the provider
+        // strategy confirms the email address. Persist that proof when OAuth
+        // signs up a new user or joins an existing account by verified email.
+        update: { emailVerified: true },
       });
 
       // Upsert, not create: the existingAccount check above is a fast-path read

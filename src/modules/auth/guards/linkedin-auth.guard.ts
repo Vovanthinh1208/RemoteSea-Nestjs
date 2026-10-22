@@ -1,15 +1,26 @@
 import { Injectable, type ExecutionContext } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { AuthGuard } from "@nestjs/passport";
 import type { Request, Response } from "express";
 import { UnauthorizedApiException } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { applyOAuthStateCheck } from "../oauth-state.util";
 import { AuthService } from "../auth.service";
+import { assertOAuthProviderConfigured } from "../oauth-provider-config";
+import type { EnvConfig } from "@/core/config/env.validation";
 
 @Injectable()
 export class LinkedinAuthGuard extends AuthGuard("linkedin") {
-  constructor(private readonly authService: AuthService) {
+  constructor(
+    private readonly authService: AuthService,
+    private readonly config: ConfigService<EnvConfig, true>,
+  ) {
     super();
+  }
+
+  override canActivate(context: ExecutionContext) {
+    assertOAuthProviderConfigured(this.config, "linkedin");
+    return super.canActivate(context);
   }
 
   // See GoogleAuthGuard / oauth-state.util.ts — same stateless CSRF check.

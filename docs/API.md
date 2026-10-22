@@ -85,7 +85,7 @@ Liveness check: pings the database with `SELECT 1` and reports connectivity.
 
 Base path: `/auth`. Controller: `auth.controller.ts`.
 
-> **OAuth-conditional routes**: `GET /auth/google(/callback)`, `GET /auth/github(/callback)`, and `GET /auth/linkedin(/callback)` are only registered when their respective credentials are configured (`AUTH_GOOGLE_ID`/`SECRET`, `AUTH_GITHUB_ID`/`SECRET`, `AUTH_LINKEDIN_ID`/`SECRET`). If unset, the strategy is never registered and hitting the route throws at the Passport layer (`500`) rather than a clean `404`. `GET /auth/:provider/link` is always registered (it just builds a URL from config, no Passport strategy involved) — the resulting URL simply won't work if that provider's credentials are unset.
+> **Optional OAuth routes**: Google, GitHub, and LinkedIn routes are always registered. `GET /auth/providers` returns only providers with a client ID, client secret, and callback URL configured. Starting sign-in or account linking for an unavailable provider returns a structured `503 SERVICE_UNAVAILABLE`; the frontend hides unavailable sign-in buttons and disables unavailable link actions.
 
 ### POST /auth/register
 
@@ -302,23 +302,38 @@ or `{ "user": null }` if the header is missing/invalid/expired.
 
 ### GET /auth/google · GET /auth/google/callback
 
-Redirects to Google's consent screen, then on callback looks up/creates the user, mints a short-lived (60s) exchange code, and redirects to `<FRONTEND_URL>/auth/callback?code=<exchangeCode>` — the frontend's callback page immediately calls `POST /auth/oauth/exchange` (below) to trade it for a real access token. The code is never a usable bearer token on its own, and isn't the long-lived access token itself, so it's safe to sit in browser history/Referer headers the way a raw token wouldn't be. Only registered if Google OAuth env vars are set.
+Redirects to Google's consent screen, then on callback looks up/creates the user, mints a short-lived (60s) exchange code, and redirects to `<FRONTEND_URL>/auth/callback?code=<exchangeCode>` — the frontend's callback page immediately calls `POST /auth/oauth/exchange` (below) to trade it for a real access token. The code is never a usable bearer token on its own, and isn't the long-lived access token itself, so it's safe to sit in browser history/Referer headers the way a raw token wouldn't be. Requires `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, and `AUTH_GOOGLE_CALLBACK_URL`.
 
 - **Auth**: `GoogleAuthGuard` (`AuthGuard("google")`) · **Rate limit**: None
 - **Success response**: `302 Found` redirect (no JSON body)
 - **Errors**: `401 { "error": "Unauthorized", "code": "AUTHENTICATION_REQUIRED" }` for both a denied Passport auth and a Google profile with no verified email — `GoogleAuthGuard` overrides `handleRequest` (same as `JwtAuthGuard`) so every failure path returns the app's usual `{ error, code }` shape instead of falling through to Nest's default body or an unwrapped 500.
+- **Unavailable provider**: `503 { "error": "Google sign-in is not configured.", "code": "SERVICE_UNAVAILABLE" }`.
 
 ---
 
 ### GET /auth/github · GET /auth/github/callback
 
-Same flow as Google, via `GithubAuthGuard`. Only registered if `AUTH_GITHUB_ID`/`AUTH_GITHUB_SECRET` are set. Same error handling (including the missing-verified-email case).
+Same flow as Google, via `GithubAuthGuard`. Requires `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, and `AUTH_GITHUB_CALLBACK_URL`. Same error handling (including the missing-verified-email case).
 
 ---
 
 ### GET /auth/linkedin · GET /auth/linkedin/callback
 
-Same shape as Google/GitHub above, via `LinkedinAuthGuard`. Uses "Sign In with LinkedIn using OpenID Connect" (`scope: openid profile email`, profile fetched from `https://api.linkedin.com/v2/userinfo`) rather than LinkedIn's older v1/v2 REST profile API. Only registered if `AUTH_LINKEDIN_ID`/`AUTH_LINKEDIN_SECRET` are set.
+Same shape as Google/GitHub above, via `LinkedinAuthGuard`. Uses "Sign In with LinkedIn using OpenID Connect" (`scope: openid profile email`, profile fetched from `https://api.linkedin.com/v2/userinfo`) rather than LinkedIn's older v1/v2 REST profile API. Requires `AUTH_LINKEDIN_ID`, `AUTH_LINKEDIN_SECRET`, and `AUTH_LINKEDIN_CALLBACK_URL`.
+
+---
+
+### GET /auth/providers
+
+Returns enabled social sign-in providers. A provider is enabled only when its client ID, client secret, and exact callback URL are configured. The response includes provider names only; credentials are never returned.
+
+**Success response — `200 OK`**
+
+```json
+{ "providers": ["google", "github"] }
+```
+
+An empty array means email and password sign-in remain available, while social sign-in and account linking are not configured.
 
 ---
 

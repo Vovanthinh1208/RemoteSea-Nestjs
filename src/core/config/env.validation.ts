@@ -6,6 +6,15 @@ const optionalNonEmptyString = z.preprocess(
   z.string().trim().min(1).optional(),
 );
 
+const optionalHttpUrl = optionalNonEmptyString.refine((value) => {
+  if (!value) return true;
+  try {
+    return ["http:", "https:"].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+}, "Must be an absolute HTTP(S) URL");
+
 const optionalMailSecure = z.preprocess(
   (value) => (value === "" ? undefined : value),
   z
@@ -84,15 +93,15 @@ const envBaseSchema = z.object({
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(1),
 
   // Optional integrations — features degrade gracefully when unset.
-  AUTH_GOOGLE_ID: z.string().optional(),
-  AUTH_GOOGLE_SECRET: z.string().optional(),
-  AUTH_GOOGLE_CALLBACK_URL: z.string().optional(),
-  AUTH_GITHUB_ID: z.string().optional(),
-  AUTH_GITHUB_SECRET: z.string().optional(),
-  AUTH_GITHUB_CALLBACK_URL: z.string().optional(),
-  AUTH_LINKEDIN_ID: z.string().optional(),
-  AUTH_LINKEDIN_SECRET: z.string().optional(),
-  AUTH_LINKEDIN_CALLBACK_URL: z.string().optional(),
+  AUTH_GOOGLE_ID: optionalNonEmptyString,
+  AUTH_GOOGLE_SECRET: optionalNonEmptyString,
+  AUTH_GOOGLE_CALLBACK_URL: optionalHttpUrl,
+  AUTH_GITHUB_ID: optionalNonEmptyString,
+  AUTH_GITHUB_SECRET: optionalNonEmptyString,
+  AUTH_GITHUB_CALLBACK_URL: optionalHttpUrl,
+  AUTH_LINKEDIN_ID: optionalNonEmptyString,
+  AUTH_LINKEDIN_SECRET: optionalNonEmptyString,
+  AUTH_LINKEDIN_CALLBACK_URL: optionalHttpUrl,
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   MAIL_HOST: optionalNonEmptyString,

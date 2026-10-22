@@ -10,25 +10,43 @@ import { GoogleStrategy } from "./strategies/google.strategy";
 import { GithubStrategy } from "./strategies/github.strategy";
 import { LinkedinStrategy } from "./strategies/linkedin.strategy";
 import type { EnvConfig } from "@/core/config/env.validation";
+import { isOAuthProviderConfigured } from "./oauth-provider-config";
 
-// Google/GitHub/LinkedIn sign-in (and Settings > Connected accounts linking)
-// degrades gracefully when unconfigured, mirroring env.ts treating these as
-// optional integrations — only register the strategy (and therefore the
-// route) when credentials are present.
+// ConfigModule loads .env during Nest initialization, after static module
+// imports have already evaluated. Use factories so each Passport strategy is
+// registered from validated runtime config, rather than inspecting
+// process.env at import time. Disabled providers return null; their guards
+// check availability before asking Passport to resolve a strategy.
 const oauthProviders: Provider[] = [
-  ...(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET
-    ? [GoogleStrategy]
-    : []),
-  ...(process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET
-    ? [GithubStrategy]
-    : []),
-  ...(process.env.AUTH_LINKEDIN_ID && process.env.AUTH_LINKEDIN_SECRET
-    ? [LinkedinStrategy]
-    : []),
+  {
+    provide: GoogleStrategy,
+    inject: [ConfigService],
+    useFactory: (config: ConfigService<EnvConfig, true>) =>
+      isOAuthProviderConfigured(config, "google")
+        ? new GoogleStrategy(config)
+        : null,
+  },
+  {
+    provide: GithubStrategy,
+    inject: [ConfigService],
+    useFactory: (config: ConfigService<EnvConfig, true>) =>
+      isOAuthProviderConfigured(config, "github")
+        ? new GithubStrategy(config)
+        : null,
+  },
+  {
+    provide: LinkedinStrategy,
+    inject: [ConfigService],
+    useFactory: (config: ConfigService<EnvConfig, true>) =>
+      isOAuthProviderConfigured(config, "linkedin")
+        ? new LinkedinStrategy(config)
+        : null,
+  },
 ];
 
 @Module({
   imports: [
+    ConfigModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

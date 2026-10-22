@@ -76,3 +76,47 @@ describe("AuthRepository 2FA secret storage", () => {
     );
   });
 });
+
+describe("AuthRepository OAuth account creation", () => {
+  it("marks provider-verified emails as verified for new or matched users", async () => {
+    const user = {
+      id: "u1",
+      email: "person@example.com",
+      name: "Person",
+      image: null,
+      role: "TALENT",
+      emailVerified: true,
+    };
+    const userUpsert = jest.fn().mockResolvedValue(user);
+    const accountUpsert = jest.fn().mockResolvedValue(undefined);
+    const prisma = {
+      account: { findUnique: jest.fn().mockResolvedValue(null) },
+      $transaction: (callback: (tx: unknown) => unknown) =>
+        callback({
+          user: { upsert: userUpsert },
+          account: { upsert: accountUpsert },
+        }),
+    } as unknown as PrismaService;
+    const repository = new AuthRepository(prisma);
+
+    await repository.findOrCreateOAuthUser({
+      provider: "google",
+      providerAccountId: "google-subject",
+      email: "person@example.com",
+      name: "Person",
+      image: null,
+    });
+
+    expect(userUpsert).toHaveBeenCalledWith({
+      where: { email: "person@example.com" },
+      create: {
+        email: "person@example.com",
+        name: "Person",
+        image: null,
+        emailVerified: true,
+      },
+      update: { emailVerified: true },
+    });
+    expect(accountUpsert).toHaveBeenCalled();
+  });
+});
