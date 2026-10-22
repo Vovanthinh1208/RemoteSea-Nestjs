@@ -51,7 +51,9 @@ export class EmailService {
 
   constructor(private readonly config: ConfigService<EnvConfig, true>) {
     this.from = this.config.get("MAIL_FROM", { infer: true }) ?? DEFAULT_FROM;
-    this.appUrl = this.config.get("FRONTEND_URL", { infer: true });
+    this.appUrl = new URL(
+      this.config.get("FRONTEND_URL", { infer: true }),
+    ).origin;
 
     const host = this.config.get("MAIL_HOST", { infer: true });
     if (!host) {
@@ -132,6 +134,17 @@ export class EmailService {
     }
   }
 
+  private buildFrontendUrl(
+    path: string,
+    query?: Record<string, string>,
+  ): string {
+    const url = new URL(path, `${this.appUrl}/`);
+    for (const [key, value] of Object.entries(query ?? {})) {
+      url.searchParams.set(key, value);
+    }
+    return url.toString();
+  }
+
   async sendWelcomeEmail(to: string, name: string): Promise<void> {
     await this.send(
       to,
@@ -141,7 +154,7 @@ export class EmailService {
   }
 
   async sendPasswordResetEmail(to: string, token: string): Promise<void> {
-    const resetUrl = `${this.appUrl}/reset-password?token=${encodeURIComponent(token)}`;
+    const resetUrl = this.buildFrontendUrl("/reset-password", { token });
     await this.send(
       to,
       "Reset your RemoteSEA password",
@@ -162,7 +175,7 @@ export class EmailService {
     companyName: string,
     token: string,
   ): Promise<void> {
-    const verifyUrl = `${this.appUrl}/employer/verify?token=${encodeURIComponent(token)}`;
+    const verifyUrl = this.buildFrontendUrl("/employer/verify", { token });
     await this.send(
       to,
       "Verify your company email",
@@ -176,7 +189,9 @@ export class EmailService {
     role: string,
     token: string,
   ): Promise<void> {
-    const acceptUrl = `${this.appUrl}/team/invitations/${encodeURIComponent(token)}`;
+    const acceptUrl = this.buildFrontendUrl(
+      `/team/invitations/${encodeURIComponent(token)}`,
+    );
     await this.send(
       to,
       `You've been invited to join ${safeHeader(companyName)} on RemoteSEA`,
@@ -185,7 +200,7 @@ export class EmailService {
   }
 
   async sendTalentVerificationEmail(to: string, token: string): Promise<void> {
-    const verifyUrl = `${this.appUrl}/talent/verify?token=${encodeURIComponent(token)}`;
+    const verifyUrl = this.buildFrontendUrl("/talent/verify", { token });
     await this.send(
       to,
       "Verify your email",
@@ -198,7 +213,9 @@ export class EmailService {
     jobTitle: string,
     jobSlug: string,
   ): Promise<void> {
-    const jobUrl = `${this.appUrl}/jobs/${encodeURIComponent(jobSlug)}`;
+    const jobUrl = this.buildFrontendUrl(
+      `/jobs/${encodeURIComponent(jobSlug)}`,
+    );
     await this.send(
       to,
       "Your job is live",
@@ -284,7 +301,9 @@ export class EmailService {
   async sendJobAlertEmail(to: string, jobs: JobWithRelations[]): Promise<void> {
     const rows = jobs
       .map((job) => {
-        const jobUrl = `${this.appUrl}/jobs/${encodeURIComponent(job.slug)}`;
+        const jobUrl = this.buildFrontendUrl(
+          `/jobs/${encodeURIComponent(job.slug)}`,
+        );
         return `<li><a href="${escapeHtml(jobUrl)}">${escapeHtml(job.title)}</a></li>`;
       })
       .join("");

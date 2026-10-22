@@ -132,4 +132,19 @@ describe("EmailService", () => {
     );
     expect(message.html).not.toContain("token&amp;value");
   });
+
+  it("builds a password reset link on the frontend reset route", async () => {
+    const { service } = makeService({
+      FRONTEND_URL: "https://app.example.com/",
+    });
+    sendMail.mockResolvedValue({ messageId: "mail-reset" });
+
+    await service.sendPasswordResetEmail("alice@example.com", "reset&token");
+
+    const message = sendMail.mock.calls[0][0] as { html: string; text: string };
+    const resetUrl =
+      "https://app.example.com/reset-password?token=reset%26token";
+    expect(message.html).toContain(`href="${resetUrl}"`);
+    expect(message.text).toContain(resetUrl);
+  });
 });

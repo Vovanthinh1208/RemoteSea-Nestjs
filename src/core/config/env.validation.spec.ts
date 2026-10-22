@@ -43,6 +43,28 @@ describe("validateEnv", () => {
     ).toThrow();
   });
 
+  it("requires a public HTTPS frontend origin in production", () => {
+    expect(() =>
+      validateEnv({ ...validBaseEnv, NODE_ENV: "production" }),
+    ).toThrow("Production requires FRONTEND_URL");
+
+    expect(() =>
+      validateEnv({
+        ...validBaseEnv,
+        NODE_ENV: "production",
+        FRONTEND_URL: "https://remotesea-web.fly.dev/reset-password",
+      }),
+    ).toThrow("FRONTEND_URL must be an origin");
+
+    expect(
+      validateEnv({
+        ...validBaseEnv,
+        NODE_ENV: "production",
+        FRONTEND_URL: "https://remotesea-web.fly.dev",
+      }).FRONTEND_URL,
+    ).toBe("https://remotesea-web.fly.dev");
+  });
+
   it("leaves the pool knobs undefined when unset", () => {
     const config = validateEnv(validBaseEnv);
     expect(config.DATABASE_CONNECTION_LIMIT).toBeUndefined();

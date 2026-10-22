@@ -24,6 +24,9 @@ primary_region = 'sin' # Singapore — matches remotesea-web's fly.toml, keeps A
 
 [env]
   NODE_ENV = 'production'
+  # Canonical public frontend origin; also used for reset-password email links.
+  # Keep this aligned with remotesea-web's Fly app name/custom public domain.
+  FRONTEND_URL = 'https://remotesea-web.fly.dev'
   # Must match [http_service].internal_port below and the Dockerfile's
   # EXPOSE — env.validation.ts defaults PORT to 4000 if unset, so this is
   # belt-and-suspenders, not strictly required, but keeps the two files from

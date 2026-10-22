@@ -84,6 +84,8 @@ Alternatively, this repo has its own `docker-compose.yml` (Postgres + migrate + 
 
 See `.env.example` for the full list. Required: `DATABASE_URL`, `AUTH_SECRET`. Everything else (Google/GitHub OAuth, Stripe, SMTP, S3) is optional and the corresponding features degrade gracefully — routes for unconfigured OAuth providers simply aren't registered, and email sends are skipped until SMTP is configured. Configure `MAIL_HOST`, `MAIL_PORT`, `MAIL_SECURE`, optional `MAIL_USER`/`MAIL_PASSWORD`, and `MAIL_FROM` to enable outbound SMTP mail. Port 587 requires STARTTLS; port 465 uses implicit TLS by default. No TLS certificate checks are disabled.
 
+`FRONTEND_URL` must be the public frontend origin only (no path, query, or fragment). Local development defaults to `http://localhost:3000`; production requires a public HTTPS origin. `fly.toml` sets the current Fly app origin (`https://remotesea-web.fly.dev`), which is also used for password-reset emails and OAuth/billing redirects. Keep it aligned with the frontend's public domain; after changing it, deploy the API with `fly deploy` from this repository. The reset email opens `/reset-password?token=[redacted]` directly; verify after deployment with a newly requested test-account reset email and confirm the link loads the reset form before submitting it.
+
 ## Scripts
 
 | Command               | Description                          |

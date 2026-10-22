@@ -14,6 +14,19 @@ const optionalMailSecure = z.preprocess(
     .optional(),
 );
 
+const frontendOriginSchema = z
+  .string()
+  .url()
+  .refine((value) => {
+    const url = new URL(value);
+    return (
+      ["http:", "https:"].includes(url.protocol) &&
+      url.pathname === "/" &&
+      !url.search &&
+      !url.hash
+    );
+  }, "FRONTEND_URL must be an origin without a path, query, or fragment");
+
 const envBaseSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -42,7 +55,7 @@ const envBaseSchema = z.object({
   // fallback; production can use a separately managed key for independent
   // rotation and access control.
   TWO_FACTOR_ENCRYPTION_KEY: z.string().min(32).optional(),
-  FRONTEND_URL: z.string().url().default("http://localhost:3000"),
+  FRONTEND_URL: frontendOriginSchema.default("http://localhost:3000"),
   // Extra origins CORS should also accept, beyond FRONTEND_URL — comma-
   // separated (e.g. "https://remotesea-web.fly.dev,https://preview.example.com").
   // Deliberately separate from FRONTEND_URL, not a list-ified version of it:
@@ -135,6 +148,25 @@ const envBaseSchema = z.object({
 });
 
 const envSchema = envBaseSchema.superRefine((config, context) => {
+  if (config.NODE_ENV === "production") {
+    const frontendUrl = new URL(config.FRONTEND_URL);
+    const isLoopback =
+      frontendUrl.hostname === "localhost" ||
+      frontendUrl.hostname.endsWith(".localhost") ||
+      frontendUrl.hostname === "127.0.0.1" ||
+      frontendUrl.hostname === "0.0.0.0" ||
+      frontendUrl.hostname === "[::1]";
+
+    if (frontendUrl.protocol !== "https:" || isLoopback) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["FRONTEND_URL"],
+        message:
+          "Production requires FRONTEND_URL to be set to a public HTTPS frontend origin",
+      });
+    }
+  }
+
   if (Boolean(config.MAIL_USER) !== Boolean(config.MAIL_PASSWORD)) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
