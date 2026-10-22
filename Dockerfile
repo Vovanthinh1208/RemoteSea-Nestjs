@@ -60,6 +60,11 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 # since prod-deps skips `prisma generate` (the CLI is a devDependency).
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/node_modules/@prisma/client ./node_modules/@prisma/client
+# Prisma CLI + schema engine, for fly.toml's release_command
+# (`prisma migrate deploy`) — without these, pending migrations never reach
+# production and queries fail on missing columns.
+COPY --from=build /app/node_modules/prisma ./node_modules/prisma
+COPY --from=build /app/node_modules/@prisma/engines ./node_modules/@prisma/engines
 COPY --from=build /app/dist ./dist
 COPY prisma ./prisma
 COPY package.json ./

@@ -16,6 +16,12 @@ primary_region = 'sin' # Singapore — matches remotesea-web's fly.toml, keeps A
   # image. DATABASE_URL etc. are only read at container start (process.env),
   # via `fly secrets set`, not at `docker build` time.
 
+[deploy]
+  # Applies pending Prisma migrations on a temporary machine before the new
+  # version rolls out; a failed migration aborts the deploy and leaves the
+  # current version running.
+  release_command = 'node node_modules/prisma/build/index.js migrate deploy'
+
 [env]
   NODE_ENV = 'production'
   # Must match [http_service].internal_port below and the Dockerfile's
