@@ -24,6 +24,10 @@ const envSchema = z.object({
   // that queues every other request behind it just to acquire a connection.
   DATABASE_STATEMENT_TIMEOUT: z.coerce.number().int().min(1).optional(),
   AUTH_SECRET: z.string().min(32, "AUTH_SECRET must be at least 32 characters"),
+  // Stable at-rest key for PB10. Unset uses AUTH_SECRET as a compatibility
+  // fallback; production can use a separately managed key for independent
+  // rotation and access control.
+  TWO_FACTOR_ENCRYPTION_KEY: z.string().min(32).optional(),
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
   // Extra origins CORS should also accept, beyond FRONTEND_URL — comma-
   // separated (e.g. "https://remotesea-web.fly.dev,https://preview.example.com").

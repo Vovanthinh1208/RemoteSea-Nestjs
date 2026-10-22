@@ -292,6 +292,12 @@ const expectations: ControllerExpectation[] = [
       },
       { method: "session", httpMethod: "GET", path: "session", guards: [] },
       {
+        method: "me",
+        httpMethod: "GET",
+        path: "me",
+        guards: ["JwtAuthGuard"],
+      },
+      {
         method: "linkProvider",
         httpMethod: "GET",
         path: ":provider/link",

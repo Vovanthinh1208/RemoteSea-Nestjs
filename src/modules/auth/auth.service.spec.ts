@@ -33,6 +33,7 @@ const makeService = (overrides?: {
     findSessionState: jest
       .fn()
       .mockResolvedValue({ id: "s1", revokedAt: null }),
+    findSessionProfile: jest.fn(),
     findOrCreateOAuthUser: jest.fn(),
     createVerificationToken: jest.fn(),
     findVerificationToken: jest.fn(),
@@ -42,6 +43,7 @@ const makeService = (overrides?: {
   const emailService = {
     sendWelcomeEmail: jest.fn().mockResolvedValue(undefined),
     sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
+    sendTwoFactorDisabledEmail: jest.fn().mockResolvedValue(undefined),
     ...overrides?.emailService,
   };
   const jwtService = overrides?.jwtService ?? {
@@ -168,6 +170,31 @@ describe("AuthService.register", () => {
       accessToken: "signed.jwt.token",
     });
     expect(emailService.sendWelcomeEmail).toHaveBeenCalledWith("a@b.com", "A");
+  });
+});
+
+describe("AuthService.getSessionProfile", () => {
+  it("returns the PB08 profile fields without database secrets", async () => {
+    const { service } = makeService({
+      authRepository: {
+        findSessionProfile: jest.fn().mockResolvedValue({
+          id: "u1",
+          email: "user@example.test",
+          name: "Test User",
+          role: "TALENT",
+          image: "https://cdn.example.test/avatar.png",
+        }),
+      },
+    });
+
+    await expect(service.getSessionProfile("u1")).resolves.toEqual({
+      id: "u1",
+      email: "user@example.test",
+      name: "Test User",
+      role: "TALENT",
+      permissions: ["TALENT"],
+      avatar: "https://cdn.example.test/avatar.png",
+    });
   });
 });
 
@@ -688,22 +715,29 @@ describe("AuthService.disableTwoFactor", () => {
   // session running indefinitely.
   it("revokes every session for the user once 2FA is disabled", async () => {
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-    const { service, authRepository, metricsService } = makeService({
-      authRepository: {
-        findUserById: jest.fn().mockResolvedValue({
-          id: "u1",
-          passwordHash: "hash",
-          twoFactorEnabled: true,
-        }),
-        disableTwoFactor: jest.fn().mockResolvedValue(undefined),
-        revokeAllSessions: jest.fn().mockResolvedValue(3),
-      },
-    });
+    const { service, authRepository, emailService, metricsService } =
+      makeService({
+        authRepository: {
+          findUserById: jest.fn().mockResolvedValue({
+            id: "u1",
+            email: "user@example.test",
+            name: "Test User",
+            passwordHash: "hash",
+            twoFactorEnabled: true,
+          }),
+          disableTwoFactor: jest.fn().mockResolvedValue(undefined),
+          revokeAllSessions: jest.fn().mockResolvedValue(3),
+        },
+      });
 
     await service.disableTwoFactor("u1", "correct-password");
 
     expect(authRepository.disableTwoFactor).toHaveBeenCalledWith("u1");
     expect(authRepository.revokeAllSessions).toHaveBeenCalledWith("u1");
+    expect(emailService.sendTwoFactorDisabledEmail).toHaveBeenCalledWith(
+      "user@example.test",
+      "Test User",
+    );
     expect(metricsService.recordAuthFailure).not.toHaveBeenCalled();
   });
 });

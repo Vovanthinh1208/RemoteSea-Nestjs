@@ -107,7 +107,12 @@ export class JobsRepository {
   // not-currently-live status already behaves on this route.
   async findActiveById(id: string) {
     const job = await this.prisma.job.findFirst({
-      where: { id, status: "ACTIVE", ...notExpiredCondition() },
+      where: {
+        id,
+        status: "ACTIVE",
+        employer: { user: { isPaused: false } },
+        ...notExpiredCondition(),
+      },
       include: jobDetailInclude,
     });
     return job && omitInternalJobFields(job);

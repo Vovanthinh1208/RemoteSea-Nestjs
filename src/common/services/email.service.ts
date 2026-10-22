@@ -102,6 +102,14 @@ export class EmailService {
     );
   }
 
+  async sendTwoFactorDisabledEmail(to: string, name: string): Promise<void> {
+    await this.send(
+      to,
+      "Two-factor authentication disabled",
+      `<p>Hi ${escapeHtml(name)},</p><p>Two-factor authentication was disabled for your RemoteSEA account. If you did not make this change, reset your password and contact support.</p>`,
+    );
+  }
+
   async sendEmployerVerificationEmail(
     to: string,
     companyName: string,

@@ -225,6 +225,26 @@ export class AuthService {
     }
   }
 
+  async getSessionProfile(userId: string) {
+    const user = await this.authRepository.findSessionProfile(userId);
+    if (!user) {
+      throw new UnauthorizedApiException(
+        "Session expired — please sign in again",
+        ErrorCode.INVALID_CREDENTIALS,
+      );
+    }
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      // The application authorizes with role guards; expose the current role
+      // as the only permission scope instead of inventing per-action grants.
+      permissions: [user.role],
+      avatar: user.image,
+    };
+  }
+
   async validateOAuthLogin(profile: OAuthProfile): Promise<AuthenticatedUser> {
     const user = await this.authRepository.findOrCreateOAuthUser(profile);
     return AuthMapper.toAuthenticatedUser(user);
@@ -456,6 +476,14 @@ export class AuthService {
       );
     }
     await this.authRepository.disableTwoFactor(userId);
+    runInBackground(
+      this.emailService.sendTwoFactorDisabledEmail(
+        user.email,
+        user.name ?? "there",
+      ),
+      this.logger,
+      "Failed to send 2FA-disabled security email",
+    );
     // Turning off 2FA is a real security-posture downgrade — same reasoning
     // as AdminService.updateUser revoking every session on a ban/role
     // change: if this request came from someone who has the password but

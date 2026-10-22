@@ -3,6 +3,5 @@ export const RATE_LIMITS = {
   SUBMIT_VERIFICATION: { limit: 5, windowMs: 60_000 },
 } as const;
 
-// Shorter than employer's 24h window — a personal inbox is checked more
-// reflexively than a shared company one.
-export const VERIFICATION_TOKEN_TTL_MS = 60 * 60 * 1000;
+// PB22 requires email-verification links to remain valid for 24 hours.
+export const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;

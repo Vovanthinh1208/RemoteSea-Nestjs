@@ -129,6 +129,7 @@ model User {
   passwordHash         String?
   name                 String?
   image                String?
+  emailVerified        Boolean   @default(false)
   role                 UserRole  @default(TALENT)
   // Settings > Account: decorative in the reference design, but these are
   // real, persisted per-user display preferences (not enforced anywhere yet
@@ -146,10 +147,8 @@ model User {
   isPaused             Boolean   @default(false)
   pausedAt             DateTime?
   // Settings > Security "Two-factor authentication". twoFactorSecret is the
-  // base32 TOTP secret (set on /auth/2fa/setup, before twoFactorEnabled
-  // flips true on /auth/2fa/verify) — stored in plaintext like the rest of
-  // this table; there's no column-level encryption anywhere in this schema,
-  // so this is the same trust boundary as, say, resumeUrl. Backup codes are
+  // AES-GCM encrypted base32 TOTP secret (set on /auth/2fa/setup, before
+  // twoFactorEnabled flips true on /auth/2fa/verify). Backup codes are
   // bcrypt-hashed and single-use (removed from the array once consumed).
   twoFactorEnabled     Boolean   @default(false)
   twoFactorSecret      String?

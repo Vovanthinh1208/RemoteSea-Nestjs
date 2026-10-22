@@ -118,6 +118,12 @@ export class TalentRepository {
     talentId: string,
   ): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
+      const profile = await tx.talentProfile.findUnique({
+        where: { id: talentId },
+        select: { userId: true },
+      });
+      if (!profile) return false;
+
       const { count } = await tx.talentEmailVerification.updateMany({
         where: { id: verificationId, consumedAt: null },
         data: { consumedAt: new Date() },
@@ -131,6 +137,10 @@ export class TalentRepository {
           verifiedAt: new Date(),
           verificationStatus: "VERIFIED",
         },
+      });
+      await tx.user.update({
+        where: { id: profile.userId },
+        data: { emailVerified: true },
       });
       return true;
     });

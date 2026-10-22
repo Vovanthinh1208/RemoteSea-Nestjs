@@ -1,8 +1,19 @@
 import { Injectable } from "@nestjs/common";
 import type { Account, Session, User, UserRole } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
+import {
+  decryptTwoFactorSecret,
+  encryptTwoFactorSecret,
+  isEncryptedTwoFactorSecret,
+} from "./two-factor-secret.crypto";
 
 export type SessionMeta = { userAgent?: string; ip?: string };
+export type AuthSessionProfile = Pick<
+  User,
+  "id" | "email" | "role" | "image"
+> & {
+  name: string;
+};
 
 @Injectable()
 export class AuthRepository {
@@ -22,17 +33,33 @@ export class AuthRepository {
     });
   }
 
-  findUserById(id: string): Promise<User | null> {
-    return this.prisma.user.findUnique({ where: { id } });
+  findSessionProfile(userId: string): Promise<AuthSessionProfile | null> {
+    return this.prisma.user
+      .findUnique({
+        where: { id: userId },
+        select: { id: true, email: true, name: true, role: true, image: true },
+      })
+      .then((user) => user && { ...user, name: user.name ?? "" });
   }
 
-  findTwoFactorState(
+  findUserById(id: string): Promise<User | null> {
+    return this.prisma.user.findUnique({ where: { id } }).then(async (user) => {
+      if (!user?.twoFactorSecret) return user;
+      const secret = await this.readAndMigrateTwoFactorSecret(
+        id,
+        user.twoFactorSecret,
+      );
+      return { ...user, twoFactorSecret: secret };
+    });
+  }
+
+  async findTwoFactorState(
     userId: string,
   ): Promise<Pick<
     User,
     "twoFactorEnabled" | "twoFactorSecret" | "twoFactorBackupCodes"
   > | null> {
-    return this.prisma.user.findUnique({
+    const state = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         twoFactorEnabled: true,
@@ -40,6 +67,33 @@ export class AuthRepository {
         twoFactorBackupCodes: true,
       },
     });
+    if (!state?.twoFactorSecret) return state;
+    return {
+      ...state,
+      twoFactorSecret: await this.readAndMigrateTwoFactorSecret(
+        userId,
+        state.twoFactorSecret,
+      ),
+    };
+  }
+
+  private async readAndMigrateTwoFactorSecret(
+    userId: string,
+    stored: string,
+  ): Promise<string> {
+    if (isEncryptedTwoFactorSecret(stored)) {
+      return decryptTwoFactorSecret(stored);
+    }
+
+    // Existing installations may have plaintext values from before PB10
+    // encryption was added. Re-encrypt with a compare-and-swap so a concurrent
+    // setup cannot have its newer secret overwritten by this compatibility read.
+    const encrypted = encryptTwoFactorSecret(stored);
+    await this.prisma.user.updateMany({
+      where: { id: userId, twoFactorSecret: stored },
+      data: { twoFactorSecret: encrypted },
+    });
+    return stored;
   }
 
   // Written on /auth/2fa/setup, before twoFactorEnabled is ever set — a
@@ -47,7 +101,7 @@ export class AuthRepository {
   async setTwoFactorSecret(userId: string, secret: string): Promise<void> {
     await this.prisma.user.update({
       where: { id: userId },
-      data: { twoFactorSecret: secret },
+      data: { twoFactorSecret: encryptTwoFactorSecret(secret) },
     });
   }
 

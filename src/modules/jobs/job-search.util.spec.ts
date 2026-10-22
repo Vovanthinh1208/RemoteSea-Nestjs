@@ -64,6 +64,7 @@ describe("notExpiredCondition / activeJobBaseWhere", () => {
     const where = activeJobBaseWhere();
     expect(where).toMatchObject({
       status: "ACTIVE",
+      employer: { user: { isPaused: false } },
       OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }],
     });
   });

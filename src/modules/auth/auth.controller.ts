@@ -66,6 +66,7 @@ import {
   ApiLinkedinCallback,
   ApiLinkedinLogin,
   ApiLogin,
+  ApiMe,
   ApiOAuthExchange,
   ApiRegister,
   ApiResetPassword,
@@ -237,6 +238,13 @@ export class AuthController {
     return {
       user: await this.authService.verifySession(req.headers.authorization),
     };
+  }
+
+  @ApiMe()
+  @Get("me")
+  @UseGuards(JwtAuthGuard)
+  async me(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.getSessionProfile(user.id);
   }
 
   // Settings > Connected accounts "Connect". Unlike the plain sign-in routes

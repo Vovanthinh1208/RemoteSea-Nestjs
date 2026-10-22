@@ -284,6 +284,30 @@ export const ApiSession = () =>
     }),
   );
 
+export const ApiMe = () =>
+  applyDecorators(
+    ApiBearerAuth(),
+    ApiOperation({
+      summary: "Read the authenticated user's session profile",
+      description:
+        "Requires a valid, unrevoked access token. Invalid or expired tokens receive HTTP 401. Returns only public account fields used by the client.",
+    }),
+    ApiOkResponse({
+      description: "Current user's public session profile",
+      schema: {
+        example: {
+          id: "user-id",
+          email: "talent@example.test",
+          name: "Alex Nguyen",
+          role: "TALENT",
+          permissions: ["TALENT"],
+          avatar: null,
+        },
+      },
+    }),
+    UnauthorizedApiResponse,
+  );
+
 export const ApiGoogleLogin = () =>
   applyDecorators(
     ApiOperation({
