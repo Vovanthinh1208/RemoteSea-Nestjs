@@ -73,7 +73,7 @@ export const ApiRegister = () =>
     ApiOperation({
       summary: "Register a new user",
       description:
-        "Creates a TALENT or EMPLOYER account with a bcrypt-hashed password, auto-provisions a TalentProfile (with a generated slug) for TALENT signups, sends a welcome email (no-op without RESEND_API_KEY), and immediately issues a real access token — the account is signed in on creation, no follow-up POST /auth/login required.",
+        "Creates a TALENT or EMPLOYER account with a bcrypt-hashed password, auto-provisions a TalentProfile (with a generated slug) for TALENT signups, schedules a welcome email when SMTP is configured, and immediately issues a real access token — the account is signed in on creation, no follow-up POST /auth/login required.",
     }),
     ApiBody({
       type: RegisterRequestDto,

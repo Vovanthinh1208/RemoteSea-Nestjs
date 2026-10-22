@@ -594,7 +594,7 @@ export class AuthService {
       hashResetToken(token),
       new Date(Date.now() + RESET_TOKEN_TTL_MS),
     );
-    // Background send: the response no longer waits out the Resend round-trip.
+    // Background send: the response no longer waits out the SMTP round-trip.
     // Note this only removes the email leg of the known-vs-unknown-email timing
     // difference — the token write above still runs only for known emails, so
     // response timing remains an account-enumeration signal. Closing that fully

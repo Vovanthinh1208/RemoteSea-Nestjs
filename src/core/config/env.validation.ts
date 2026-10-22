@@ -1,6 +1,20 @@
 import { z } from "zod";
 
-const envSchema = z.object({
+const optionalNonEmptyString = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().trim().min(1).optional(),
+);
+
+const optionalMailSecure = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
+);
+
+const envBaseSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
@@ -68,8 +82,15 @@ const envSchema = z.object({
   AUTH_LINKEDIN_CALLBACK_URL: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
-  RESEND_API_KEY: z.string().optional(),
-  EMAIL_FROM: z.string().optional(),
+  MAIL_HOST: optionalNonEmptyString,
+  MAIL_PORT: z.preprocess(
+    (value) => (value === "" || value === undefined ? "587" : value),
+    z.coerce.number().int().min(1).max(65535).default(587),
+  ),
+  MAIL_SECURE: optionalMailSecure,
+  MAIL_USER: optionalNonEmptyString,
+  MAIL_PASSWORD: optionalNonEmptyString,
+  MAIL_FROM: optionalNonEmptyString,
   CRON_SECRET: z.string().optional(),
   // Unset means no error tracking, not a boot failure — same convention as
   // every other optional integration here. See main.ts's Sentry.init call.
@@ -111,6 +132,36 @@ const envSchema = z.object({
   // AiOrchestratorService.mintContextToken).
   AI_SERVICE_URL: z.string().url().default("http://localhost:8000"),
   AI_SERVICE_SECRET: z.string().optional(),
+});
+
+const envSchema = envBaseSchema.superRefine((config, context) => {
+  if (Boolean(config.MAIL_USER) !== Boolean(config.MAIL_PASSWORD)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [config.MAIL_USER ? "MAIL_PASSWORD" : "MAIL_USER"],
+      message: "MAIL_USER and MAIL_PASSWORD must be configured together",
+    });
+  }
+
+  if (!config.MAIL_HOST && (config.MAIL_USER || config.MAIL_PASSWORD)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["MAIL_HOST"],
+      message: "MAIL_HOST is required when SMTP credentials are configured",
+    });
+  }
+
+  if (
+    config.MAIL_HOST &&
+    config.MAIL_PORT === 587 &&
+    config.MAIL_SECURE === true
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["MAIL_SECURE"],
+      message: "Port 587 must use STARTTLS (MAIL_SECURE=false)",
+    });
+  }
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

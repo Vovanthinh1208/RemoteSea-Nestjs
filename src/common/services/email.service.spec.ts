@@ -1,54 +1,135 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import { EmailService } from "./email.service";
 
-jest.mock("resend");
+jest.mock("nodemailer", () => ({
+  __esModule: true,
+  default: { createTransport: jest.fn() },
+}));
 
-// Circuit-breaker state/timing logic itself is covered directly in
-// circuit-breaker.spec.ts — this only checks that EmailService actually wires
-// it up: real sends still go through Resend, and a run of failures eventually
-// makes send() skip the network call entirely instead of trying (and timing
-// out) forever.
 describe("EmailService", () => {
-  const makeService = () => {
-    const sendMock = jest.fn();
-    (Resend as jest.Mock).mockImplementation(() => ({
-      emails: { send: sendMock },
-    }));
+  const sendMail = jest.fn();
+  const verify = jest.fn();
+  const transport = { sendMail, verify };
 
-    const config = {
-      get: jest.fn((key: string) => {
-        if (key === "RESEND_API_KEY") return "re_test_key";
-        if (key === "FRONTEND_URL") return "https://app.example.com";
-        return undefined;
-      }),
+  const makeService = (overrides: Record<string, unknown> = {}) => {
+    jest.clearAllMocks();
+    (nodemailer.createTransport as jest.Mock).mockReturnValue(transport);
+    const values: Record<string, unknown> = {
+      MAIL_HOST: "smtp.example.com",
+      MAIL_PORT: 587,
+      MAIL_SECURE: false,
+      MAIL_USER: "smtp-user",
+      MAIL_PASSWORD: "smtp-secret",
+      MAIL_FROM: "RemoteSEA <noreply@example.com>",
+      FRONTEND_URL: "https://app.example.com",
+      ...overrides,
     };
-
-    const service = new EmailService(config as never);
-    return { service, sendMock };
+    const config = {
+      get: jest.fn((key: string) => values[key]),
+    };
+    return { service: new EmailService(config as never), config };
   };
 
-  it("sends through Resend on a healthy circuit", async () => {
-    const { service, sendMock } = makeService();
-    sendMock.mockResolvedValue({ id: "email_1" });
+  it("creates authenticated STARTTLS transport on port 587", async () => {
+    const { service } = makeService();
+    sendMail.mockResolvedValue({ messageId: "mail-1" });
 
-    await service.sendWelcomeEmail("a@b.com", "Alice");
+    await service.sendWelcomeEmail("alice@example.com", "Alice");
 
-    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(nodemailer.createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        host: "smtp.example.com",
+        port: 587,
+        secure: false,
+        requireTLS: true,
+        auth: { user: "smtp-user", pass: "smtp-secret" },
+        tls: { minVersion: "TLSv1.2" },
+      }),
+    );
+    expect(sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: "RemoteSEA <noreply@example.com>",
+        to: "alice@example.com",
+        subject: "Welcome to RemoteSEA",
+        text: expect.stringContaining("Hi Alice"),
+        html: expect.stringContaining("Hi Alice"),
+      }),
+    );
   });
 
-  it("stops calling Resend after enough consecutive failures", async () => {
-    const { service, sendMock } = makeService();
-    sendMock.mockRejectedValue(new Error("Resend is down"));
+  it("uses implicit TLS on port 465 when MAIL_SECURE is unset", async () => {
+    makeService({ MAIL_PORT: 465, MAIL_SECURE: undefined });
+    expect(nodemailer.createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({ port: 465, secure: true }),
+    );
+  });
 
-    // Enough consecutive failures to trip the breaker — each swallowed the
-    // same way a real caller (runInBackground) would.
-    for (let i = 0; i < 5; i += 1) {
-      await service.sendWelcomeEmail("a@b.com", "Alice").catch(() => {});
+  it("verifies SMTP connectivity without sending a message", async () => {
+    const { service } = makeService();
+    verify.mockResolvedValue(true);
+
+    await expect(service.verifyConnection()).resolves.toBeUndefined();
+    expect(verify).toHaveBeenCalledTimes(1);
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it("does not attempt mail delivery when SMTP is not configured", async () => {
+    const { service } = makeService({
+      MAIL_HOST: undefined,
+      MAIL_USER: undefined,
+      MAIL_PASSWORD: undefined,
+    });
+
+    await expect(
+      service.sendWelcomeEmail("alice@example.com", "Alice"),
+    ).resolves.toBeUndefined();
+    await expect(service.verifyConnection()).rejects.toThrow(
+      "SMTP is not configured",
+    );
+    expect(nodemailer.createTransport).not.toHaveBeenCalled();
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid recipient addresses before calling SMTP", async () => {
+    const { service } = makeService();
+
+    await expect(
+      service.sendWelcomeEmail("bad\r\nBcc:x@example.com", "A"),
+    ).rejects.toThrow("Invalid email recipient");
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it("surfaces SMTP failures and opens the circuit after repeated failures", async () => {
+    const { service } = makeService();
+    sendMail.mockRejectedValue(new Error("SMTP unavailable"));
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await expect(
+        service.sendWelcomeEmail("alice@example.com", "Alice"),
+      ).rejects.toThrow("SMTP unavailable");
     }
-    expect(sendMock).toHaveBeenCalledTimes(5);
+    expect(sendMail).toHaveBeenCalledTimes(5);
 
-    // The circuit is now open: this call must not reach Resend at all.
-    await service.sendWelcomeEmail("a@b.com", "Alice").catch(() => {});
-    expect(sendMock).toHaveBeenCalledTimes(5);
+    await service.sendWelcomeEmail("alice@example.com", "Alice");
+    expect(sendMail).toHaveBeenCalledTimes(5);
+  });
+
+  it("escapes dynamic template fields and encodes tokens in links", async () => {
+    const { service } = makeService();
+    sendMail.mockResolvedValue({ messageId: "mail-2" });
+
+    await service.sendTalentVerificationEmail(
+      "alice@example.com",
+      "token&value",
+    );
+
+    const message = sendMail.mock.calls[0][0] as { html: string; text: string };
+    expect(message.html).toContain("token%26value");
+    expect(message.html).toContain("RemoteSEA");
+    expect(message.text).toContain("Verify email");
+    expect(message.text).toContain(
+      "https://app.example.com/talent/verify?token=token%26value",
+    );
+    expect(message.html).not.toContain("token&amp;value");
   });
 });

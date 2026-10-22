@@ -1,87 +1,134 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Resend } from "resend";
+import nodemailer, { type Transporter } from "nodemailer";
 import type { EnvConfig } from "@/core/config/env.validation";
 import type { JobWithRelations } from "@/common/types/job-with-relations.type";
 import { escapeHtml } from "@/common/utils/escape-html";
 import { CircuitBreaker } from "@/common/utils/circuit-breaker";
 
-/**
- * Ported from src/lib/email.ts. The original Next.js app renders React Email
- * (.tsx) templates via @react-email/render — those template components live
- * in the Next.js app under src/emails/ and were out of scope for the API
- * route migration. This service preserves every call site, payload, and
- * "no-op when RESEND_API_KEY is unset" behavior, but emails plain HTML
- * instead of the original branded templates. Port src/emails/*.tsx into this
- * service (or a shared package) to restore pixel-identical emails.
- */
-const SEND_TIMEOUT_MS = 10_000;
-// Opens after 5 consecutive failures (a real Resend outage, not one flaky
-// send) and stays open for 30s before letting a single trial through. Without
-// this, a degraded Resend turns every queued send — most visibly the alerts
-// cron's chunks of up to SEND_CONCURRENCY sends — into a full SEND_TIMEOUT_MS
-// wait each, instead of failing the rest of the batch fast once the outage is
-// detected.
+const SMTP_TIMEOUT_MS = 10_000;
 const BREAKER_FAILURE_THRESHOLD = 5;
 const BREAKER_COOLDOWN_MS = 30_000;
+const DEFAULT_FROM = "RemoteSEA <noreply@remotesea.io>";
 
+const toPlainText = (html: string): string =>
+  html
+    .replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, "$2 ($1)")
+    .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+    .replace(/<\s*\/(p|li|div|h[1-6])\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+const safeHeader = (value: string): string =>
+  value.replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, " ").trim();
+
+const wrapHtml = (title: string, content: string): string =>
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title></head><body style="margin:0;background:#f4f6f8;color:#17212b;font-family:Arial,sans-serif"><div style="max-width:600px;margin:32px auto;padding:32px;background:#fff;border-radius:12px"><p style="margin:0 0 24px;color:#087f8c;font-size:20px;font-weight:bold">RemoteSEA</p>${content}<p style="margin-top:32px;color:#65717d;font-size:13px">RemoteSEA — remote work, worldwide.</p></div></body></html>`;
+
+/**
+ * Shared SMTP transport for all email call sites. SMTP is optional in local
+ * and automated test environments; once MAIL_HOST is configured, sends use
+ * Nodemailer and provider failures are surfaced to the business caller.
+ */
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private readonly resend: Resend;
+  private readonly transporter: Transporter | null;
   private readonly from: string;
   private readonly appUrl: string;
-  private readonly enabled: boolean;
   private readonly breaker = new CircuitBreaker(
     BREAKER_FAILURE_THRESHOLD,
     BREAKER_COOLDOWN_MS,
   );
 
   constructor(private readonly config: ConfigService<EnvConfig, true>) {
-    const apiKey = this.config.get("RESEND_API_KEY", { infer: true });
-    this.enabled = Boolean(apiKey);
-    // Resend's constructor throws synchronously on an empty key. Original
-    // lib/email.ts only checked the key inside send(), never at module load,
-    // so an unconfigured key must not prevent the app from booting.
-    this.resend = new Resend(apiKey || "re_unconfigured");
-    this.from =
-      this.config.get("EMAIL_FROM", { infer: true }) ??
-      "RemoteSEA <noreply@remotesea.io>";
+    this.from = this.config.get("MAIL_FROM", { infer: true }) ?? DEFAULT_FROM;
     this.appUrl = this.config.get("FRONTEND_URL", { infer: true });
-  }
 
-  private async send(to: string, subject: string, html: string): Promise<void> {
-    if (!this.enabled) return;
-
-    if (this.breaker.isOpen()) {
-      // Skip and log here rather than throw: callers already treat a thrown
-      // send() failure as "log and drop" via runInBackground, so throwing
-      // here would just reproduce that same outcome through a longer path.
-      this.logger.warn(
-        `Skipping email to ${to}: Resend appears to be down (circuit open)`,
-      );
+    const host = this.config.get("MAIL_HOST", { infer: true });
+    if (!host) {
+      this.transporter = null;
       return;
     }
 
-    // The Resend SDK has no built-in request timeout, so a slow/hung upstream
-    // call would otherwise block the caller (e.g. the alerts cron loop) indefinitely.
-    let timer: ReturnType<typeof setTimeout>;
+    const port = this.config.get("MAIL_PORT", { infer: true });
+    const configuredSecure = this.config.get("MAIL_SECURE", { infer: true });
+    const secure = configuredSecure ?? port === 465;
+    const user = this.config.get("MAIL_USER", { infer: true });
+    const password = this.config.get("MAIL_PASSWORD", { infer: true });
+
+    this.transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      // Port 587 is SMTP submission: require STARTTLS instead of silently
+      // falling back to a clear-text connection when the server misbehaves.
+      ...(port === 587 && !secure ? { requireTLS: true } : {}),
+      ...(user && password ? { auth: { user, pass: password } } : {}),
+      connectionTimeout: SMTP_TIMEOUT_MS,
+      greetingTimeout: SMTP_TIMEOUT_MS,
+      socketTimeout: SMTP_TIMEOUT_MS,
+      tls: { minVersion: "TLSv1.2" },
+    });
+  }
+
+  /** Test connectivity and credentials without sending a message. */
+  async verifyConnection(): Promise<void> {
+    if (!this.transporter) {
+      throw new Error("SMTP is not configured (MAIL_HOST is missing)");
+    }
+    await this.transporter.verify();
+  }
+
+  private async send(
+    to: string,
+    subject: string,
+    content: string,
+  ): Promise<void> {
+    if (!this.transporter) return;
+
+    // Do not allow an invalid or header-injection recipient through to SMTP.
+    if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(to)) {
+      throw new Error("Invalid email recipient");
+    }
+
+    if (this.breaker.isOpen()) {
+      this.logger.warn("Skipping email because the SMTP circuit is open");
+      return;
+    }
+
+    const safeSubject = safeHeader(subject);
+    const html = wrapHtml(safeSubject, content);
     try {
-      await Promise.race([
-        this.resend.emails.send({ from: this.from, to, subject, html }),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () => reject(new Error("Email send timed out")),
-            SEND_TIMEOUT_MS,
-          );
-        }),
-      ]);
+      await this.transporter.sendMail({
+        from: this.from,
+        to,
+        subject: safeSubject,
+        html,
+        text: toPlainText(content),
+      });
       this.breaker.onSuccess();
     } catch (error) {
       this.breaker.onFailure();
+      // Do not include recipient, message body, token, or SMTP credentials.
+      const safeError =
+        error && typeof error === "object"
+          ? (error as { code?: unknown; command?: unknown }).code
+          : undefined;
+      const code =
+        typeof safeError === "string" && /^[A-Z0-9_-]{1,32}$/i.test(safeError)
+          ? safeError
+          : "unknown";
+      this.logger.error(`SMTP email delivery failed (code: ${code})`);
       throw error;
-    } finally {
-      clearTimeout(timer!);
     }
   }
 
@@ -89,16 +136,16 @@ export class EmailService {
     await this.send(
       to,
       "Welcome to RemoteSEA",
-      `<p>Hi ${escapeHtml(name)},</p><p>Welcome to RemoteSEA! Start exploring remote jobs at <a href="${this.appUrl}">${this.appUrl}</a>.</p>`,
+      `<p>Hi ${escapeHtml(name)},</p><p>Welcome to RemoteSEA! Start exploring remote jobs at <a href="${escapeHtml(this.appUrl)}">${escapeHtml(this.appUrl)}</a>.</p>`,
     );
   }
 
   async sendPasswordResetEmail(to: string, token: string): Promise<void> {
-    const resetUrl = `${this.appUrl}/reset-password?token=${token}`;
+    const resetUrl = `${this.appUrl}/reset-password?token=${encodeURIComponent(token)}`;
     await this.send(
       to,
       "Reset your RemoteSEA password",
-      `<p>Reset your password by clicking <a href="${resetUrl}">here</a>. This link expires in 1 hour.</p>`,
+      `<p>Use the link below to choose a new password. It expires in 15 minutes and can only be used once.</p><p><a href="${escapeHtml(resetUrl)}">Reset password</a></p>`,
     );
   }
 
@@ -115,11 +162,11 @@ export class EmailService {
     companyName: string,
     token: string,
   ): Promise<void> {
-    const verifyUrl = `${this.appUrl}/employer/verify?token=${token}`;
+    const verifyUrl = `${this.appUrl}/employer/verify?token=${encodeURIComponent(token)}`;
     await this.send(
       to,
       "Verify your company email",
-      `<p>Confirm ${escapeHtml(companyName)} controls this address by clicking <a href="${verifyUrl}">here</a>. This link expires in 24 hours.</p>`,
+      `<p>Confirm that ${escapeHtml(companyName)} controls this address by clicking the link below. This link expires in 24 hours.</p><p><a href="${escapeHtml(verifyUrl)}">Verify company email</a></p>`,
     );
   }
 
@@ -129,20 +176,20 @@ export class EmailService {
     role: string,
     token: string,
   ): Promise<void> {
-    const acceptUrl = `${this.appUrl}/team/invitations/${token}`;
+    const acceptUrl = `${this.appUrl}/team/invitations/${encodeURIComponent(token)}`;
     await this.send(
       to,
-      `You've been invited to join ${companyName} on RemoteSEA`,
-      `<p>You've been invited to join <strong>${escapeHtml(companyName)}</strong> as ${escapeHtml(role)}. Click <a href="${acceptUrl}">here</a> to accept. This link expires in 7 days.</p>`,
+      `You've been invited to join ${safeHeader(companyName)} on RemoteSEA`,
+      `<p>You've been invited to join <strong>${escapeHtml(companyName)}</strong> as ${escapeHtml(role)}. Click the link below to accept. This link expires in 7 days.</p><p><a href="${escapeHtml(acceptUrl)}">Accept invitation</a></p>`,
     );
   }
 
   async sendTalentVerificationEmail(to: string, token: string): Promise<void> {
-    const verifyUrl = `${this.appUrl}/talent/verify?token=${token}`;
+    const verifyUrl = `${this.appUrl}/talent/verify?token=${encodeURIComponent(token)}`;
     await this.send(
       to,
       "Verify your email",
-      `<p>Confirm you control this address by clicking <a href="${verifyUrl}">here</a>. This link expires in 1 hour.</p>`,
+      `<p>Confirm you control this address by clicking the link below. This link expires in 24 hours.</p><p><a href="${escapeHtml(verifyUrl)}">Verify email</a></p>`,
     );
   }
 
@@ -151,10 +198,11 @@ export class EmailService {
     jobTitle: string,
     jobSlug: string,
   ): Promise<void> {
+    const jobUrl = `${this.appUrl}/jobs/${encodeURIComponent(jobSlug)}`;
     await this.send(
       to,
       "Your job is live",
-      `<p>Your listing "${escapeHtml(jobTitle)}" is now live: <a href="${this.appUrl}/jobs/${jobSlug}">${this.appUrl}/jobs/${jobSlug}</a></p>`,
+      `<p>Your listing "${escapeHtml(jobTitle)}" is now live: <a href="${escapeHtml(jobUrl)}">${escapeHtml(jobUrl)}</a></p>`,
     );
   }
 
@@ -185,7 +233,7 @@ export class EmailService {
   ): Promise<void> {
     await this.send(
       to,
-      `New application: ${talentName}`,
+      `New application: ${safeHeader(talentName)}`,
       `<p>${escapeHtml(talentName)} applied to "${escapeHtml(jobTitle)}". Log in to review the application.</p>`,
     );
   }
@@ -198,7 +246,7 @@ export class EmailService {
   ): Promise<void> {
     await this.send(
       to,
-      `Your application for ${jobTitle} is now ${statusLabel}`,
+      `Your application for ${safeHeader(jobTitle)} is now ${safeHeader(statusLabel)}`,
       `<p>Hi ${escapeHtml(talentName)},</p><p>Your application for "${escapeHtml(jobTitle)}" is now <strong>${escapeHtml(statusLabel)}</strong>. Log in to see the full timeline.</p>`,
     );
   }
@@ -211,7 +259,7 @@ export class EmailService {
   ): Promise<void> {
     await this.send(
       to,
-      `${companyName} invited you to apply`,
+      `${safeHeader(companyName)} invited you to apply`,
       `<p>Hi ${escapeHtml(talentName)},</p><p>${escapeHtml(companyName)} invited you to apply for "${escapeHtml(jobTitle)}". Log in to view the invitation.</p>`,
     );
   }
@@ -235,10 +283,10 @@ export class EmailService {
 
   async sendJobAlertEmail(to: string, jobs: JobWithRelations[]): Promise<void> {
     const rows = jobs
-      .map(
-        (job) =>
-          `<li><a href="${this.appUrl}/jobs/${job.slug}">${escapeHtml(job.title)}</a></li>`,
-      )
+      .map((job) => {
+        const jobUrl = `${this.appUrl}/jobs/${encodeURIComponent(job.slug)}`;
+        return `<li><a href="${escapeHtml(jobUrl)}">${escapeHtml(job.title)}</a></li>`;
+      })
       .join("");
     await this.send(
       to,

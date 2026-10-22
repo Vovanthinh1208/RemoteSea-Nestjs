@@ -241,7 +241,7 @@ describe("ApplicationsService.dispatchBacklogReminders", () => {
     const markRemindersSent = jest.fn().mockResolvedValue(undefined);
     const sendBacklogReminderEmail = jest
       .fn()
-      .mockRejectedValueOnce(new Error("Resend down"))
+      .mockRejectedValueOnce(new Error("SMTP unavailable"))
       .mockResolvedValueOnce(undefined);
     const service = makeService(
       { findBacklogged, markRemindersSent },

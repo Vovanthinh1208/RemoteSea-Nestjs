@@ -64,4 +64,65 @@ describe("validateEnv", () => {
       validateEnv({ ...validBaseEnv, DATABASE_CONNECTION_LIMIT: "0" }),
     ).toThrow();
   });
+
+  it("coerces SMTP settings and allows an unconfigured local mail service", () => {
+    const config = validateEnv({
+      ...validBaseEnv,
+      MAIL_HOST: "smtp.example.com",
+      MAIL_PORT: "465",
+      MAIL_SECURE: "true",
+      MAIL_USER: "smtp-user",
+      MAIL_PASSWORD: "smtp-password",
+    });
+
+    expect(config.MAIL_HOST).toBe("smtp.example.com");
+    expect(config.MAIL_PORT).toBe(465);
+    expect(config.MAIL_SECURE).toBe(true);
+    expect(validateEnv(validBaseEnv).MAIL_HOST).toBeUndefined();
+  });
+
+  it("rejects partial SMTP credentials and credentials without a host", () => {
+    expect(() =>
+      validateEnv({
+        ...validBaseEnv,
+        MAIL_HOST: "smtp.example.com",
+        MAIL_USER: "smtp-user",
+      }),
+    ).toThrow("MAIL_USER and MAIL_PASSWORD must be configured together");
+
+    expect(() =>
+      validateEnv({
+        ...validBaseEnv,
+        MAIL_USER: "smtp-user",
+        MAIL_PASSWORD: "secret",
+      }),
+    ).toThrow("MAIL_HOST is required when SMTP credentials are configured");
+  });
+
+  it("treats blank SMTP values from .env as unset", () => {
+    const config = validateEnv({
+      ...validBaseEnv,
+      MAIL_HOST: "",
+      MAIL_PORT: "",
+      MAIL_SECURE: "",
+      MAIL_USER: "",
+      MAIL_PASSWORD: "",
+      MAIL_FROM: "RemoteSEA <noreply@example.com>",
+    });
+    expect(config.MAIL_HOST).toBeUndefined();
+    expect(config.MAIL_PORT).toBe(587);
+    expect(config.MAIL_SECURE).toBeUndefined();
+    expect(config.MAIL_FROM).toBe("RemoteSEA <noreply@example.com>");
+  });
+
+  it("rejects implicit TLS configuration on SMTP submission port 587", () => {
+    expect(() =>
+      validateEnv({
+        ...validBaseEnv,
+        MAIL_HOST: "smtp.example.com",
+        MAIL_PORT: "587",
+        MAIL_SECURE: "true",
+      }),
+    ).toThrow("Port 587 must use STARTTLS");
+  });
 });

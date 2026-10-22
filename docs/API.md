@@ -89,7 +89,7 @@ Base path: `/auth`. Controller: `auth.controller.ts`.
 
 ### POST /auth/register
 
-Creates a new user account (`TALENT` or `EMPLOYER`) with a bcrypt-hashed password; auto-provisions a `TalentProfile` (with a generated slug) for `TALENT` signups; sends a welcome email (no-op without `RESEND_API_KEY`); signs the new account in immediately (no separate `POST /auth/login` call needed).
+Creates a new user account (`TALENT` or `EMPLOYER`) with a bcrypt-hashed password; auto-provisions a `TalentProfile` (with a generated slug) for `TALENT` signups; schedules a welcome email when SMTP is configured; signs the new account in immediately (no separate `POST /auth/login` call needed).
 
 - **Auth**: None
 - **Rate limit**: 5 req / 60s, keyed per IP — `register:<ip>`

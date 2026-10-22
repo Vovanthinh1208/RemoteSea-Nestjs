@@ -1,3 +1,4 @@
+import * as crypto from "crypto";
 import { TalentService } from "./talent.service";
 import {
   BadRequestApiException,
@@ -199,10 +200,12 @@ describe("TalentService.submitVerification", () => {
 
     await service.submitVerification("user-1", { email: "jane@gmail.com" });
 
+    const emailedToken = (emailService.sendTalentVerificationEmail as jest.Mock)
+      .mock.calls[0][1] as string;
     expect(createEmailVerification).toHaveBeenCalledWith(
       "talent-1",
       "jane@gmail.com",
-      expect.any(String),
+      crypto.createHash("sha256").update(emailedToken).digest("hex"),
       expect.any(Date),
     );
     expect(emailService.sendTalentVerificationEmail).toHaveBeenCalledWith(
@@ -267,8 +270,43 @@ describe("TalentService.confirmVerification", () => {
     });
 
     await service.confirmVerification({ token: "good" });
+    expect(repo.findEmailVerificationByToken).toHaveBeenCalledWith(
+      crypto.createHash("sha256").update("good").digest("hex"),
+    );
     expect(repo.consumeEmailVerification).toHaveBeenCalledWith(
       "ver-1",
+      "talent-1",
+    );
+  });
+
+  it("accepts a legacy raw-token record during the token migration window", async () => {
+    const legacyRecord = {
+      id: "legacy-ver-1",
+      talentId: "talent-1",
+      consumedAt: null,
+      expiresAt: new Date(Date.now() + 10_000),
+    };
+    const findEmailVerificationByToken = jest
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(legacyRecord);
+    const { service, repo } = makeService({
+      findEmailVerificationByToken,
+      consumeEmailVerification: jest.fn().mockResolvedValue(true),
+    });
+
+    await service.confirmVerification({ token: "legacy-token" });
+
+    expect(findEmailVerificationByToken).toHaveBeenNthCalledWith(
+      1,
+      crypto.createHash("sha256").update("legacy-token").digest("hex"),
+    );
+    expect(findEmailVerificationByToken).toHaveBeenNthCalledWith(
+      2,
+      "legacy-token",
+    );
+    expect(repo.consumeEmailVerification).toHaveBeenCalledWith(
+      "legacy-ver-1",
       "talent-1",
     );
   });

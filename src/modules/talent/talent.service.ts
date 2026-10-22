@@ -44,6 +44,9 @@ import { AlertsService } from "@/modules/alerts/alerts.service";
 import { InvitationsService } from "@/modules/invitations/invitations.service";
 import { nullOnExpectedError } from "@/common/utils/null-on-expected-error.util";
 
+const hashVerificationToken = (token: string): string =>
+  crypto.createHash("sha256").update(token).digest("hex");
+
 // Matches the frontend's own DASHBOARD_APPLICATIONS_LIMIT (TalentDashboard.tsx)
 // — the dashboard's applications table/recommendations panel show a complete
 // picture for the vast majority of talents without needing pager UI there;
@@ -336,7 +339,7 @@ export class TalentService {
     await this.talentRepository.createEmailVerification(
       profile.id,
       dto.email,
-      token,
+      hashVerificationToken(token),
       new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
     );
 
@@ -348,9 +351,12 @@ export class TalentService {
   }
 
   async confirmVerification(dto: ConfirmVerificationDto): Promise<void> {
-    const record = await this.talentRepository.findEmailVerificationByToken(
-      dto.token,
-    );
+    const tokenHash = hashVerificationToken(dto.token);
+    // New records store only a digest. This raw-token lookup supports links
+    // issued before this change; those legacy records expire after 24 hours.
+    const record =
+      (await this.talentRepository.findEmailVerificationByToken(tokenHash)) ??
+      (await this.talentRepository.findEmailVerificationByToken(dto.token));
     if (!record || record.consumedAt) {
       throw new BadRequestApiException(
         "Invalid or expired token",

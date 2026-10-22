@@ -11,7 +11,7 @@ Production-ready NestJS backend for RemoteSEA, a remote job platform for Southea
 - **Zod** — request validation, ported verbatim from the original Next.js Zod schemas so error response shapes stay byte-identical
 - **Stripe** — job listing payments
 - **AWS S3** — presigned file uploads (avatars, logos, resumes)
-- **Resend** — transactional email
+- **Nodemailer / SMTP** — transactional email
 
 ## Architecture
 
@@ -82,7 +82,7 @@ Alternatively, this repo has its own `docker-compose.yml` (Postgres + migrate + 
 
 ## Environment variables
 
-See `.env.example` for the full list. Required: `DATABASE_URL`, `AUTH_SECRET`. Everything else (Google/GitHub OAuth, Stripe, Resend, S3) is optional and the corresponding features degrade gracefully — routes for unconfigured OAuth providers simply aren't registered, and Stripe/S3/email calls only fail at request time if hit without credentials.
+See `.env.example` for the full list. Required: `DATABASE_URL`, `AUTH_SECRET`. Everything else (Google/GitHub OAuth, Stripe, SMTP, S3) is optional and the corresponding features degrade gracefully — routes for unconfigured OAuth providers simply aren't registered, and email sends are skipped until SMTP is configured. Configure `MAIL_HOST`, `MAIL_PORT`, `MAIL_SECURE`, optional `MAIL_USER`/`MAIL_PASSWORD`, and `MAIL_FROM` to enable outbound SMTP mail. Port 587 requires STARTTLS; port 465 uses implicit TLS by default. No TLS certificate checks are disabled.
 
 ## Scripts
 
