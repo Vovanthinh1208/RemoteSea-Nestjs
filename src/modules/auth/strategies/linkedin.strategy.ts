@@ -33,6 +33,11 @@ export class LinkedinStrategy extends PassportStrategy(Strategy, "linkedin") {
       callbackURL: config.get("AUTH_LINKEDIN_CALLBACK_URL", { infer: true }),
       scope: ["openid", "profile", "email"],
     });
+    // node-oauth's get() sends the token as ?access_token= unless told
+    // otherwise; LinkedIn's /v2/userinfo only accepts a Bearer header and
+    // answers 401, which failed every LinkedIn sign-in/connect with
+    // AUTHENTICATION_REQUIRED. (passport-github2 sets this itself.)
+    this._oauth2.useAuthorizationHeaderforGET(true);
   }
 
   // passport-oauth2's default userProfile() assumes a REST profile endpoint
