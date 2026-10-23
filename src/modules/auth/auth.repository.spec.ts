@@ -119,4 +119,76 @@ describe("AuthRepository OAuth account creation", () => {
     });
     expect(accountUpsert).toHaveBeenCalled();
   });
+
+  it.each(["google", "github", "linkedin"] as const)(
+    "creates a fresh user for a verified %s identity after the prior user was hard-deleted",
+    async (provider) => {
+      const deletedUserId = "deleted-user";
+      const freshUser = {
+        id: `fresh-${provider}-user`,
+        email: "person@example.com",
+        name: "Person",
+        image: null,
+        role: "TALENT",
+        emailVerified: true,
+      };
+      const userUpsert = jest.fn().mockResolvedValue(freshUser);
+      const accountUpsert = jest.fn().mockResolvedValue(undefined);
+      const accountFind = jest.fn().mockResolvedValue(null);
+      const prisma = {
+        account: { findUnique: accountFind },
+        $transaction: (callback: (tx: unknown) => unknown) =>
+          callback({
+            user: { upsert: userUpsert },
+            account: { upsert: accountUpsert },
+          }),
+      } as unknown as PrismaService;
+      const repository = new AuthRepository(prisma);
+
+      const user = await repository.findOrCreateOAuthUser({
+        provider,
+        providerAccountId: `${provider}-subject`,
+        email: "person@example.com",
+        name: "Person",
+        image: null,
+      });
+
+      expect(accountFind).toHaveBeenCalledWith({
+        where: {
+          provider_providerAccountId: {
+            provider,
+            providerAccountId: `${provider}-subject`,
+          },
+        },
+        include: { user: true },
+      });
+      expect(user.id).toBe(`fresh-${provider}-user`);
+      expect(user.id).not.toBe(deletedUserId);
+      expect(userUpsert).toHaveBeenCalledWith({
+        where: { email: "person@example.com" },
+        create: {
+          email: "person@example.com",
+          name: "Person",
+          image: null,
+          emailVerified: true,
+        },
+        update: { emailVerified: true },
+      });
+      expect(accountUpsert).toHaveBeenCalledWith({
+        where: {
+          provider_providerAccountId: {
+            provider,
+            providerAccountId: `${provider}-subject`,
+          },
+        },
+        create: {
+          userId: `fresh-${provider}-user`,
+          type: "oauth",
+          provider,
+          providerAccountId: `${provider}-subject`,
+        },
+        update: {},
+      });
+    },
+  );
 });

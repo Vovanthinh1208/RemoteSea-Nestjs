@@ -369,6 +369,26 @@ describe("AuthService.verifySession", () => {
       role: "TALENT",
     });
   });
+
+  it("treats an access token whose session disappeared after account deletion as anonymous", async () => {
+    const verify = jest.fn().mockReturnValue({
+      sub: "deleted-user",
+      email: "a@b.com",
+      name: "A",
+      role: "TALENT",
+      sid: "deleted-session",
+    });
+    const findSessionState = jest.fn().mockResolvedValue(null);
+    const { service } = makeService({
+      jwtService: { sign: jest.fn(), verify },
+      authRepository: { findSessionState },
+    });
+
+    await expect(
+      service.verifySession("Bearer old.access.token"),
+    ).resolves.toBeNull();
+    expect(findSessionState).toHaveBeenCalledWith("deleted-session");
+  });
 });
 
 describe("AuthService.createOAuthExchangeCode / completeOAuthExchange", () => {

@@ -216,8 +216,22 @@ export class UsersRepository {
     });
   }
 
+  // Account, Session and every profile row cascade from User (onDelete:
+  // Cascade), but VerificationToken has no relation to User — password-reset
+  // tokens are keyed only by email (see AuthRepository.createVerificationToken).
+  // Left behind, a reset link requested before deletion kept the deleted
+  // user's email on file (PB20) and could still set a password on whatever
+  // account later signs up with that address (e.g. a fresh OAuth signup).
+  // Same transaction so a failed delete (e.g. the jobs Restrict FK) keeps
+  // the tokens too.
   deleteUser(id: string): Promise<User> {
-    return this.prisma.user.delete({ where: { id } });
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.delete({ where: { id } });
+      await tx.verificationToken.deleteMany({
+        where: { identifier: user.email },
+      });
+      return user;
+    });
   }
 
   // Read before deleteUser so the caller can best-effort clean up the S3

@@ -200,3 +200,46 @@ describe("UsersRepository.setPausedAndRevokeSessions", () => {
     expect(transaction).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("UsersRepository.deleteUser", () => {
+  it("deletes the user and their email-keyed reset tokens in one transaction", async () => {
+    const tx = {
+      user: {
+        delete: jest
+          .fn()
+          .mockResolvedValue({ id: "user-1", email: "gone@example.com" }),
+      },
+      verificationToken: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const transaction = jest.fn((callback) => callback(tx));
+    const repository = new UsersRepository({
+      $transaction: transaction,
+    } as unknown as PrismaService);
+
+    await expect(repository.deleteUser("user-1")).resolves.toMatchObject({
+      id: "user-1",
+    });
+    expect(tx.user.delete).toHaveBeenCalledWith({ where: { id: "user-1" } });
+    expect(tx.verificationToken.deleteMany).toHaveBeenCalledWith({
+      where: { identifier: "gone@example.com" },
+    });
+    expect(transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves reset tokens alone when the user delete itself fails", async () => {
+    const tx = {
+      user: { delete: jest.fn().mockRejectedValue(new Error("FK restrict")) },
+      verificationToken: { deleteMany: jest.fn() },
+    };
+    const repository = new UsersRepository({
+      $transaction: jest.fn((callback) => callback(tx)),
+    } as unknown as PrismaService);
+
+    await expect(repository.deleteUser("user-1")).rejects.toThrow(
+      "FK restrict",
+    );
+    expect(tx.verificationToken.deleteMany).not.toHaveBeenCalled();
+  });
+});
