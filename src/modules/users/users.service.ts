@@ -222,11 +222,9 @@ export class UsersService {
   }
 
   async pauseAccount(userId: string) {
-    const state = await this.usersRepository.setPaused(userId, true);
-    // PB16 step 4: pausing signs the user out everywhere. Sign-in itself stays
-    // allowed so they can reactivate from Settings.
-    await this.authService.revokeAllSessionsForUser(userId);
-    return state;
+    // Update the pause state and revoke sessions together so a database error
+    // cannot leave a paused account with valid pre-pause tokens.
+    return this.usersRepository.setPausedAndRevokeSessions(userId);
   }
 
   reactivateAccount(userId: string) {
@@ -252,32 +250,29 @@ export class UsersService {
   }
 
   async disconnectConnection(userId: string, provider: string): Promise<void> {
-    const state =
-      await this.usersRepository.findPasswordHashAndConnectionCount(userId);
-    if (!state) {
-      throw new BadRequestApiException(
-        "Account not found",
-        ErrorCode.USER_NOT_FOUND,
-      );
-    }
-    // Disconnecting the only sign-in method would lock the user out entirely —
-    // block it unless a password is set (the fallback sign-in method) or more
-    // than one provider remains linked.
-    if (!state.passwordHash && state.connectionCount <= 1) {
-      throw new ConflictApiException(
-        "Set a password or keep at least one other connected account before disconnecting this one.",
-        ErrorCode.LAST_SIGN_IN_METHOD,
-      );
-    }
-    const deleted = await this.usersRepository.deleteConnection(
+    const result = await this.usersRepository.disconnectConnectionSafely(
       userId,
       provider,
     );
-    if (!deleted) {
-      throw new BadRequestApiException(
-        "That provider isn't connected to this account",
-        ErrorCode.CONNECTION_NOT_FOUND,
-      );
+
+    switch (result) {
+      case "user_not_found":
+        throw new BadRequestApiException(
+          "Account not found",
+          ErrorCode.USER_NOT_FOUND,
+        );
+      case "last_sign_in_method":
+        throw new ConflictApiException(
+          "Set a password or keep at least one other connected account before disconnecting this one.",
+          ErrorCode.LAST_SIGN_IN_METHOD,
+        );
+      case "connection_not_found":
+        throw new BadRequestApiException(
+          "That provider isn't connected to this account",
+          ErrorCode.CONNECTION_NOT_FOUND,
+        );
+      case "disconnected":
+        return;
     }
   }
 }

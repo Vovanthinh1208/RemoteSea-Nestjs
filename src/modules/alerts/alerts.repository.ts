@@ -74,7 +74,9 @@ export class AlertsRepository {
   // get priority on the next tick instead of starving behind newer ones.
   findActiveAlerts() {
     return this.prisma.jobAlert.findMany({
-      where: { isActive: true },
+      // PB16: a paused account is hidden from public search and must stop
+      // receiving new-job email alerts until it is reactivated.
+      where: { isActive: true, user: { isPaused: false } },
       take: MAX_ALERTS_PER_RUN,
       orderBy: { lastSentAt: { sort: "asc", nulls: "first" } },
       include: {

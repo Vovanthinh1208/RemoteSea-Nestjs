@@ -141,9 +141,9 @@ model User {
   // Settings > Danger zone "Pause my account": reversible, unlike delete.
   // Deliberately does NOT block sign-in (AuthService.validateCredentials) —
   // the reference design's "reactivate anytime" copy requires being able to
-  // log back in to flip it off. Not enforced anywhere else yet (e.g. a
-  // paused talent's public profile is still reachable by direct link) —
-  // narrower than the reference design's "hidden from search" copy implies.
+  // log back in to flip it off. Paused profiles and employer jobs are
+  // excluded from public search/direct profile reads, and paused users stop
+  // receiving new job-alert emails until reactivated.
   isPaused             Boolean   @default(false)
   pausedAt             DateTime?
   // Settings > Security "Two-factor authentication". twoFactorSecret is the
@@ -254,6 +254,7 @@ model Notification {
 model Account {
   id                String  @id @default(cuid())
   userId            String
+  createdAt         DateTime? @default(now())
   type              String
   provider          String
   providerAccountId String

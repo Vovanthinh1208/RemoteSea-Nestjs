@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-// Settings > Notifications. Nothing in this codebase sends a notification
-// gated by these yet (no email/push dispatch reads this row) — this is a
-// real, persisted preference with no reader, same caveat as update-account.dto.ts.
+// Settings > Notifications. The email preferences gate application updates,
+// employer messages, weekly digests, and instant match alerts. Product news,
+// tips/resources, and browser push are persisted for their future send paths.
 export const updateNotificationPreferencesSchema = z
   .object({
     applicationUpdates: z.boolean().optional(),

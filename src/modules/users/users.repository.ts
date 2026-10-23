@@ -18,6 +18,12 @@ export type AccountFields = Pick<
   "id" | "phone" | "language" | "region" | "currencyDisplay" | "image"
 >;
 
+export type DisconnectConnectionResult =
+  | "user_not_found"
+  | "last_sign_in_method"
+  | "connection_not_found"
+  | "disconnected";
+
 @Injectable()
 export class UsersRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -55,11 +61,14 @@ export class UsersRepository {
   async getNotificationPreferences(
     userId: string,
   ): Promise<NotificationPreference> {
-    const existing = await this.prisma.notificationPreference.findUnique({
+    // A lazy read may be the first request from several Settings tabs. Use a
+    // single upsert so concurrent first reads cannot race on the unique
+    // userId constraint.
+    return this.prisma.notificationPreference.upsert({
       where: { userId },
+      create: { userId },
+      update: {},
     });
-    if (existing) return existing;
-    return this.prisma.notificationPreference.create({ data: { userId } });
   }
 
   updateNotificationPreferences(
@@ -84,6 +93,23 @@ export class UsersRepository {
     });
   }
 
+  setPausedAndRevokeSessions(
+    id: string,
+  ): Promise<Pick<User, "id" | "isPaused" | "pausedAt">> {
+    return this.prisma.$transaction(async (tx) => {
+      const state = await tx.user.update({
+        where: { id },
+        data: { isPaused: true, pausedAt: new Date() },
+        select: { id: true, isPaused: true, pausedAt: true },
+      });
+      await tx.session.updateMany({
+        where: { userId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      return state;
+    });
+  }
+
   findPauseState(id: string): Promise<Pick<User, "isPaused"> | null> {
     return this.prisma.user.findUnique({
       where: { id },
@@ -102,9 +128,17 @@ export class UsersRepository {
         id: true,
         email: true,
         name: true,
+        image: true,
+        emailVerified: true,
         phone: true,
+        language: true,
+        region: true,
+        currencyDisplay: true,
         role: true,
+        isPaused: true,
+        pausedAt: true,
         createdAt: true,
+        updatedAt: true,
         talent: {
           include: {
             skills: { include: { skill: { select: { name: true } } } },
@@ -140,10 +174,11 @@ export class UsersRepository {
 
   listConnections(
     userId: string,
-  ): Promise<Pick<Account, "provider" | "providerAccountId">[]> {
+  ): Promise<Pick<Account, "provider" | "providerAccountId" | "createdAt">[]> {
     return this.prisma.account.findMany({
       where: { userId },
-      select: { provider: true, providerAccountId: true },
+      select: { provider: true, providerAccountId: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
     });
   }
 
@@ -151,26 +186,34 @@ export class UsersRepository {
     return this.prisma.account.count({ where: { userId } });
   }
 
-  findPasswordHashAndConnectionCount(
+  async disconnectConnectionSafely(
     userId: string,
-  ): Promise<{ passwordHash: string | null; connectionCount: number } | null> {
-    return this.prisma.user
-      .findUnique({
+    provider: string,
+  ): Promise<DisconnectConnectionResult> {
+    return this.prisma.$transaction(async (tx) => {
+      // Serialize disconnects (including requests from other tabs/devices) by
+      // locking the owning user row before counting or deleting accounts. A
+      // check followed by a separate delete lets two requests each observe
+      // two providers and remove both, locking a password-less user out.
+      const lockedUsers = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE
+      `;
+      if (lockedUsers.length === 0) return "user_not_found";
+
+      const user = await tx.user.findUnique({
         where: { id: userId },
         select: { passwordHash: true, _count: { select: { accounts: true } } },
-      })
-      .then((u) =>
-        u
-          ? { passwordHash: u.passwordHash, connectionCount: u._count.accounts }
-          : null,
-      );
-  }
+      });
+      if (!user) return "user_not_found";
+      if (!user.passwordHash && user._count.accounts <= 1) {
+        return "last_sign_in_method";
+      }
 
-  async deleteConnection(userId: string, provider: string): Promise<boolean> {
-    const { count } = await this.prisma.account.deleteMany({
-      where: { userId, provider },
+      const { count } = await tx.account.deleteMany({
+        where: { userId, provider },
+      });
+      return count > 0 ? "disconnected" : "connection_not_found";
     });
-    return count > 0;
   }
 
   deleteUser(id: string): Promise<User> {

@@ -188,6 +188,9 @@ export class ConnectionResponseDto {
 
   @ApiProperty({ example: "104852384756293847561" })
   providerAccountId!: string;
+
+  @ApiProperty({ type: String, format: "date-time", nullable: true })
+  createdAt!: string | null;
 }
 
 export class SuccessResponseDto {

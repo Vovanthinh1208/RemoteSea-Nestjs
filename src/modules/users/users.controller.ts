@@ -31,6 +31,8 @@ import {
   type DeleteAccountDto,
 } from "./dto/delete-account.dto";
 import { CurrentSessionId } from "@/core/decorators/current-session-id.decorator";
+import { Roles } from "@/core/decorators/roles.decorator";
+import { RolesGuard } from "@/core/guards/roles.guard";
 import { RateLimitService } from "@/common/services/rate-limit.service";
 import { AuthService } from "@/modules/auth/auth.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
@@ -75,6 +77,8 @@ export class UsersController {
 
   @ApiDeleteAccount()
   @Delete()
+  @UseGuards(RolesGuard)
+  @Roles("TALENT", "EMPLOYER")
   async deleteAccount(
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(deleteAccountSchema)) body: DeleteAccountDto,

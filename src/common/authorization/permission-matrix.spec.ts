@@ -751,7 +751,8 @@ const expectations: ControllerExpectation[] = [
         method: "deleteAccount",
         httpMethod: "DELETE",
         path: "/",
-        guards: ["JwtAuthGuard"],
+        guards: ["JwtAuthGuard", "RolesGuard"],
+        roles: ["TALENT", "EMPLOYER"],
       },
       {
         method: "changePassword",

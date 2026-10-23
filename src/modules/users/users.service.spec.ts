@@ -318,16 +318,48 @@ describe("UsersService.deleteAccount confirmation (PB20)", () => {
 
 describe("UsersService.pauseAccount (PB16)", () => {
   it("flags the account paused and signs the user out of every session", async () => {
-    const setPaused = jest.fn().mockResolvedValue({
+    const setPausedAndRevokeSessions = jest.fn().mockResolvedValue({
       id: "user-1",
       isPaused: true,
       pausedAt: new Date(),
     });
-    const { service, authService } = makeService({ setPaused });
+    const { service, authService } = makeService({
+      setPausedAndRevokeSessions,
+    });
 
     await service.pauseAccount("user-1");
 
-    expect(setPaused).toHaveBeenCalledWith("user-1", true);
-    expect(authService.revokeAllSessionsForUser).toHaveBeenCalledWith("user-1");
+    expect(setPausedAndRevokeSessions).toHaveBeenCalledWith("user-1");
+    expect(authService.revokeAllSessionsForUser).not.toHaveBeenCalled();
+  });
+});
+
+describe("UsersService.disconnectConnection (PB18)", () => {
+  it("delegates the unlink and last-method invariant to one atomic repository operation", async () => {
+    const disconnectConnectionSafely = jest
+      .fn()
+      .mockResolvedValue("disconnected");
+    const { service } = makeService({ disconnectConnectionSafely });
+
+    await expect(
+      service.disconnectConnection("user-1", "google"),
+    ).resolves.toBeUndefined();
+    expect(disconnectConnectionSafely).toHaveBeenCalledWith("user-1", "google");
+  });
+
+  it("surfaces the last-sign-in-method conflict without allowing the unlink", async () => {
+    const disconnectConnectionSafely = jest
+      .fn()
+      .mockResolvedValue("last_sign_in_method");
+    const { service } = makeService({ disconnectConnectionSafely });
+
+    const error = await service
+      .disconnectConnection("user-1", "github")
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ConflictApiException);
+    expect((error as ConflictApiException).getResponse()).toMatchObject({
+      code: ErrorCode.LAST_SIGN_IN_METHOD,
+    });
   });
 });

@@ -606,20 +606,26 @@ describe("AuthService.forgotPassword", () => {
       },
     });
     const before = Date.now();
+    const nowSpy = jest.spyOn(Date, "now").mockReturnValue(before);
 
-    await service.forgotPassword("a@b.com");
+    try {
+      await service.forgotPassword("a@b.com");
 
-    const [, storedToken, expires] = (
-      authRepository.createVerificationToken as jest.Mock
-    ).mock.calls[0] as [string, string, Date];
-    const [, emailedToken] = (emailService.sendPasswordResetEmail as jest.Mock)
-      .mock.calls[0] as [string, string];
-    expect(emailedToken).toMatch(/^[0-9a-f]{64}$/);
-    expect(storedToken).not.toBe(emailedToken);
-    expect(storedToken).toBe(
-      crypto.createHash("sha256").update(emailedToken).digest("hex"),
-    );
-    expect(expires.getTime() - before).toBeLessThanOrEqual(15 * 60 * 1000 + 50);
+      const [, storedToken, expires] = (
+        authRepository.createVerificationToken as jest.Mock
+      ).mock.calls[0] as [string, string, Date];
+      const [, emailedToken] = (
+        emailService.sendPasswordResetEmail as jest.Mock
+      ).mock.calls[0] as [string, string];
+      expect(emailedToken).toMatch(/^[0-9a-f]{64}$/);
+      expect(storedToken).not.toBe(emailedToken);
+      expect(storedToken).toBe(
+        crypto.createHash("sha256").update(emailedToken).digest("hex"),
+      );
+      expect(expires.getTime()).toBe(before + 15 * 60 * 1000);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 });
 

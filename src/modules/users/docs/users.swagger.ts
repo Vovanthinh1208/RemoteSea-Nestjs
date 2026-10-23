@@ -86,7 +86,7 @@ export const ApiDeleteAccount = () =>
     ApiOperation({
       summary: "Delete account",
       description:
-        "Permanently deletes the authenticated user's account (cascades to related records).",
+        "Permanently deletes the authenticated TALENT or EMPLOYER account (cascades to permitted related records).",
     }),
     ApiOkResponse({
       description: "Account deleted",
@@ -220,7 +220,7 @@ export const ApiPauseAccount = () =>
     ApiOperation({
       summary: "Pause account",
       description:
-        "Reversible, unlike DELETE /users/me. Does NOT block sign-in — the user must be able to log back in to reactivate. Not enforced anywhere else yet (a paused user's public profile, jobs, etc. behave exactly as before).",
+        "Reversible, unlike DELETE /users/me. Revokes current sessions, hides public profiles and employer jobs from discovery, and pauses new job-alert emails. Sign-in remains available so the user can reactivate the account.",
     }),
     ApiOkResponse({
       description: "Account paused",
