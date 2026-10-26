@@ -161,7 +161,14 @@ export class TeamService {
         ErrorCode.TEAM_INVITATION_NOT_FOUND,
       );
     }
-    await this.teamRepository.revokeInvitation(invitationId);
+    // PB38 precondition: only a PENDING invitation can be revoked.
+    const revoked = await this.teamRepository.revokeInvitation(invitationId);
+    if (!revoked) {
+      throw new ConflictApiException(
+        "Only a pending invitation can be revoked",
+        ErrorCode.TEAM_INVITATION_NOT_PENDING,
+      );
+    }
   }
 
   async previewInvitation(token: string): Promise<{

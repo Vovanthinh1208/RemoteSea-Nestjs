@@ -97,4 +97,15 @@ describe("buildTalentSearchWhere", () => {
       ],
     });
   });
+
+  // PB29 AC2: maximum desired salary.
+  it("filters by maxSalary, keeping candidates who stated no salary", () => {
+    const where = buildTalentSearchWhere(
+      { ...baseQuery, maxSalary: 2000 },
+      false,
+    );
+    expect(where.AND).toContainEqual({
+      OR: [{ desiredSalaryMin: null }, { desiredSalaryMin: { lte: 2000 } }],
+    });
+  });
 });

@@ -209,4 +209,14 @@ export const ListActivityResponseExample = {
 export const ProfileViewAnalyticsExample = {
   totalViews: 128,
   uniqueViewers: 47,
+  viewsToday: 3,
+  viewsThisWeek: 12,
+  viewsThisMonth: 40,
+  daily: [{ date: "2026-10-26", views: 3 }],
+  recentViewers: [
+    {
+      company: { name: "Acme Inc", slug: "acme-inc", logoUrl: null },
+      viewedAt: "2026-10-26T08:00:00.000Z",
+    },
+  ],
 };

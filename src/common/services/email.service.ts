@@ -170,16 +170,16 @@ export class EmailService {
     );
   }
 
+  // PB32: the OTP itself, entered on the employer dashboard — no link.
   async sendEmployerVerificationEmail(
     to: string,
     companyName: string,
-    token: string,
+    code: string,
   ): Promise<void> {
-    const verifyUrl = this.buildFrontendUrl("/employer/verify", { token });
     await this.send(
       to,
-      "Verify your company email",
-      `<p>Confirm that ${escapeHtml(companyName)} controls this address by clicking the link below. This link expires in 24 hours.</p><p><a href="${escapeHtml(verifyUrl)}">Verify company email</a></p>`,
+      "Your RemoteSEA company verification code",
+      `<p>Use this code to confirm that ${escapeHtml(companyName)} controls this address. It expires in 15 minutes.</p><p style="font-size:24px;font-weight:bold;letter-spacing:4px">${escapeHtml(code)}</p><p>If you didn't request this, you can ignore this email.</p>`,
     );
   }
 
@@ -232,6 +232,14 @@ export class EmailService {
       to,
       "Changes needed for your listing",
       `<p>Your listing "${escapeHtml(jobTitle)}" needs changes before it can go live.</p><p>${escapeHtml(note)}</p>`,
+    );
+  }
+
+  async sendJobExpiredEmail(to: string, jobTitle: string): Promise<void> {
+    await this.send(
+      to,
+      "Your job listing has expired",
+      `<p>Your listing "${escapeHtml(jobTitle)}" reached the end of its display period and is no longer visible to candidates. Applications already received are unchanged.</p>`,
     );
   }
 

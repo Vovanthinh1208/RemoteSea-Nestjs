@@ -64,7 +64,7 @@ export class WorkExperienceController {
     @Body(new ZodValidationPipe(updateWorkExperienceSchema))
     body: UpdateWorkExperienceDto,
   ) {
-    return this.workExperienceService.update(experience.id, body);
+    return this.workExperienceService.update(experience, body);
   }
 
   @ApiDeleteWorkExperience()

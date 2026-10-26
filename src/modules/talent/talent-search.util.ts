@@ -37,6 +37,16 @@ export function buildTalentSearchWhere(
   if (query.noticePeriod?.length) {
     and.push({ noticePeriod: { in: query.noticePeriod } });
   }
+  if (query.maxSalary !== undefined) {
+    // A candidate who hasn't stated a desired salary isn't "above" the
+    // budget, so they stay in the results.
+    and.push({
+      OR: [
+        { desiredSalaryMin: null },
+        { desiredSalaryMin: { lte: query.maxSalary } },
+      ],
+    });
+  }
 
   return {
     // Only candidates who opted into "Open to work" are ever searchable —

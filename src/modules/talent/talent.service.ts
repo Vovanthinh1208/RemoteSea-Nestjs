@@ -31,13 +31,16 @@ import { EmailService } from "@/common/services/email.service";
 import { runInBackground } from "@/common/utils/background-task.util";
 import {
   BadRequestApiException,
-  NotFoundApiException,
+  ForbiddenApiException,
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { SalaryRange } from "@/modules/jobs/salary-range";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import { ProfileViewsService } from "@/modules/profile-views/profile-views.service";
-import type { ProfileViewAnalytics } from "@/modules/profile-views/interfaces";
+import {
+  EMPTY_PROFILE_VIEW_ANALYTICS,
+  type ProfileViewAnalytics,
+} from "@/modules/profile-views/interfaces";
 import { ApplicationsService } from "@/modules/applications/applications.service";
 import { SavedService } from "@/modules/saved/saved.service";
 import { AlertsService } from "@/modules/alerts/alerts.service";
@@ -132,12 +135,14 @@ export class TalentService {
       const allowed =
         viewer?.role === "EMPLOYER" &&
         (await this.talentRepository.isVerifiedEmployer(viewer.id));
-      // Same response as a nonexistent slug — doesn't reveal that a profile
-      // exists but is gated, just that this caller can't see it here.
+      // PB28 AC2.2: hide every detail but tell the caller why — the page
+      // asks them to sign in with a Verified Employer account. The body
+      // carries no profile data, only this code (a nonexistent slug is
+      // still a 404, AC2.3).
       if (!allowed) {
-        throw new NotFoundApiException(
-          "Profile not found",
-          ErrorCode.TALENT_PROFILE_NOT_FOUND,
+        throw new ForbiddenApiException(
+          "This profile is visible to verified employers only",
+          ErrorCode.TALENT_PROFILE_RESTRICTED,
         );
       }
     }
@@ -160,7 +165,7 @@ export class TalentService {
   // simpler for the dashboard to render than a special-cased error state.
   async getProfileViewAnalytics(userId: string): Promise<ProfileViewAnalytics> {
     const talent = await this.talentRepository.findTalentIdByUserId(userId);
-    if (!talent) return { totalViews: 0, uniqueViewers: 0 };
+    if (!talent) return EMPTY_PROFILE_VIEW_ANALYTICS;
     return this.profileViewsService.getAnalytics(talent.id);
   }
 

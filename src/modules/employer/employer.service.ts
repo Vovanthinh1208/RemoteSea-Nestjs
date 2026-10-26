@@ -15,7 +15,9 @@ import {
 import {
   ALLOWED_TRANSITIONS,
   APPLICATION_STATUS_LABELS,
-  VERIFICATION_TOKEN_TTL_MS,
+  VERIFICATION_OTP_LENGTH,
+  VERIFICATION_OTP_MAX_ATTEMPTS,
+  VERIFICATION_OTP_TTL_MS,
 } from "./constants";
 import type { CreateEmployerProfileDto } from "./dto/create-employer-profile.dto";
 import type { UpdateEmployerProfileDto } from "./dto/update-employer-profile.dto";
@@ -25,7 +27,12 @@ import type { UpdateApplicationDto } from "./dto/update-application.dto";
 import type { BulkUpdateApplicationsDto } from "./dto/bulk-update-applications.dto";
 import type { SubmitVerificationDto } from "./dto/submit-verification.dto";
 import type { ConfirmVerificationDto } from "./dto/confirm-verification.dto";
-import { domainMatches } from "./verification.util";
+import type { VerifyCodeDto } from "./dto/verify-code.dto";
+import {
+  OTP_TOKEN_PREFIX,
+  domainMatches,
+  hashVerificationCode,
+} from "./verification.util";
 import { buildApplicantsCsv } from "./applicant-csv.util";
 import { slugify, withUniqueSuffix } from "@/common/utils/slugify";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
@@ -245,6 +252,22 @@ export class EmployerService {
       );
     }
 
+    // Same ownership rule for the PB31 cover image as for the logo above.
+    if (
+      dto.coverImageUrl &&
+      !isOwnedUploadUrl(
+        dto.coverImageUrl,
+        this.config.get("CDN_URL", { infer: true }),
+        userId,
+        "cover",
+      )
+    ) {
+      throw new BadRequestApiException(
+        "coverImageUrl must be an uploaded file from this account",
+        ErrorCode.UPLOAD_URL_NOT_OWNED,
+      );
+    }
+
     const updated = await this.employerRepository.updateProfile(
       profile.id,
       dto,
@@ -258,6 +281,13 @@ export class EmployerService {
     // unhandled rejection and should switch to runInBackground.
     if (dto.logoUrl && profile.logoUrl && profile.logoUrl !== dto.logoUrl) {
       void this.uploadsService.deleteObjectByUrl(profile.logoUrl);
+    }
+    if (
+      dto.coverImageUrl !== undefined &&
+      profile.coverImageUrl &&
+      profile.coverImageUrl !== dto.coverImageUrl
+    ) {
+      void this.uploadsService.deleteObjectByUrl(profile.coverImageUrl);
     }
 
     return updated;
@@ -322,29 +352,105 @@ export class EmployerService {
       );
     }
 
-    const token = crypto.randomBytes(32).toString("hex");
+    // PB32 AC3: a 6-digit OTP. Only its hash is stored (scoped to this
+    // company, which also keeps the column's unique index collision-free
+    // across companies that happen to draw the same code).
+    const code = crypto
+      .randomInt(0, 10 ** VERIFICATION_OTP_LENGTH)
+      .toString()
+      .padStart(VERIFICATION_OTP_LENGTH, "0");
     await this.employerRepository.createEmailVerification(
       profile.id,
       dto.email,
-      token,
-      new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
+      hashVerificationCode(profile.id, code),
+      new Date(Date.now() + VERIFICATION_OTP_TTL_MS),
     );
 
     runInBackground(
       this.emailService.sendEmployerVerificationEmail(
         dto.email,
         profile.companyName,
-        token,
+        code,
       ),
       this.logger,
       `Failed to send verification email for employer ${profile.id}`,
     );
   }
 
-  async confirmVerification(dto: ConfirmVerificationDto): Promise<void> {
-    const record = await this.employerRepository.findEmailVerificationByToken(
-      dto.token,
+  // PB32 AC4–5: the OWNER enters the emailed code within 15 minutes; a match
+  // marks the company VERIFIED and grants the badge.
+  async verifyCode(userId: string, dto: VerifyCodeDto): Promise<void> {
+    const membership = await this.requireRole(userId, OWNER_ONLY);
+    const employerId = membership.employerId;
+    const record =
+      await this.employerRepository.findPendingEmailVerification(employerId);
+    if (!record) {
+      throw new BadRequestApiException(
+        "No active verification code — request a new one",
+        ErrorCode.INVALID_OR_EXPIRED_TOKEN,
+      );
+    }
+
+    if (
+      record.expiresAt < new Date() ||
+      record.attempts >= VERIFICATION_OTP_MAX_ATTEMPTS
+    ) {
+      await this.employerRepository.burnEmailVerification(
+        record.id,
+        employerId,
+      );
+      throw new BadRequestApiException(
+        "This code has expired — request a new one",
+        ErrorCode.INVALID_OR_EXPIRED_TOKEN,
+      );
+    }
+
+    const expected = Buffer.from(record.token);
+    const actual = Buffer.from(hashVerificationCode(employerId, dto.code));
+    if (
+      expected.length !== actual.length ||
+      !crypto.timingSafeEqual(expected, actual)
+    ) {
+      const attempts =
+        await this.employerRepository.recordFailedVerificationAttempt(
+          record.id,
+        );
+      if (attempts >= VERIFICATION_OTP_MAX_ATTEMPTS) {
+        await this.employerRepository.burnEmailVerification(
+          record.id,
+          employerId,
+        );
+        throw new BadRequestApiException(
+          "Too many wrong codes — request a new one",
+          ErrorCode.INVALID_OR_EXPIRED_TOKEN,
+        );
+      }
+      throw new BadRequestApiException(
+        "Incorrect verification code",
+        ErrorCode.INVALID_VERIFICATION_CODE,
+      );
+    }
+
+    const confirmed = await this.employerRepository.consumeEmailVerification(
+      record.id,
+      employerId,
     );
+    if (!confirmed) {
+      throw new BadRequestApiException(
+        "Invalid or expired code",
+        ErrorCode.INVALID_OR_EXPIRED_TOKEN,
+      );
+    }
+  }
+
+  // Legacy link confirmation for verification emails sent before PB32's OTP
+  // flow (64-hex link tokens, 24h). New codes are stored hashed, so no link
+  // can confirm them; this route can be removed once those links lapse.
+  async confirmVerification(dto: ConfirmVerificationDto): Promise<void> {
+    // An OTP row is only ever confirmed through verifyCode.
+    const record = dto.token.startsWith(OTP_TOKEN_PREFIX)
+      ? null
+      : await this.employerRepository.findEmailVerificationByToken(dto.token);
     if (!record || record.consumedAt) {
       throw new BadRequestApiException(
         "Invalid or expired token",

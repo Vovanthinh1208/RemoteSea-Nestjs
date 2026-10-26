@@ -9,6 +9,7 @@ import type { TalentRepository } from "./talent.repository";
 import type { UploadsService } from "@/modules/uploads/uploads.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import type { ProfileViewsService } from "@/modules/profile-views/profile-views.service";
+import { EMPTY_PROFILE_VIEW_ANALYTICS } from "@/modules/profile-views/interfaces";
 import type { ApplicationsService } from "@/modules/applications/applications.service";
 import type { SavedService } from "@/modules/saved/saved.service";
 import type { AlertsService } from "@/modules/alerts/alerts.service";
@@ -371,7 +372,9 @@ describe("TalentService.getPublicProfile — profile view recording", () => {
     );
   });
 
-  it("does not record a view for a gated VERIFIED_EMPLOYERS profile the caller can't see", async () => {
+  // PB28 AC2.2: a gated profile answers 403 TALENT_PROFILE_RESTRICTED (the
+  // page shows "sign in as a Verified Employer"), never the profile data.
+  it("refuses a gated VERIFIED_EMPLOYERS profile with TALENT_PROFILE_RESTRICTED and records no view", async () => {
     const { service, profileViewsService } = makeService({
       findBySlug: jest
         .fn()
@@ -379,10 +382,26 @@ describe("TalentService.getPublicProfile — profile view recording", () => {
       isVerifiedEmployer: jest.fn().mockResolvedValue(false),
     });
 
-    await expect(
-      service.getPublicProfile("ada", viewer),
-    ).rejects.toBeInstanceOf(NotFoundApiException);
+    await expect(service.getPublicProfile("ada", viewer)).rejects.toMatchObject(
+      {
+        status: 403,
+        response: { code: ErrorCode.TALENT_PROFILE_RESTRICTED },
+      },
+    );
     expect(profileViewsService.recordView).not.toHaveBeenCalled();
+  });
+
+  it("refuses a gated profile to a guest the same way", async () => {
+    const { service } = makeService({
+      findBySlug: jest
+        .fn()
+        .mockResolvedValue({ ...profile, visibility: "VERIFIED_EMPLOYERS" }),
+    });
+
+    await expect(service.getPublicProfile("ada", null)).rejects.toMatchObject({
+      status: 403,
+      response: { code: ErrorCode.TALENT_PROFILE_RESTRICTED },
+    });
   });
 });
 
@@ -411,7 +430,7 @@ describe("TalentService.getProfileViewAnalytics", () => {
 
     const result = await service.getProfileViewAnalytics("no-profile-user");
 
-    expect(result).toEqual({ totalViews: 0, uniqueViewers: 0 });
+    expect(result).toEqual(EMPTY_PROFILE_VIEW_ANALYTICS);
     expect(profileViewsService.getAnalytics).not.toHaveBeenCalled();
   });
 });

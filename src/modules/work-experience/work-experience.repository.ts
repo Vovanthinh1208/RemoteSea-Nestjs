@@ -42,6 +42,8 @@ export class WorkExperienceRepository {
   findOwnerById(id: string): Promise<{
     id: string;
     talentId: string;
+    startDate: Date;
+    endDate: Date | null;
     talent: { userId: string };
   } | null> {
     return this.prisma.workExperience.findUnique({
@@ -49,6 +51,8 @@ export class WorkExperienceRepository {
       select: {
         id: true,
         talentId: true,
+        startDate: true,
+        endDate: true,
         talent: { select: { userId: true } },
       },
     });

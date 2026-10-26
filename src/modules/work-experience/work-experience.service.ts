@@ -4,7 +4,9 @@ import { WorkExperienceRepository } from "./work-experience.repository";
 import { MAX_WORK_EXPERIENCES_PER_PROFILE } from "./constants";
 import type { CreateWorkExperienceDto } from "./dto/create-work-experience.dto";
 import type { UpdateWorkExperienceDto } from "./dto/update-work-experience.dto";
+import type { WorkExperienceWithOwner } from "./guards/work-experience-ownership.guard";
 import {
+  BadRequestApiException,
   ConflictApiException,
   ForbiddenApiException,
 } from "@/common/exceptions/api.exception";
@@ -53,8 +55,23 @@ export class WorkExperienceService {
 
   // Ownership is already enforced by WorkExperienceOwnershipGuard before
   // these run — same division of responsibility as AlertsService.
-  update(id: string, dto: UpdateWorkExperienceDto): Promise<WorkExperience> {
-    return this.workExperienceRepository.update(id, dto);
+  async update(
+    experience: WorkExperienceWithOwner,
+    dto: UpdateWorkExperienceDto,
+  ): Promise<WorkExperience> {
+    // The DTO can only compare the two dates when both are in the request;
+    // a PATCH may send just one, so PB24 RC2 (start strictly before end) is
+    // checked against the effective post-update pair here.
+    const startDate = dto.startDate ?? experience.startDate;
+    const endDate =
+      dto.endDate === undefined ? experience.endDate : dto.endDate;
+    if (endDate && endDate <= startDate) {
+      throw new BadRequestApiException(
+        "endDate must be after startDate",
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+    return this.workExperienceRepository.update(experience.id, dto);
   }
 
   async remove(id: string): Promise<{ success: true }> {

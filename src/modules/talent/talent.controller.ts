@@ -69,7 +69,9 @@ export class TalentController {
 
   @ApiGetDashboard()
   @Get("me/dashboard")
-  @UseGuards(JwtAuthGuard)
+  // PB26: the dashboard belongs to a TALENT account only.
+  @Roles("TALENT")
+  @UseGuards(JwtAuthGuard, RolesGuard)
   getDashboard(@CurrentUser() user: AuthenticatedUser) {
     return this.talentService.getDashboard(user.id);
   }
@@ -102,7 +104,8 @@ export class TalentController {
   // the authenticated caller, so there's no target id for anyone to swap in.
   @ApiGetProfileViewAnalytics()
   @Get("me/profile-views")
-  @UseGuards(JwtAuthGuard)
+  @Roles("TALENT")
+  @UseGuards(JwtAuthGuard, RolesGuard)
   getProfileViewAnalytics(@CurrentUser() user: AuthenticatedUser) {
     return this.talentService.getProfileViewAnalytics(user.id);
   }

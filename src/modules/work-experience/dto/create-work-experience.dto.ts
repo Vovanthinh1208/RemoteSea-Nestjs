@@ -11,8 +11,9 @@ export const createWorkExperienceSchema = z
     endDate: z.coerce.date().optional(),
     description: trimmedString({ max: 1000 }).optional(),
   })
-  .refine((data) => !data.endDate || data.endDate >= data.startDate, {
-    message: "endDate must be on or after startDate",
+  // PB24 RC2: the start date must be strictly before the end date.
+  .refine((data) => !data.endDate || data.endDate > data.startDate, {
+    message: "endDate must be after startDate",
     path: ["endDate"],
   });
 

@@ -25,7 +25,7 @@ const makeService = (
     createInvitation: jest.fn(),
     findPendingInvitationsByCompany: jest.fn().mockResolvedValue([]),
     findInvitationById: jest.fn().mockResolvedValue(null),
-    revokeInvitation: jest.fn().mockResolvedValue(undefined),
+    revokeInvitation: jest.fn().mockResolvedValue(true),
     findInvitationByToken: jest.fn().mockResolvedValue(null),
     acceptInvitation: jest.fn().mockResolvedValue(true),
     countOwners: jest.fn().mockResolvedValue(2),
@@ -473,5 +473,35 @@ describe("TeamService — transferring OWNER (PB39 AC3)", () => {
     });
     await service.updateMemberRole(target, { role: "OWNER" }, "owner-user");
     expect(repo.transferOwnership).toHaveBeenCalled();
+  });
+});
+
+// PB38 precondition: only a PENDING invitation can be revoked.
+describe("TeamService.revokeInvitation (PB38)", () => {
+  const invitation = { id: "inv-1", employerId: "company-1" };
+
+  it("revokes a pending invitation of the owner's company", async () => {
+    const { service, repo } = makeService(
+      { findInvitationById: jest.fn().mockResolvedValue(invitation) },
+      jest.fn().mockResolvedValue(OWNER_MEMBERSHIP),
+    );
+    await service.revokeInvitation("owner-1", "inv-1");
+    expect(repo.revokeInvitation).toHaveBeenCalledWith("inv-1");
+  });
+
+  it("answers 409 TEAM_INVITATION_NOT_PENDING for an already used or revoked invitation", async () => {
+    const { service } = makeService(
+      {
+        findInvitationById: jest.fn().mockResolvedValue(invitation),
+        revokeInvitation: jest.fn().mockResolvedValue(false),
+      },
+      jest.fn().mockResolvedValue(OWNER_MEMBERSHIP),
+    );
+    await expect(
+      service.revokeInvitation("owner-1", "inv-1"),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: { code: "TEAM_INVITATION_NOT_PENDING" },
+    });
   });
 });

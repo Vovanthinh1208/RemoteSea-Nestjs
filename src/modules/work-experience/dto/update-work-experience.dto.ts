@@ -15,10 +15,9 @@ export const updateWorkExperienceSchema = z
     message: "At least one field must be provided",
   })
   .refine(
-    (data) =>
-      !data.startDate || !data.endDate || data.endDate >= data.startDate,
+    (data) => !data.startDate || !data.endDate || data.endDate > data.startDate,
     {
-      message: "endDate must be on or after startDate",
+      message: "endDate must be after startDate",
       path: ["endDate"],
     },
   );

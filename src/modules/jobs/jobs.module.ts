@@ -6,13 +6,15 @@ import { JobOwnershipGuard } from "./guards/job-ownership.guard";
 import { ViewCountBuffer } from "./view-count.buffer";
 import { EmployerModule } from "@/modules/employer/employer.module";
 import { CompanyModule } from "@/modules/company/company.module";
+import { AuthModule } from "@/modules/auth/auth.module";
 
 @Module({
   // JobsService.getActiveById calls EmployerService.getPublicResponseHours
   // to surface the employer's response-time stat on the public job detail
   // page — EmployerModule doesn't import JobsModule, so no cycle.
   // CompanyModule: multi-seat company/role resolution for job creation.
-  imports: [EmployerModule, CompanyModule],
+  // AuthModule: optional Bearer lookup on GET /jobs/:id (PB48 RC1 preview).
+  imports: [EmployerModule, CompanyModule, AuthModule],
   controllers: [JobsController],
   providers: [JobsService, JobsRepository, JobOwnershipGuard, ViewCountBuffer],
   // AdminModule calls JobsService.approveForReview/rejectForReview for

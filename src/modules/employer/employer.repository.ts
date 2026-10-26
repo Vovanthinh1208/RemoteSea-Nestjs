@@ -44,6 +44,12 @@ const publicProfileSelect = {
   founded: true,
   hqCountry: true,
   hqCity: true,
+  hqAddress: true,
+  benefits: true,
+  linkedinUrl: true,
+  facebookUrl: true,
+  videoUrl: true,
+  coverImageUrl: true,
   isVerified: true,
   verifiedAt: true,
   createdAt: true,
@@ -65,6 +71,12 @@ const profileSelect = {
   founded: true,
   hqCountry: true,
   hqCity: true,
+  hqAddress: true,
+  benefits: true,
+  linkedinUrl: true,
+  facebookUrl: true,
+  videoUrl: true,
+  coverImageUrl: true,
   isVerified: true,
   verificationEmail: true,
   verificationStatus: true,
@@ -103,12 +115,14 @@ export class EmployerRepository {
   // (CompanyMembershipService.resolveMembership), not EmployerProfile.userId,
   // since only the company's original creator has a row keyed on their own
   // userId.
-  findProfileByCompanyId(
-    employerId: string,
-  ): Promise<{ id: string; logoUrl: string | null } | null> {
+  findProfileByCompanyId(employerId: string): Promise<{
+    id: string;
+    logoUrl: string | null;
+    coverImageUrl: string | null;
+  } | null> {
     return this.prisma.employerProfile.findUnique({
       where: { id: employerId },
-      select: { id: true, logoUrl: true },
+      select: { id: true, logoUrl: true, coverImageUrl: true },
     });
   }
 
@@ -294,6 +308,39 @@ export class EmployerRepository {
       this.prisma.employerProfile.update({
         where: { id: employerId },
         data: { verificationEmail: email, verificationStatus: "PENDING" },
+      }),
+    ]);
+  }
+
+  // The one code an employer can still enter: createEmailVerification
+  // deletes every earlier unconsumed row, so there is at most one.
+  findPendingEmailVerification(employerId: string) {
+    return this.prisma.employerEmailVerification.findFirst({
+      where: { employerId, consumedAt: null },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  // Atomic increment so concurrent wrong guesses are all counted.
+  async recordFailedVerificationAttempt(id: string): Promise<number> {
+    const { attempts } = await this.prisma.employerEmailVerification.update({
+      where: { id },
+      data: { attempts: { increment: 1 } },
+      select: { attempts: true },
+    });
+    return attempts;
+  }
+
+  // A code that hit the attempt limit or expired can never be used again.
+  async burnEmailVerification(id: string, employerId: string): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.employerEmailVerification.updateMany({
+        where: { id, consumedAt: null },
+        data: { consumedAt: new Date() },
+      }),
+      this.prisma.employerProfile.update({
+        where: { id: employerId },
+        data: { verificationStatus: "FAILED" },
       }),
     ]);
   }

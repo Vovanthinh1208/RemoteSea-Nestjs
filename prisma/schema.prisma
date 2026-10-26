@@ -491,6 +491,14 @@ model EmployerProfile {
   founded            Int?
   hqCountry          String?
   hqCity             String?
+  // PB31 company settings: street address, perks, social links, intro video
+  // and the cover image shown on the public company page (PB33).
+  hqAddress          String?
+  benefits           String[]                   @default([])
+  linkedinUrl        String?
+  facebookUrl        String?
+  videoUrl           String?
+  coverImageUrl      String?
   isVerified         Boolean                    @default(false)
   // Neither is derivable from updatedAt: a later profile edit (updateProfile)
   // moves updatedAt without touching verification status, and re-verifying
@@ -542,6 +550,8 @@ model EmployerEmailVerification {
   token      String    @unique
   expiresAt  DateTime
   consumedAt DateTime?
+  // PB32: wrong OTP entries against this code; it is burned after the limit.
+  attempts   Int       @default(0)
   createdAt  DateTime  @default(now())
 
   employer EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)

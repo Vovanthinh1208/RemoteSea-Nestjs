@@ -371,7 +371,7 @@ export const ApiSubmitVerification = () =>
     ApiOperation({
       summary: "Submit company email verification",
       description:
-        "Sends a confirmation link to the given email (TTL 24h) if its domain matches the company's websiteUrl. Requires the EMPLOYER role and a websiteUrl already on file. Resubmitting invalidates any prior unconsumed link for this employer.",
+        "Emails a 6-digit verification code (valid 15 minutes) to the given address if its domain matches the company's websiteUrl. OWNER only; a websiteUrl must already be on file. Resubmitting invalidates any earlier unused code for this company.",
     }),
     ApiBody({
       type: SubmitVerificationRequestDto,
@@ -391,12 +391,40 @@ export const ApiSubmitVerification = () =>
     InternalServerErrorApiResponse,
   );
 
+export const ApiVerifyCode = () =>
+  applyDecorators(
+    ApiBearerAuth("bearer"),
+    ApiOperation({
+      summary: "Verify the company with the emailed code",
+      description:
+        "OWNER enters the 6-digit code from POST /employer/verification. A match within 15 minutes sets verificationStatus = VERIFIED and isVerified = true. 5 wrong entries burn the code (a new one must be requested).",
+    }),
+    ApiBody({
+      schema: {
+        type: "object",
+        required: ["code"],
+        properties: { code: { type: "string", example: "482913" } },
+      },
+    }),
+    ApiOkResponse({
+      description: "Company email verified",
+      type: MessageResponseDto,
+      schema: { example: ConfirmVerificationResponseExample },
+    }),
+    ValidationErrorResponse,
+    UnauthorizedApiResponse,
+    ForbiddenApiResponse,
+    InvalidOrExpiredVerificationTokenResponse,
+    rateLimitResponse("10 req/60s per user"),
+    InternalServerErrorApiResponse,
+  );
+
 export const ApiConfirmVerification = () =>
   applyDecorators(
     ApiOperation({
       summary: "Confirm company email verification",
       description:
-        "Consumes a verification token and, on success, sets EmployerProfile.isVerified true. Unauthenticated — the token itself is the proof, same as POST /auth/reset-password.",
+        "Legacy: consumes a link token from a verification email sent before the OTP flow (POST /employer/verification/verify-code). Unauthenticated — the token itself is the proof.",
     }),
     ApiBody({
       type: ConfirmVerificationRequestDto,

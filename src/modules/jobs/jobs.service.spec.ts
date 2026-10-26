@@ -46,7 +46,10 @@ const zeroFacetCounts = {
   tz_us: 0,
 };
 
-const makeService = (repoOverrides: Partial<JobsRepository> = {}) => {
+const makeService = (
+  repoOverrides: Partial<JobsRepository> = {},
+  deps: { employerService?: unknown; membership?: unknown } = {},
+) => {
   const repo = {
     update: jest.fn(),
     updateIfEditable: jest.fn(),
@@ -56,16 +59,22 @@ const makeService = (repoOverrides: Partial<JobsRepository> = {}) => {
   } as unknown as JobsRepository;
   const viewCounts = { record: jest.fn() };
   const cache = { get: jest.fn().mockResolvedValue(undefined), set: jest.fn() };
+  const emailService = {
+    sendJobExpiredEmail: jest.fn().mockResolvedValue(undefined),
+  };
   return {
     service: new JobsService(
       repo,
       cache as never,
       viewCounts as never,
-      {} as never,
-      {} as never,
+      (deps.employerService ?? {}) as never,
+      (deps.membership ?? {}) as never,
+      emailService as never,
     ),
     repo,
     cache,
+    viewCounts,
+    emailService,
   };
 };
 
@@ -289,5 +298,127 @@ describe("JobsService.list", () => {
     // rankedIds is already the full filtered+matched set, so there's nothing
     // left for a count query to compute — one fewer DB round trip than before.
     expect(count).not.toHaveBeenCalled();
+  });
+});
+
+describe("JobsService.getById (PB48)", () => {
+  const liveJob = {
+    id: "job-1",
+    employerId: "emp-1",
+    status: "ACTIVE",
+    planPaid: true,
+    paidAt: new Date(),
+    employer: { companyName: "Acme" },
+  };
+  const draftJob = { id: "job-2", employerId: "emp-1", status: "DRAFT" };
+  const employerService = {
+    getPublicResponseHours: jest.fn().mockResolvedValue(4),
+  };
+  const membershipOf = (employerId: string | null) => ({
+    resolveMembership: jest
+      .fn()
+      .mockResolvedValue(employerId ? { employerId, role: "RECRUITER" } : null),
+  });
+
+  it("serves a live job publicly without billing fields", async () => {
+    const { service } = makeService(
+      { findActiveById: jest.fn().mockResolvedValue(liveJob) },
+      { employerService },
+    );
+    const result = await service.getById("job-1", null);
+    expect(result).not.toHaveProperty("planPaid");
+    expect(result).not.toHaveProperty("paidAt");
+    expect(result.employer).toEqual({
+      companyName: "Acme",
+      avgFirstResponseHours: 4,
+    });
+  });
+
+  it("lets a member of the owning company preview a draft, without counting a view", async () => {
+    const { service, viewCounts } = makeService(
+      {
+        findActiveById: jest.fn().mockResolvedValue(null),
+        findPreviewById: jest.fn().mockResolvedValue(draftJob),
+      },
+      { membership: membershipOf("emp-1") },
+    );
+    await expect(service.getById("job-2", owner)).resolves.toEqual({
+      ...draftJob,
+      isPreview: true,
+    });
+    expect(viewCounts.record).not.toHaveBeenCalled();
+  });
+
+  it("lets an ADMIN preview a draft", async () => {
+    const { service } = makeService({
+      findActiveById: jest.fn().mockResolvedValue(null),
+      findPreviewById: jest.fn().mockResolvedValue(draftJob),
+    });
+    await expect(service.getById("job-2", admin)).resolves.toMatchObject({
+      isPreview: true,
+    });
+  });
+
+  it.each([
+    ["a guest", null, null],
+    ["another company's member", owner, "emp-2"],
+  ])("answers 404 for a draft to %s", async (_label, viewer, employerId) => {
+    const { service } = makeService(
+      {
+        findActiveById: jest.fn().mockResolvedValue(null),
+        findPreviewById: jest.fn().mockResolvedValue(draftJob),
+      },
+      { membership: membershipOf(employerId) },
+    );
+    await expect(service.getById("job-2", viewer)).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+
+  it("answers 404 (not a DB error) for an id containing a NUL byte", async () => {
+    const findActiveById = jest.fn();
+    const { service } = makeService({ findActiveById });
+    await expect(service.getById("bad\0id", admin)).rejects.toMatchObject({
+      status: 404,
+    });
+    expect(findActiveById).not.toHaveBeenCalled();
+  });
+});
+
+describe("JobsService.expireStaleJobs (PB46)", () => {
+  it("emails each expired job's OWNER/RECRUITER members and reports the count", async () => {
+    const expired = [
+      { id: "j1", title: "Backend Engineer", employerId: "emp-1" },
+      { id: "j2", title: "Designer", employerId: "emp-2" },
+    ];
+    const findJobManagerEmails = jest.fn().mockResolvedValue(
+      new Map([
+        ["emp-1", ["owner@a.test", "rec@a.test"]],
+        ["emp-2", ["owner@b.test"]],
+      ]),
+    );
+    const { service, emailService } = makeService({
+      expireStaleJobs: jest.fn().mockResolvedValue(expired),
+      findJobManagerEmails,
+    });
+
+    await expect(service.expireStaleJobs()).resolves.toEqual({ expired: 2 });
+    expect(findJobManagerEmails).toHaveBeenCalledWith(["emp-1", "emp-2"]);
+    expect(emailService.sendJobExpiredEmail.mock.calls).toEqual([
+      ["owner@a.test", "Backend Engineer"],
+      ["rec@a.test", "Backend Engineer"],
+      ["owner@b.test", "Designer"],
+    ]);
+  });
+
+  it("sends nothing when no job expired", async () => {
+    const findJobManagerEmails = jest.fn();
+    const { service, emailService } = makeService({
+      expireStaleJobs: jest.fn().mockResolvedValue([]),
+      findJobManagerEmails,
+    });
+    await expect(service.expireStaleJobs()).resolves.toEqual({ expired: 0 });
+    expect(findJobManagerEmails).not.toHaveBeenCalled();
+    expect(emailService.sendJobExpiredEmail).not.toHaveBeenCalled();
   });
 });

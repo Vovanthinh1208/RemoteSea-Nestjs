@@ -28,6 +28,7 @@ import {
   clientIp,
 } from "@/common/services/rate-limit.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+import { AuthService } from "@/modules/auth/auth.service";
 import {
   JobOwnershipGuard,
   type JobWithOwner,
@@ -48,6 +49,7 @@ export class JobsController {
   constructor(
     private readonly jobsService: JobsService,
     private readonly rateLimitService: RateLimitService,
+    private readonly authService: AuthService,
   ) {}
 
   // Public, identical for every caller, no side effects — lets a CDN/proxy
@@ -104,8 +106,14 @@ export class JobsController {
 
   @ApiGetJobById()
   @Get(":id")
-  getById(@Param("id") id: string) {
-    return this.jobsService.getActiveById(id);
+  async getById(@Param("id") id: string, @Req() req: Request) {
+    // No JwtAuthGuard — public for live listings. A Bearer token is optional
+    // and only consulted to let a company member or ADMIN preview a listing
+    // that isn't live yet (PB48 RC1), same pattern as GET /talent/:slug.
+    const viewer = await this.authService.verifySession(
+      req.headers.authorization,
+    );
+    return this.jobsService.getById(id, viewer);
   }
 
   @ApiUpdateJob()

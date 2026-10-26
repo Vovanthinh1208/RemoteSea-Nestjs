@@ -6,6 +6,7 @@ import {
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { EmployerRepository } from "./employer.repository";
+import { hashVerificationCode } from "./verification.util";
 import type { ApplicationWithJobOwner } from "./guards/application-ownership.guard";
 
 // Ownership is enforced upstream by ApplicationOwnershipGuard — these tests cover
@@ -1067,5 +1068,209 @@ describe("EmployerService.exportJobApplicantsCsv", () => {
     const csv = await service.exportJobApplicantsCsv("job-1", "REJECTED");
 
     expect(csv.slice(1).trim().split("\r\n")).toHaveLength(1);
+  });
+});
+
+// PB32: OTP verification — 6 digits, 15 minutes, 5 wrong tries.
+describe("EmployerService verification OTP (PB32)", () => {
+  const EMPLOYER = "owner-1-company";
+  const profile = {
+    id: EMPLOYER,
+    companyName: "Acme Inc",
+    websiteUrl: "https://acme.com",
+  };
+  const pending = (code: string, overrides: Record<string, unknown> = {}) => ({
+    id: "ver-1",
+    employerId: EMPLOYER,
+    token: hashVerificationCode(EMPLOYER, code),
+    attempts: 0,
+    consumedAt: null,
+    expiresAt: new Date(Date.now() + 60_000),
+    ...overrides,
+  });
+
+  it("emails a 6-digit code valid for 15 minutes and stores only its hash", async () => {
+    const { service, repo, emailService } = makeService({
+      findProfileForVerification: jest.fn().mockResolvedValue(profile),
+      createEmailVerification: jest.fn().mockResolvedValue(undefined),
+    });
+    const before = Date.now();
+
+    await service.submitVerification("owner-1", { email: "hr@acme.com" });
+
+    const code = (emailService.sendEmployerVerificationEmail as jest.Mock).mock
+      .calls[0][2] as string;
+    expect(code).toMatch(/^\d{6}$/);
+    const [, , storedToken, expiresAt] = (
+      repo.createEmailVerification as jest.Mock
+    ).mock.calls[0];
+    expect(storedToken).toBe(hashVerificationCode(EMPLOYER, code));
+    expect(storedToken).not.toContain(code);
+    const ttl = (expiresAt as Date).getTime() - before;
+    expect(ttl).toBeGreaterThan(14 * 60_000);
+    expect(ttl).toBeLessThanOrEqual(15 * 60_000 + 1000);
+  });
+
+  it("verifies the company with the right code", async () => {
+    const { service, repo } = makeService({
+      findPendingEmailVerification: jest
+        .fn()
+        .mockResolvedValue(pending("123456")),
+      consumeEmailVerification: jest.fn().mockResolvedValue(true),
+    });
+
+    await service.verifyCode("owner-1", { code: "123456" });
+
+    expect(repo.consumeEmailVerification).toHaveBeenCalledWith(
+      "ver-1",
+      EMPLOYER,
+    );
+  });
+
+  it("counts a wrong code and keeps the code usable below the limit", async () => {
+    const { service, repo } = makeService({
+      findPendingEmailVerification: jest
+        .fn()
+        .mockResolvedValue(pending("123456")),
+      recordFailedVerificationAttempt: jest.fn().mockResolvedValue(1),
+      burnEmailVerification: jest.fn(),
+      consumeEmailVerification: jest.fn(),
+    });
+
+    await expect(
+      service.verifyCode("owner-1", { code: "000000" }),
+    ).rejects.toMatchObject({
+      status: 400,
+      response: { code: ErrorCode.INVALID_VERIFICATION_CODE },
+    });
+    expect(repo.burnEmailVerification).not.toHaveBeenCalled();
+    expect(repo.consumeEmailVerification).not.toHaveBeenCalled();
+  });
+
+  it("burns the code on the 5th wrong entry", async () => {
+    const { service, repo } = makeService({
+      findPendingEmailVerification: jest
+        .fn()
+        .mockResolvedValue(pending("123456", { attempts: 4 })),
+      recordFailedVerificationAttempt: jest.fn().mockResolvedValue(5),
+      burnEmailVerification: jest.fn().mockResolvedValue(undefined),
+    });
+
+    await expect(
+      service.verifyCode("owner-1", { code: "000000" }),
+    ).rejects.toMatchObject({
+      response: { code: ErrorCode.INVALID_OR_EXPIRED_TOKEN },
+    });
+    expect(repo.burnEmailVerification).toHaveBeenCalledWith("ver-1", EMPLOYER);
+  });
+
+  it("refuses an expired code even when it is correct", async () => {
+    const { service, repo } = makeService({
+      findPendingEmailVerification: jest
+        .fn()
+        .mockResolvedValue(
+          pending("123456", { expiresAt: new Date(Date.now() - 1000) }),
+        ),
+      burnEmailVerification: jest.fn().mockResolvedValue(undefined),
+      consumeEmailVerification: jest.fn(),
+    });
+
+    await expect(
+      service.verifyCode("owner-1", { code: "123456" }),
+    ).rejects.toMatchObject({
+      response: { code: ErrorCode.INVALID_OR_EXPIRED_TOKEN },
+    });
+    expect(repo.consumeEmailVerification).not.toHaveBeenCalled();
+  });
+
+  it("refuses when no code is pending", async () => {
+    const { service } = makeService({
+      findPendingEmailVerification: jest.fn().mockResolvedValue(null),
+    });
+    await expect(
+      service.verifyCode("owner-1", { code: "123456" }),
+    ).rejects.toBeInstanceOf(BadRequestApiException);
+  });
+
+  it("is OWNER only", async () => {
+    const { service } = makeService(
+      { findPendingEmailVerification: jest.fn() },
+      {},
+      {
+        resolveMembership: jest
+          .fn()
+          .mockResolvedValue({ employerId: EMPLOYER, role: "RECRUITER" }),
+      },
+    );
+    await expect(
+      service.verifyCode("rec-1", { code: "123456" }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+// PB31: cover image must come from this account's own upload.
+describe("EmployerService.updateProfile cover image (PB31)", () => {
+  const repo = () => ({
+    findProfileByCompanyId: jest.fn().mockResolvedValue({
+      id: "owner-1-company",
+      logoUrl: null,
+      coverImageUrl: null,
+    }),
+    updateProfile: jest.fn().mockResolvedValue({ id: "owner-1-company" }),
+  });
+
+  it("rejects a cover image URL that isn't this user's upload", async () => {
+    const r = repo();
+    const { service } = makeService(r);
+    await expect(
+      service.updateProfile("owner-1", {
+        coverImageUrl: "https://evil.example/cover.png",
+      }),
+    ).rejects.toMatchObject({
+      response: { code: ErrorCode.UPLOAD_URL_NOT_OWNED },
+    });
+    expect(r.updateProfile).not.toHaveBeenCalled();
+  });
+
+  it("saves settings fields with an owned cover image", async () => {
+    const r = repo();
+    const { service } = makeService(r);
+    const dto = {
+      coverImageUrl: "https://remotesea.io/uploads/cover/owner-1/c.png",
+      benefits: ["Remote stipend"],
+      linkedinUrl: "https://www.linkedin.com/company/acme",
+      hqAddress: "1 Raffles Place, Singapore",
+    };
+    await service.updateProfile("owner-1", dto);
+    expect(r.updateProfile).toHaveBeenCalledWith("owner-1-company", dto);
+  });
+
+  it("is OWNER only", async () => {
+    const { service } = makeService(
+      repo(),
+      {},
+      {
+        resolveMembership: jest.fn().mockResolvedValue({
+          employerId: "owner-1-company",
+          role: "RECRUITER",
+        }),
+      },
+    );
+    await expect(
+      service.updateProfile("rec-1", { hqAddress: "x" }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe("EmployerService.confirmVerification legacy route vs OTP rows (PB32)", () => {
+  it("never confirms an OTP row, even given its stored token", async () => {
+    const findEmailVerificationByToken = jest.fn();
+    const { service } = makeService({ findEmailVerificationByToken });
+    await expect(
+      service.confirmVerification({
+        token: hashVerificationCode("owner-1-company", "123456"),
+      }),
+    ).rejects.toBeInstanceOf(BadRequestApiException);
+    expect(findEmailVerificationByToken).not.toHaveBeenCalled();
   });
 });

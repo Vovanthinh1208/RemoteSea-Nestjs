@@ -31,6 +31,18 @@ export const jobWithRelationsInclude = {
 // `omit` query option isn't usable on this client's generated types (rejects it at
 // the type level even after `prisma generate`), so strip them manually wherever a
 // query built on jobWithRelationsInclude reaches an HTTP response body.
+// Billing state is internal to the employer/admin views; the public job
+// detail page has no use for it (PB48).
+export const omitBillingFields = <
+  T extends { planPaid: boolean; paidAt: Date | null },
+>({
+  planPaid: _planPaid,
+  paidAt: _paidAt,
+  ...rest
+}: T): Omit<T, "planPaid" | "paidAt"> => {
+  return rest;
+};
+
 export const omitInternalJobFields = <
   T extends { stripeSessionId: string | null; reviewNote: string | null },
 >({

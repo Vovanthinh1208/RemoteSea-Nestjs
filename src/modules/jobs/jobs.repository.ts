@@ -20,6 +20,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type PublicJob = Omit<Job, "stripeSessionId" | "reviewNote">;
 
+export type ExpiredJob = Pick<Job, "id" | "title" | "employerId">;
+
 const jobDetailInclude = {
   employer: {
     select: {
@@ -113,6 +115,16 @@ export class JobsRepository {
         employer: { user: { isPaused: false } },
         ...notExpiredCondition(),
       },
+      include: jobDetailInclude,
+    });
+    return job && omitInternalJobFields(job);
+  }
+
+  // PB48 RC1: the same detail shape for a listing in any status, for the
+  // company-member/ADMIN preview. Access is decided by JobsService.getById.
+  async findPreviewById(id: string) {
+    const job = await this.prisma.job.findUnique({
+      where: { id },
       include: jobDetailInclude,
     });
     return job && omitInternalJobFields(job);
@@ -266,12 +278,36 @@ export class JobsRepository {
   // and executing simply no longer matches — Postgres's own MVCC snapshot
   // for the UPDATE statement handles that, no application-level check
   // needed on top.
-  expireStaleJobs(): Promise<number> {
-    return this.prisma.job
-      .updateMany({
-        where: { status: "ACTIVE", expiresAt: { lt: new Date() } },
-        data: { status: "EXPIRED" },
-      })
-      .then(({ count }) => count);
+  // Returns the jobs this run actually moved to EXPIRED (PB46 AC4 emails
+  // their company's OWNER/RECRUITER members). The UPDATE ... RETURNING keeps
+  // it one statement, so a job is reported by exactly one concurrent run.
+  expireStaleJobs(): Promise<ExpiredJob[]> {
+    return this.prisma.$queryRaw<ExpiredJob[]>`
+      UPDATE "jobs"
+      SET "status" = 'EXPIRED', "updatedAt" = NOW()
+      WHERE "status" = 'ACTIVE' AND "expiresAt" < NOW()
+      RETURNING "id", "title", "employerId"
+    `;
+  }
+
+  // Who hears about an expired listing: the members who manage jobs.
+  async findJobManagerEmails(
+    employerIds: string[],
+  ): Promise<Map<string, string[]>> {
+    const members = await this.prisma.companyMember.findMany({
+      where: {
+        employerId: { in: employerIds },
+        role: { in: ["OWNER", "RECRUITER"] },
+      },
+      select: { employerId: true, user: { select: { email: true } } },
+    });
+    const byEmployer = new Map<string, string[]>();
+    for (const m of members) {
+      byEmployer.set(m.employerId, [
+        ...(byEmployer.get(m.employerId) ?? []),
+        m.user.email,
+      ]);
+    }
+    return byEmployer;
   }
 }

@@ -1,4 +1,4 @@
-export type UploadType = "avatar" | "logo" | "resume";
+export type UploadType = "avatar" | "logo" | "cover" | "resume";
 
 /**
  * True only if `url` is exactly a presigned-upload result this user could have

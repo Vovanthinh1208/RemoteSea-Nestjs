@@ -122,11 +122,14 @@ export class TeamRepository {
     return this.prisma.teamInvitation.findUnique({ where: { id } });
   }
 
-  async revokeInvitation(id: string): Promise<void> {
-    await this.prisma.teamInvitation.update({
-      where: { id },
+  // Conditional on PENDING so a revoke racing an accept can't overwrite an
+  // invitation that was just used. Returns false when nothing was pending.
+  async revokeInvitation(id: string): Promise<boolean> {
+    const { count } = await this.prisma.teamInvitation.updateMany({
+      where: { id, status: "PENDING" },
       data: { status: "REVOKED", respondedAt: new Date() },
     });
+    return count > 0;
   }
 
   findInvitationByToken(token: string) {

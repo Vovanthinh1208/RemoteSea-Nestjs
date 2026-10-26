@@ -11,12 +11,15 @@ export const RATE_LIMITS = {
 export const CONTENT_TYPES = {
   avatar: ["image/jpeg", "image/png", "image/webp"],
   logo: ["image/jpeg", "image/png", "image/webp"],
+  // PB31 company cover image — same image rules as the logo.
+  cover: ["image/jpeg", "image/png", "image/webp"],
   resume: ["application/pdf"],
 } as const;
 
 export const MAX_FILE_SIZE_BYTES = {
   avatar: 5 * 1024 * 1024,
   logo: 5 * 1024 * 1024,
+  cover: 5 * 1024 * 1024,
   resume: 10 * 1024 * 1024,
 } as const;
 

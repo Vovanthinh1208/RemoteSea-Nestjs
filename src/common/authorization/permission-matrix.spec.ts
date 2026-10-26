@@ -567,6 +567,13 @@ const expectations: ControllerExpectation[] = [
         roles: ["EMPLOYER"],
       },
       {
+        method: "verifyCode",
+        httpMethod: "POST",
+        path: "verification/verify-code",
+        guards: ["JwtAuthGuard", "RolesGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
         method: "confirmVerification",
         httpMethod: "POST",
         path: "verification/confirm",
@@ -882,7 +889,8 @@ const expectations: ControllerExpectation[] = [
         method: "getDashboard",
         httpMethod: "GET",
         path: "me/dashboard",
-        guards: ["JwtAuthGuard"],
+        guards: ["JwtAuthGuard", "RolesGuard"],
+        roles: ["TALENT"],
       },
       {
         method: "upsertProfile",
@@ -901,7 +909,8 @@ const expectations: ControllerExpectation[] = [
         method: "getProfileViewAnalytics",
         httpMethod: "GET",
         path: "me/profile-views",
-        guards: ["JwtAuthGuard"],
+        guards: ["JwtAuthGuard", "RolesGuard"],
+        roles: ["TALENT"],
       },
       {
         method: "submitVerification",

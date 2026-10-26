@@ -662,10 +662,58 @@ export class ListActivityResponseDto {
   activity!: ActivityItemDto[];
 }
 
+class ProfileViewDailyCountDto {
+  @ApiProperty({ example: "2026-10-26", description: "UTC day" })
+  date!: string;
+
+  @ApiProperty({ example: 3 })
+  views!: number;
+}
+
+class ProfileViewerCompanyDto {
+  @ApiProperty({ example: "Acme Inc" })
+  name!: string;
+
+  @ApiProperty({ example: "acme-inc" })
+  slug!: string;
+
+  @ApiProperty({ type: String, nullable: true })
+  logoUrl!: string | null;
+}
+
+class ProfileViewerDto {
+  @ApiProperty({ type: ProfileViewerCompanyDto, nullable: true })
+  company!: ProfileViewerCompanyDto | null;
+
+  @ApiProperty({ format: "date-time" })
+  viewedAt!: string;
+}
+
 export class ProfileViewAnalyticsResponseDto {
   @ApiProperty({ example: 128 })
   totalViews!: number;
 
   @ApiProperty({ example: 47 })
   uniqueViewers!: number;
+
+  @ApiProperty({ example: 3, description: "Views since 00:00 UTC today" })
+  viewsToday!: number;
+
+  @ApiProperty({ example: 12, description: "Views in the last 7 UTC days" })
+  viewsThisWeek!: number;
+
+  @ApiProperty({ example: 40, description: "Views in the last 30 UTC days" })
+  viewsThisMonth!: number;
+
+  @ApiProperty({
+    type: [ProfileViewDailyCountDto],
+    description: "Last 30 UTC days, oldest first, zero-filled",
+  })
+  daily!: ProfileViewDailyCountDto[];
+
+  @ApiProperty({
+    type: [ProfileViewerDto],
+    description: "Most recent 20 viewers (one per employer per day)",
+  })
+  recentViewers!: ProfileViewerDto[];
 }

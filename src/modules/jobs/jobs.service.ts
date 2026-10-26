@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { CACHE_MANAGER, type Cache } from "@nestjs/cache-manager";
 import type { Job } from "@prisma/client";
 import { JobsRepository, type PublicJob } from "./jobs.repository";
@@ -30,6 +30,9 @@ import {
   JOB_MANAGEMENT_ROLES,
   requireCompanyRole,
 } from "@/common/authorization/company-role.util";
+import { EmailService } from "@/common/services/email.service";
+import { omitBillingFields } from "@/common/types/job-with-relations.type";
+import { runInBackground } from "@/common/utils/background-task.util";
 
 // Facets are a single global aggregate (findFacetRows() ignores the caller's search
 // filters entirely — see job-search.util.ts), so a flat cache key is correct: every
@@ -37,14 +40,23 @@ import {
 const FACETS_CACHE_KEY = "jobs:facets";
 const FACETS_CACHE_TTL_MS = 60_000;
 
+// Postgres text columns can't hold a NUL byte — querying with one makes the
+// driver throw (a 500) instead of simply matching nothing. Such an id can
+// never belong to a job, so it is answered as "not found" up front.
+const isValidJobId = (id: string): boolean =>
+  id.length > 0 && !id.includes("\0");
+
 @Injectable()
 export class JobsService {
+  private readonly logger = new Logger(JobsService.name);
+
   constructor(
     private readonly jobsRepository: JobsRepository,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly viewCounts: ViewCountBuffer,
     private readonly employerService: EmployerService,
     private readonly companyMembershipService: CompanyMembershipService,
+    private readonly emailService: EmailService,
   ) {}
 
   async list(query: ListJobsDto) {
@@ -155,11 +167,40 @@ export class JobsService {
   }
 
   async getActiveById(id: string) {
-    const job = await this.jobsRepository.findActiveById(id);
+    const job = await this.findLiveJob(id);
     if (!job) {
       throw new NotFoundApiException("Job not found", ErrorCode.JOB_NOT_FOUND);
     }
+    return this.toPublicDetail(job);
+  }
 
+  // GET /jobs/:id. A live listing is public; any other status (DRAFT,
+  // PENDING_REVIEW, REJECTED, CLOSED, EXPIRED) is visible only to members of
+  // the owning company or an ADMIN, as a preview (PB48 RC1). Everyone else
+  // gets the same 404 as a nonexistent id, so a draft's existence never leaks.
+  async getById(id: string, viewer: AuthenticatedUser | null) {
+    const job = await this.findLiveJob(id);
+    if (job) return this.toPublicDetail(job);
+
+    if (viewer && isValidJobId(id)) {
+      const draft = await this.jobsRepository.findPreviewById(id);
+      if (draft && (await this.canPreview(viewer, draft.employerId))) {
+        // No viewCount bump — a preview isn't a public view.
+        return { ...draft, isPreview: true as const };
+      }
+    }
+    throw new NotFoundApiException("Job not found", ErrorCode.JOB_NOT_FOUND);
+  }
+
+  private findLiveJob(id: string) {
+    return isValidJobId(id)
+      ? this.jobsRepository.findActiveById(id)
+      : Promise.resolve(null);
+  }
+
+  private async toPublicDetail(
+    job: NonNullable<Awaited<ReturnType<JobsRepository["findActiveById"]>>>,
+  ) {
     // Buffered, not a per-view UPDATE — see ViewCountBuffer for the rationale.
     this.viewCounts.record(job.id);
 
@@ -167,9 +208,20 @@ export class JobsService {
       await this.employerService.getPublicResponseHours(job.employerId);
 
     return {
-      ...job,
+      ...omitBillingFields(job),
       employer: { ...job.employer, avgFirstResponseHours },
     };
+  }
+
+  private async canPreview(
+    viewer: AuthenticatedUser,
+    employerId: string,
+  ): Promise<boolean> {
+    if (viewer.role === "ADMIN") return true;
+    const membership = await this.companyMembershipService.resolveMembership(
+      viewer.id,
+    );
+    return membership?.employerId === employerId;
   }
 
   async create(userId: string, dto: CreateJobDto) {
@@ -282,6 +334,22 @@ export class JobsService {
   // one without re-deriving that same date comparison itself.
   async expireStaleJobs(): Promise<{ expired: number }> {
     const expired = await this.jobsRepository.expireStaleJobs();
-    return { expired };
+    if (expired.length > 0) {
+      // PB46 AC4: tell each company's OWNER/RECRUITER members. Best-effort —
+      // the status change above is the part that must not fail.
+      const recipients = await this.jobsRepository.findJobManagerEmails([
+        ...new Set(expired.map((job) => job.employerId)),
+      ]);
+      for (const job of expired) {
+        for (const email of recipients.get(job.employerId) ?? []) {
+          runInBackground(
+            this.emailService.sendJobExpiredEmail(email, job.title),
+            this.logger,
+            `Failed to send expiry email for job ${job.id}`,
+          );
+        }
+      }
+    }
+    return { expired: expired.length };
   }
 }

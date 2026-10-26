@@ -49,6 +49,7 @@ import {
   confirmVerificationSchema,
   type ConfirmVerificationDto,
 } from "./dto/confirm-verification.dto";
+import { verifyCodeSchema, type VerifyCodeDto } from "./dto/verify-code.dto";
 import {
   sendMessageSchema,
   type SendMessageDto,
@@ -97,6 +98,7 @@ import {
   ApiListJobApplications,
   ApiListRecentApplications,
   ApiSubmitVerification,
+  ApiVerifyCode,
   ApiUpdateApplication,
   ApiUpdateEmployerProfile,
 } from "./docs/employer.swagger";
@@ -546,6 +548,25 @@ export class EmployerController {
     );
     await this.employerService.submitVerification(user.id, body);
     return { message: "Verification email sent" };
+  }
+
+  // PB32 AC4: the OWNER enters the 6-digit code from the company inbox.
+  @ApiVerifyCode()
+  @Post("verification/verify-code")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("EMPLOYER")
+  @HttpCode(HttpStatus.OK)
+  async verifyCode(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(verifyCodeSchema)) body: VerifyCodeDto,
+  ) {
+    this.rateLimitService.enforce(
+      `employer-verify-code:${user.id}`,
+      RATE_LIMITS.VERIFY_CODE.limit,
+      RATE_LIMITS.VERIFY_CODE.windowMs,
+    );
+    await this.employerService.verifyCode(user.id, body);
+    return { message: "Company email verified" };
   }
 
   // Unauthenticated by design — the token in the body is itself the proof,

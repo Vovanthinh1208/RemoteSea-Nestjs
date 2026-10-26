@@ -5,6 +5,7 @@ export const RATE_LIMITS = {
   UPDATE_PROFILE: { limit: 20, windowMs: 60_000 },
   UPDATE_APPLICATION: { limit: 30, windowMs: 60_000 },
   SUBMIT_VERIFICATION: { limit: 5, windowMs: 60_000 },
+  VERIFY_CODE: { limit: 10, windowMs: 60_000 },
   // Call-count based, like every limit above — a bulk call can carry many
   // items, so 10/min comfortably covers clearing out a backlog in a few
   // clicks while still bounding abuse.
@@ -22,9 +23,13 @@ export const RATE_LIMITS = {
 // built generic enough to outlive that widget.
 export const BULK_UPDATE_MAX_ITEMS = 50;
 
-// Longer than the password-reset token's 1h window (auth/constants.ts) — a
-// company inbox is checked less reflexively than a personal one.
-export const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+// PB32 AC3–4: a 6-digit OTP sent to the company inbox, valid for 15 minutes.
+export const VERIFICATION_OTP_TTL_MS = 15 * 60 * 1000;
+export const VERIFICATION_OTP_LENGTH = 6;
+// Wrong entries allowed per code before it is burned and a new one is needed
+// — together with VERIFY_CODE's rate limit this keeps a 10^6 code space out
+// of brute-force reach.
+export const VERIFICATION_OTP_MAX_ATTEMPTS = 5;
 
 // OFFER_ACCEPTED/OFFER_DECLINED never appear as a target anywhere in this
 // table — they're the talent's own response to an offer (see

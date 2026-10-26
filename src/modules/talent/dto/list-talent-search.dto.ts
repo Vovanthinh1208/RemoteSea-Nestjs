@@ -25,6 +25,9 @@ export const listTalentSearchSchema = paginationQuerySchema.extend({
   employmentTypes: toArray(employmentTypeSchema),
   timezoneOverlap: toArray(timezoneOverlapSchema),
   noticePeriod: toArray(noticePeriodSchema),
+  // PB29 AC2: the employer's budget — candidates whose desired salary starts
+  // above it are left out.
+  maxSalary: z.coerce.number().int().positive().max(10_000_000).optional(),
 });
 
 export type ListTalentSearchDto = z.infer<typeof listTalentSearchSchema>;
