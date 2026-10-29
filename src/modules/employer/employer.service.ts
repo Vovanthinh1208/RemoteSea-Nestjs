@@ -111,6 +111,31 @@ export class EmployerService {
     return requireCompanyRole(membership, allowed);
   }
 
+  // logoUrl was only checked with z.string().url() — any URL passed the DTO,
+  // completely bypassing the presign flow's content-type allowlist, size cap,
+  // and rate limit. Only accept a URL this user could actually have obtained
+  // from their own POST /uploads/presign call.
+  private assertOwnUpload(
+    userId: string,
+    url: string | null | undefined,
+    type: "logo" | "cover",
+  ): void {
+    if (
+      url &&
+      !isOwnedUploadUrl(
+        url,
+        this.config.get("CDN_URL", { infer: true }),
+        userId,
+        type,
+      )
+    ) {
+      throw new BadRequestApiException(
+        `${type === "logo" ? "logoUrl" : "coverImageUrl"} must be an uploaded file from this account`,
+        ErrorCode.UPLOAD_URL_NOT_OWNED,
+      );
+    }
+  }
+
   async createProfile(
     userId: string,
     dto: CreateEmployerProfileDto,
@@ -133,6 +158,8 @@ export class EmployerService {
         ErrorCode.ALREADY_COMPANY_MEMBER,
       );
     }
+
+    this.assertOwnUpload(userId, dto.logoUrl, "logo");
 
     // A company name made entirely of characters slugify can't transliterate
     // (e.g. CJK, or Vietnamese with no plain-Latin fallback) reduces to an empty
@@ -235,40 +262,9 @@ export class EmployerService {
       ErrorCode.EMPLOYER_PROFILE_NOT_FOUND,
     );
 
-    // logoUrl was only checked with z.string().url() — any URL passed the DTO,
-    // completely bypassing the presign flow's content-type allowlist, size cap,
-    // and rate limit. Only accept a URL this user could actually have obtained
-    // from their own POST /uploads/presign call.
-    if (
-      dto.logoUrl &&
-      !isOwnedUploadUrl(
-        dto.logoUrl,
-        this.config.get("CDN_URL", { infer: true }),
-        userId,
-        "logo",
-      )
-    ) {
-      throw new BadRequestApiException(
-        "logoUrl must be an uploaded file from this account",
-        ErrorCode.UPLOAD_URL_NOT_OWNED,
-      );
-    }
-
-    // Same ownership rule for the PB31 cover image as for the logo above.
-    if (
-      dto.coverImageUrl &&
-      !isOwnedUploadUrl(
-        dto.coverImageUrl,
-        this.config.get("CDN_URL", { infer: true }),
-        userId,
-        "cover",
-      )
-    ) {
-      throw new BadRequestApiException(
-        "coverImageUrl must be an uploaded file from this account",
-        ErrorCode.UPLOAD_URL_NOT_OWNED,
-      );
-    }
+    this.assertOwnUpload(userId, dto.logoUrl, "logo");
+    // Same ownership rule for the PB31 cover image as for the logo.
+    this.assertOwnUpload(userId, dto.coverImageUrl, "cover");
 
     const updated = await this.employerRepository.updateProfile(
       profile.id,

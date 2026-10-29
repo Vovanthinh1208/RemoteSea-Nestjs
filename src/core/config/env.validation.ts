@@ -114,6 +114,10 @@ const envBaseSchema = z.object({
   MAIL_PASSWORD: optionalNonEmptyString,
   MAIL_FROM: optionalNonEmptyString,
   CRON_SECRET: z.string().optional(),
+  // PB44 AC2.1: comma-separated keywords that keep a paid job out of
+  // auto-approval (it goes to PENDING_REVIEW instead). Unset = the default
+  // list in job-verification.util.ts; empty = check disabled.
+  JOB_BANNED_KEYWORDS: z.string().optional(),
   // Unset means no error tracking, not a boot failure — same convention as
   // every other optional integration here. See main.ts's Sentry.init call.
   SENTRY_DSN: z.string().optional(),

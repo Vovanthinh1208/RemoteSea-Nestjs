@@ -1394,6 +1394,62 @@ describe("EmployerService verification OTP (PB32)", () => {
 });
 
 // PB31: cover image must come from this account's own upload.
+describe("EmployerService.createProfile logo (PB30 AC3)", () => {
+  const baseDto = {
+    companyName: "Acme",
+    websiteUrl: "https://acme.example",
+    description: "Remote-first team.",
+    size: "11-50",
+    hqCountry: "Vietnam",
+  };
+  const repo = () => ({
+    findProfileByUserId: jest.fn().mockResolvedValue(null),
+    findProfileBySlug: jest.fn().mockResolvedValue(null),
+    createProfileForUser: jest
+      .fn()
+      .mockResolvedValue({ id: "p1", slug: "acme", companyName: "Acme" }),
+  });
+  const noMembership = {
+    resolveMembership: jest.fn().mockResolvedValue(null),
+  };
+
+  it("stores a logo this user uploaded during onboarding", async () => {
+    const r = repo();
+    const { service } = makeService(r, {}, noMembership);
+    const dto = {
+      ...baseDto,
+      logoUrl: "https://remotesea.io/uploads/logo/new-1/acme.png",
+    };
+    await service.createProfile("new-1", dto);
+    expect(r.createProfileForUser).toHaveBeenCalledWith("new-1", dto, "acme");
+  });
+
+  it("rejects a logo URL that isn't this user's own upload", async () => {
+    const r = repo();
+    const { service } = makeService(r, {}, noMembership);
+    await expect(
+      service.createProfile("new-1", {
+        ...baseDto,
+        logoUrl: "https://evil.example/logo.png",
+      }),
+    ).rejects.toMatchObject({
+      response: { code: ErrorCode.UPLOAD_URL_NOT_OWNED },
+    });
+    expect(r.createProfileForUser).not.toHaveBeenCalled();
+  });
+
+  it("logo stays optional", async () => {
+    const r = repo();
+    const { service } = makeService(r, {}, noMembership);
+    await service.createProfile("new-1", baseDto);
+    expect(r.createProfileForUser).toHaveBeenCalledWith(
+      "new-1",
+      baseDto,
+      "acme",
+    );
+  });
+});
+
 describe("EmployerService.updateProfile cover image (PB31)", () => {
   const repo = () => ({
     findProfileByCompanyId: jest.fn().mockResolvedValue({

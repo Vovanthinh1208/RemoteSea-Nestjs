@@ -10,7 +10,8 @@ export const RATE_LIMITS = {
 
 export const CONTENT_TYPES = {
   avatar: ["image/jpeg", "image/png", "image/webp"],
-  logo: ["image/jpeg", "image/png", "image/webp"],
+  // PB30 AC3: the company logo is PNG or JPG only.
+  logo: ["image/jpeg", "image/png"],
   // PB31 company cover image — same image rules as the logo.
   cover: ["image/jpeg", "image/png", "image/webp"],
   // PB53 AC2: PDF or Word (.docx).

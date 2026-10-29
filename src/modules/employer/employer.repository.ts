@@ -200,6 +200,7 @@ export class EmployerRepository {
       size?: string;
       hqCountry?: string;
       hqCity?: string;
+      logoUrl?: string;
     },
     slug: string,
   ): Promise<{ id: string; slug: string; companyName: string }> {

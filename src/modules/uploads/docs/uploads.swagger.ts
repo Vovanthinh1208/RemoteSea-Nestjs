@@ -35,7 +35,7 @@ export const ApiPresign = () =>
       summary: "Generate a presigned upload URL",
       description:
         "Generates a presigned S3 PUT URL (expires in 300s) plus the resulting public CDN URL, for direct client-side upload. " +
-        "`contentType` must belong to the whitelist for the given `type`: avatar/logo → image/jpeg, image/png, image/webp; resume → application/pdf. " +
+        "`contentType` must belong to the whitelist for the given `type`: avatar/cover → image/jpeg, image/png, image/webp; logo → image/jpeg, image/png; resume → application/pdf. " +
         "S3 key: uploads/{type}/{userId}/{Date.now()}-{sanitizedFilename}.",
     }),
     ApiBody({

@@ -130,7 +130,7 @@ describe("BillingService.handleWebhookEvent auto-approval", () => {
       config as never,
       jobsService as never,
     );
-    return { service, jobsService, emailService };
+    return { service, jobsService, emailService, config };
   };
 
   it("auto-approves and sends the live email for a verified employer with a complete job", async () => {
@@ -166,6 +166,23 @@ describe("BillingService.handleWebhookEvent auto-approval", () => {
     const { service, jobsService, emailService } = makeService({
       job: { ...baseJob, categories: [] },
     });
+
+    await service.handleWebhookEvent(Buffer.from(""), "sig");
+
+    expect(jobsService.approveForReview).not.toHaveBeenCalled();
+    expect(emailService.sendJobSubmittedEmail).toHaveBeenCalled();
+  });
+
+  it("leaves the job queued when its text contains a JOB_BANNED_KEYWORDS entry (PB44 AC2.1)", async () => {
+    const { service, jobsService, emailService, config } = makeService({
+      job: {
+        ...baseJob,
+        description: `Casino promo role. ${baseJob.description}`,
+      },
+    });
+    config.get.mockImplementation((key: string) =>
+      key === "JOB_BANNED_KEYWORDS" ? "casino, gambling" : "whsec_test",
+    );
 
     await service.handleWebhookEvent(Buffer.from(""), "sig");
 

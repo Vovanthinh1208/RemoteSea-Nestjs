@@ -23,7 +23,7 @@ export class PresignRequestDto {
   @ApiProperty({
     example: "application/pdf",
     description:
-      "Must belong to the whitelist for the given `type`: avatar/logo → image/jpeg, image/png, image/webp; resume → application/pdf",
+      "Must belong to the whitelist for the given `type`: avatar/cover → image/jpeg, image/png, image/webp; logo → image/jpeg, image/png; resume → application/pdf",
   })
   contentType!: string;
 

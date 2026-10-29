@@ -16,7 +16,10 @@ import { CircuitBreaker } from "@/common/utils/circuit-breaker";
 import type { EnvConfig } from "@/core/config/env.validation";
 import type { JobPayer } from "./guards/job-payer-ownership.guard";
 import { JobsService } from "@/modules/jobs/jobs.service";
-import { isEligibleForAutoApproval } from "@/modules/jobs/job-verification.util";
+import {
+  isEligibleForAutoApproval,
+  parseBannedKeywords,
+} from "@/modules/jobs/job-verification.util";
 
 // Opens after 5 consecutive failures and stays open for 30s before letting a
 // single trial through — same thresholds as EmailService's breaker. Unlike
@@ -51,6 +54,14 @@ export class BillingService {
     private readonly config: ConfigService<EnvConfig, true>,
     private readonly jobsService: JobsService,
   ) {}
+
+  // Read per call (not cached in the constructor) so it's trivially
+  // testable and follows the same ConfigService access as everything else.
+  private bannedKeywords(): string[] {
+    return parseBannedKeywords(
+      this.config.get("JOB_BANNED_KEYWORDS", { infer: true }),
+    );
+  }
 
   async createCheckoutSession(
     job: JobPayer,
@@ -152,11 +163,13 @@ export class BillingService {
         if (job) {
           const eligible = isEligibleForAutoApproval(
             {
+              title: job.title,
               description: job.description,
               salaryMin: job.salaryMin,
               categoryCount: job.categories.length,
             },
             job.employer.isVerified,
+            this.bannedKeywords(),
           );
 
           // approveForReview is itself conditioned on status === PENDING_REVIEW
@@ -216,16 +229,19 @@ export class BillingService {
     try {
       const cutoff = new Date(Date.now() - STUCK_JOB_GRACE_MS);
       const stuckJobs = await this.billingRepository.findStuckPaidJobs(cutoff);
+      const bannedKeywords = this.bannedKeywords();
 
       let approved = 0;
       for (const job of stuckJobs) {
         const eligible = isEligibleForAutoApproval(
           {
+            title: job.title,
             description: job.description,
             salaryMin: job.salaryMin,
             categoryCount: job.categories.length,
           },
           job.employer.isVerified,
+          bannedKeywords,
         );
         if (!eligible) continue;
 
