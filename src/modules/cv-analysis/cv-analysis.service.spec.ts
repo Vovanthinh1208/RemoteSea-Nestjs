@@ -24,7 +24,7 @@ const validLlmText = JSON.stringify({
   strengths: ["5 years Node.js"],
   gaps: [],
   suggestedQuestions: [],
-  recommendation: "ADVANCE",
+  recommendation: "PROCEED",
   recommendationReason: "Directly relevant experience.",
 });
 
@@ -100,11 +100,11 @@ describe("CvAnalysisService.getOrCreate", () => {
     expect(repository.create).toHaveBeenCalledWith(
       expect.objectContaining({
         applicationId: "app-1",
-        recommendation: "ADVANCE",
+        recommendation: "PROCEED",
       }),
     );
     expect(repository.replace).not.toHaveBeenCalled();
-    expect(result.recommendation).toBe("ADVANCE");
+    expect(result.recommendation).toBe("PROCEED");
   });
 
   it("throws BadRequest without calling the AI when the applicant has no resume", async () => {

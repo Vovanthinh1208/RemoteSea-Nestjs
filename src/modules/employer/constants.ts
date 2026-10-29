@@ -53,6 +53,16 @@ export const ALLOWED_TRANSITIONS: Record<
   WITHDRAWN: [],
 };
 
+// PB59 BR1: applications already at an end state are skipped (reported as
+// `skipped`, not as failures) by a bulk status change. OFFER_ACCEPTED is the
+// backlog's "HIRED".
+export const BULK_SKIPPED_STATUSES: ReadonlySet<ApplicationStatus> = new Set([
+  "WITHDRAWN",
+  "OFFER_ACCEPTED",
+  "OFFER_DECLINED",
+  "REJECTED",
+]);
+
 // Human-readable status wording for the talent-facing status-changed
 // notification — no existing formatter to reuse (frontend has its own
 // display-label mapping, but this notification's body is baked in at

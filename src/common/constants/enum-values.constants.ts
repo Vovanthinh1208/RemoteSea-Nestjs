@@ -24,7 +24,11 @@ export const JOB_MODERATION_RISK_LEVEL_VALUES = [
   "MEDIUM",
   "HIGH",
 ] as const;
-export const CV_RECOMMENDATION_VALUES = ["ADVANCE", "HOLD", "REJECT"] as const;
+export const CV_RECOMMENDATION_VALUES = [
+  "PROCEED",
+  "REVIEW",
+  "REJECT",
+] as const;
 export const APPLICATION_STATUS_VALUES = [
   "PENDING",
   "REVIEWING",

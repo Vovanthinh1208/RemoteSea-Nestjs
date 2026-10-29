@@ -12,6 +12,11 @@ export const scorecardListItemSelect = {
   authorId: true,
   author: { select: { name: true } },
   recommendation: true,
+  technicalRating: true,
+  communicationRating: true,
+  cultureFitRating: true,
+  strengths: true,
+  improvements: true,
   note: true,
   createdAt: true,
 } satisfies Prisma.InterviewScorecardSelect;
@@ -24,5 +29,20 @@ export type CreateScorecardInput = {
   applicationId: string;
   authorId: string;
   recommendation: ScorecardRecommendation;
+  technicalRating: number;
+  communicationRating: number;
+  cultureFitRating: number;
+  strengths: string;
+  improvements: string;
   note?: string;
+};
+
+// PB65 AC2: averages per criterion plus the overall mean of all three.
+// null when no scorecard carries that rating (only possible for rows written
+// before the per-criterion fields existed).
+export type ScorecardAverages = {
+  technical: number | null;
+  communication: number | null;
+  cultureFit: number | null;
+  overall: number | null;
 };

@@ -944,6 +944,13 @@ const expectations: ControllerExpectation[] = [
     controller: ReviewsController,
     basePath: "reviews",
     routes: [
+      // PB70 AC2: GET /reviews/eligibility?partnerId=…
+      {
+        method: "getPartnerEligibility",
+        httpMethod: "GET",
+        path: "eligibility",
+        guards: ["JwtAuthGuard"],
+      },
       {
         method: "getEligibility",
         httpMethod: "GET",

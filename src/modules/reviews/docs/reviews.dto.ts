@@ -15,6 +15,19 @@ export class ReviewEligibilityResponseDto {
   eligible!: boolean;
 
   @ApiPropertyOptional({
+    nullable: true,
+    enum: [
+      "NO_INTERVIEW",
+      "INTERVIEW_NOT_CONFIRMED",
+      "INTERVIEW_NOT_YET_HELD",
+      "ALREADY_REVIEWED",
+    ],
+    example: null,
+    description: "Why eligible is false (PB70 AC3.2)",
+  })
+  reason!: string | null;
+
+  @ApiPropertyOptional({
     enum: DIRECTION_VALUES,
     nullable: true,
     example: "TALENT_TO_EMPLOYER",
@@ -61,11 +74,15 @@ export class CreateReviewRequestDto {
   })
   reliabilityRating?: number;
 
-  @ApiPropertyOptional({
+  @ApiProperty({ maxLength: 120, example: "Smooth, well-organised process" })
+  title!: string;
+
+  @ApiProperty({
+    minLength: 20,
     maxLength: 2000,
     example: "Great communication throughout the interview process.",
   })
-  comment?: string;
+  comment!: string;
 }
 
 export class ReviewResponseDto {
@@ -103,6 +120,9 @@ export class ReviewResponseDto {
     example: null,
   })
   reliabilityRating!: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: "Smooth process" })
+  title!: string | null;
 
   @ApiPropertyOptional({
     nullable: true,
@@ -154,6 +174,9 @@ export class ReviewListItemDto {
   @ApiPropertyOptional({ nullable: true, example: null })
   reliabilityRating!: number | null;
 
+  @ApiPropertyOptional({ nullable: true, example: "Reliable candidate" })
+  title!: string | null;
+
   @ApiPropertyOptional({
     nullable: true,
     example: "Very professional and reliable throughout the process.",
@@ -201,6 +224,12 @@ export class ListUserReviewsResponseDto {
 
   @ApiProperty({ example: 24 })
   totalReviews!: number;
+
+  @ApiProperty({
+    description: "Count of published reviews per star rating (PB72 AC2)",
+    example: { 1: 0, 2: 1, 3: 2, 4: 6, 5: 15 },
+  })
+  distribution!: Record<"1" | "2" | "3" | "4" | "5", number>;
 
   @ApiProperty({ type: RatingBreakdownDto })
   ratings!: RatingBreakdownDto;

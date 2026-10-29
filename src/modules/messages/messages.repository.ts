@@ -38,6 +38,31 @@ export class MessagesRepository {
     return messages.reverse();
   }
 
+  // PB68 AC6: who to e-mail about a new message. Talent recipients follow
+  // their employerMessages preference (no row = schema default, on); the
+  // company side has no message-mail preference and is always e-mailed.
+  async findRecipientContact(
+    userId: string,
+    isTalentRecipient: boolean,
+  ): Promise<{ email: string; name: string | null } | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        email: true,
+        name: true,
+        notificationPreference: { select: { employerMessages: true } },
+      },
+    });
+    if (!user) return null;
+    if (
+      isTalentRecipient &&
+      !(user.notificationPreference?.employerMessages ?? true)
+    ) {
+      return null;
+    }
+    return { email: user.email, name: user.name };
+  }
+
   /** Self-contained narrow query (not a cross-import of ApplicationsRepository)
    * — same reasoning as InvitationsRepository.employerMessagesEnabled. Backs
    * TalentApplicationOwnershipGuard. */

@@ -6,12 +6,14 @@ export const ListCategoriesResponseExample = [
     name: "Engineering",
     slug: "engineering",
     icon: "code",
+    jobCount: 12,
   },
   {
     id: "clcat2a2b3c4d5e6f7g8h9i0",
     name: "Design",
     slug: "design",
     icon: "palette",
+    jobCount: 4,
   },
 ];
 

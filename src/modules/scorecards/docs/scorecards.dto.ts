@@ -9,18 +9,34 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
  */
 
 const SCORECARD_RECOMMENDATION_VALUES = [
-  "STRONG_YES",
-  "YES",
-  "NO",
-  "STRONG_NO",
+  "STRONGLY_RECOMMEND",
+  "RECOMMEND",
+  "NEUTRAL",
+  "NOT_RECOMMEND",
+  "STRONGLY_NOT_RECOMMEND",
 ] as const;
 
 export class CreateScorecardRequestDto {
   @ApiProperty({
     enum: SCORECARD_RECOMMENDATION_VALUES,
-    example: "STRONG_YES",
+    example: "STRONGLY_RECOMMEND",
   })
   recommendation!: (typeof SCORECARD_RECOMMENDATION_VALUES)[number];
+
+  @ApiProperty({ minimum: 1, maximum: 5, example: 4 })
+  technicalRating!: number;
+
+  @ApiProperty({ minimum: 1, maximum: 5, example: 3 })
+  communicationRating!: number;
+
+  @ApiProperty({ minimum: 1, maximum: 5, example: 5 })
+  cultureFitRating!: number;
+
+  @ApiProperty({ example: "Strong system design; clear trade-off reasoning." })
+  strengths!: string;
+
+  @ApiProperty({ example: "Probe testing strategy in the next round." })
+  improvements!: string;
 
   @ApiPropertyOptional({
     example: "Sharp on system design, weak on the behavioral round.",
@@ -45,9 +61,24 @@ export class ScorecardResponseDto {
 
   @ApiProperty({
     enum: SCORECARD_RECOMMENDATION_VALUES,
-    example: "STRONG_YES",
+    example: "STRONGLY_RECOMMEND",
   })
   recommendation!: (typeof SCORECARD_RECOMMENDATION_VALUES)[number];
+
+  @ApiPropertyOptional({ nullable: true, example: 4 })
+  technicalRating!: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 3 })
+  communicationRating!: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 5 })
+  cultureFitRating!: number | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  strengths!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  improvements!: string | null;
 
   @ApiPropertyOptional({
     nullable: true,
@@ -59,12 +90,43 @@ export class ScorecardResponseDto {
   createdAt!: string;
 }
 
+export class ScorecardAveragesDto {
+  @ApiPropertyOptional({ nullable: true, example: 4 })
+  technical!: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 3.5 })
+  communication!: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 4.5 })
+  cultureFit!: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 4 })
+  overall!: number | null;
+}
+
 export class ScorecardSummaryDto {
   @ApiProperty({ example: 4 })
   total!: number;
 
   @ApiProperty({ example: 3 })
   hireCount!: number;
+
+  @ApiProperty({ type: ScorecardAveragesDto })
+  averages!: ScorecardAveragesDto;
+
+  @ApiProperty({
+    example: {
+      STRONGLY_RECOMMEND: 1,
+      RECOMMEND: 1,
+      NEUTRAL: 0,
+      NOT_RECOMMEND: 0,
+      STRONGLY_NOT_RECOMMEND: 0,
+    },
+  })
+  recommendations!: Record<
+    (typeof SCORECARD_RECOMMENDATION_VALUES)[number],
+    number
+  >;
 }
 
 export class ScorecardListResponseDto {

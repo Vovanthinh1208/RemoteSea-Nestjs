@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { applicationStatusSchema } from "@/common/dto/enums.schema";
 import { BULK_UPDATE_MAX_ITEMS } from "../constants";
+import { rejectionReasonSchema } from "./update-application.dto";
 
 export const bulkUpdateApplicationsSchema = z.object({
   ids: z.array(z.string().min(1)).min(1).max(BULK_UPDATE_MAX_ITEMS),
@@ -9,6 +10,8 @@ export const bulkUpdateApplicationsSchema = z.object({
   // cap as the single-application update; there's no per-item note in a
   // bulk request.
   notes: z.string().max(2000).optional(),
+  // PB58 BR2 for a bulk rejection — one shared feedback text for the batch.
+  reason: rejectionReasonSchema.optional(),
 });
 
 export type BulkUpdateApplicationsDto = z.infer<

@@ -6,11 +6,10 @@ export const RATE_LIMITS = {
   REGENERATE: { limit: 1, windowMs: 30_000 },
 } as const;
 
-// Resumes are capped at upload time (see uploads/constants.ts
-// MAX_FILE_SIZE_BYTES.resume), but that cap is generous for a PDF viewer —
-// this is a second, tighter cap on what actually gets sent to the LLM, so
-// one outlier upload can't blow the per-request token budget/cost.
-export const MAX_RESUME_BYTES = 5 * 1024 * 1024;
+// Same 10 MB cap as upload time (uploads/constants.ts MAX_FILE_SIZE_BYTES.resume,
+// PB53 BR2) — a CV the talent was allowed to submit must also be analysable
+// (PB66). Token cost is bounded separately by MAX_RESUME_TEXT_CHARS.
+export const MAX_RESUME_BYTES = 10 * 1024 * 1024;
 export const MAX_RESUME_TEXT_CHARS = 15_000;
 
 // No model constant here anymore — which model answers depends on which

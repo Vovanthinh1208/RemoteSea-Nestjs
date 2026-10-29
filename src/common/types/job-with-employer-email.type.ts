@@ -1,7 +1,7 @@
 import type { Job, Prisma } from "@prisma/client";
 
 export type JobWithEmployerEmail = Job & {
-  employer: { user: { email: string } };
+  employer: { userId: string; user: { email: string } };
 };
 
 export const jobWithEmployerEmailInclude = {

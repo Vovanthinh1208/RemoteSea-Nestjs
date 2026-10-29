@@ -33,6 +33,27 @@ const safeHeader = (value: string): string =>
 const wrapHtml = (title: string, content: string): string =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title></head><body style="margin:0;background:#f4f6f8;color:#17212b;font-family:Arial,sans-serif"><div style="max-width:600px;margin:32px auto;padding:32px;background:#fff;border-radius:12px"><p style="margin:0 0 24px;color:#087f8c;font-size:20px;font-weight:bold">RemoteSEA</p>${content}<p style="margin-top:32px;color:#65717d;font-size:13px">RemoteSEA — remote work, worldwide.</p></div></body></html>`;
 
+export type EmailAttachment = {
+  filename: string;
+  content: string;
+  contentType: string;
+};
+
+// Interview e-mails print times in UTC with an explicit label — participants
+// are frequently in different countries, and the attached .ics (PB61) carries
+// the exact instant for each calendar app to localize.
+const formatUtc = (date: Date): string =>
+  `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+
+export type InterviewEmailDetails = {
+  title: string;
+  jobTitle: string;
+  companyName: string;
+  durationMinutes: number;
+  platform: string | null;
+  meetingUrl: string | null;
+};
+
 /**
  * Shared SMTP transport for all email call sites. SMTP is optional in local
  * and automated test environments; once MAIL_HOST is configured, sends use
@@ -94,6 +115,7 @@ export class EmailService {
     to: string,
     subject: string,
     content: string,
+    attachments?: EmailAttachment[],
   ): Promise<void> {
     if (!this.transporter) return;
 
@@ -116,6 +138,7 @@ export class EmailService {
         subject: safeSubject,
         html,
         text: toPlainText(content),
+        ...(attachments?.length && { attachments }),
       });
       this.breaker.onSuccess();
     } catch (error) {
@@ -268,11 +291,86 @@ export class EmailService {
     talentName: string,
     jobTitle: string,
     statusLabel: string,
+    // PB58 BR2: optional feedback the employer chose to share on rejection.
+    feedback?: string,
   ): Promise<void> {
+    const feedbackHtml = feedback
+      ? `<p>Feedback from the employer:</p><blockquote style="margin:0;padding:8px 12px;border-left:3px solid #d0d7de">${escapeHtml(feedback)}</blockquote>`
+      : "";
     await this.send(
       to,
       `Your application for ${safeHeader(jobTitle)} is now ${safeHeader(statusLabel)}`,
-      `<p>Hi ${escapeHtml(talentName)},</p><p>Your application for "${escapeHtml(jobTitle)}" is now <strong>${escapeHtml(statusLabel)}</strong>. Log in to see the full timeline.</p>`,
+      `<p>Hi ${escapeHtml(talentName)},</p><p>Your application for "${escapeHtml(jobTitle)}" is now <strong>${escapeHtml(statusLabel)}</strong>. Log in to see the full timeline.</p>${feedbackHtml}`,
+    );
+  }
+
+  // PB60 AC5: the talent is told which times were proposed.
+  async sendInterviewProposedEmail(
+    to: string,
+    talentName: string,
+    details: InterviewEmailDetails,
+    proposedSlots: Date[],
+    applicationId: string,
+  ): Promise<void> {
+    const slots = proposedSlots
+      .map((slot) => `<li>${escapeHtml(formatUtc(slot))}</li>`)
+      .join("");
+    await this.send(
+      to,
+      `${safeHeader(details.companyName)} proposed interview times`,
+      `<p>Hi ${escapeHtml(talentName)},</p><p>${escapeHtml(details.companyName)} proposed times for "${escapeHtml(details.title)}" (${details.durationMinutes} min) for "${escapeHtml(details.jobTitle)}"${details.platform ? ` on ${escapeHtml(details.platform)}` : ""}:</p><ul>${slots}</ul><p><a href="${this.buildFrontendUrl(`/applications/${applicationId}/interview`)}">Choose a time</a></p>`,
+    );
+  }
+
+  // PB61 AC4: confirmation with the calendar file, sent to each participant.
+  async sendInterviewConfirmedEmail(
+    to: string,
+    recipientName: string,
+    details: InterviewEmailDetails,
+    confirmedSlot: Date,
+    ics: string,
+  ): Promise<void> {
+    await this.send(
+      to,
+      `Interview confirmed: ${safeHeader(details.title)}`,
+      `<p>Hi ${escapeHtml(recipientName)},</p><p>The interview "${escapeHtml(details.title)}" for "${escapeHtml(details.jobTitle)}" at ${escapeHtml(details.companyName)} is confirmed for <strong>${escapeHtml(formatUtc(confirmedSlot))}</strong> (${details.durationMinutes} min).</p>${details.meetingUrl ? `<p>Meeting link: <a href="${escapeHtml(details.meetingUrl)}">${escapeHtml(details.meetingUrl)}</a></p>` : ""}<p>The attached calendar.ics adds it to Google Calendar, Outlook or Apple Calendar.</p>`,
+      [
+        {
+          filename: "calendar.ics",
+          content: ics,
+          contentType: "text/calendar; charset=utf-8; method=PUBLISH",
+        },
+      ],
+    );
+  }
+
+  // PB62 AC4: cancellation notice including the employer's reason.
+  async sendInterviewCancelledEmail(
+    to: string,
+    talentName: string,
+    details: InterviewEmailDetails,
+    reason: string,
+  ): Promise<void> {
+    await this.send(
+      to,
+      `Interview cancelled: ${safeHeader(details.title)}`,
+      `<p>Hi ${escapeHtml(talentName)},</p><p>${escapeHtml(details.companyName)} cancelled the interview "${escapeHtml(details.title)}" for "${escapeHtml(details.jobTitle)}".</p><p>Reason:</p><blockquote style="margin:0;padding:8px 12px;border-left:3px solid #d0d7de">${escapeHtml(reason)}</blockquote>`,
+    );
+  }
+
+  // PB68 AC6: the other party is e-mailed about a new message.
+  async sendNewMessageEmail(
+    to: string,
+    recipientName: string,
+    senderLabel: string,
+    jobTitle: string,
+    preview: string,
+    applicationId: string,
+  ): Promise<void> {
+    await this.send(
+      to,
+      `New message from ${safeHeader(senderLabel)} about ${safeHeader(jobTitle)}`,
+      `<p>Hi ${escapeHtml(recipientName)},</p><p>${escapeHtml(senderLabel)} sent you a message about "${escapeHtml(jobTitle)}":</p><blockquote style="margin:0;padding:8px 12px;border-left:3px solid #d0d7de">${escapeHtml(preview)}</blockquote><p><a href="${this.buildFrontendUrl(`/applications/${applicationId}/messages`)}">Reply</a></p>`,
     );
   }
 

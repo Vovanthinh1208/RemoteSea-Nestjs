@@ -365,6 +365,20 @@ export class EmployerDashboardResponseDto {
   funnel!: object | null;
 }
 
+class OfferDetailsRequestDto {
+  @ApiProperty({ maxLength: 120, example: "USD 4,000 / month" })
+  salary!: string;
+
+  @ApiProperty({ maxLength: 2000, example: "Remote stipend, 20 days PTO" })
+  benefits!: string;
+
+  @ApiProperty({
+    example: "2026-12-01",
+    description: "YYYY-MM-DD, not in the past",
+  })
+  startDate!: string;
+}
+
 export class UpdateApplicationRequestDto {
   @ApiProperty({ enum: APPLICATION_STATUS_VALUES, example: "REVIEWING" })
   status!: (typeof APPLICATION_STATUS_VALUES)[number];
@@ -372,8 +386,24 @@ export class UpdateApplicationRequestDto {
   @ApiPropertyOptional({
     maxLength: 2000,
     example: "Strong candidate, moving to interview.",
+    description: "Private company note — never shown to the talent",
   })
   notes?: string;
+
+  @ApiPropertyOptional({
+    maxLength: 1000,
+    example: "We went with a candidate with more Go experience.",
+    description:
+      "Only with status REJECTED — feedback shown to the talent (PB58)",
+  })
+  reason?: string;
+
+  @ApiPropertyOptional({
+    type: OfferDetailsRequestDto,
+    description:
+      "Required when moving to OFFERED (400 OFFER_DETAILS_REQUIRED otherwise) — shown to the talent (PB56)",
+  })
+  offer?: OfferDetailsRequestDto;
 }
 
 export class ApplicationResponseDto {
@@ -435,6 +465,13 @@ export class BulkUpdateApplicationsRequestDto {
     description: "One shared note applied to every application in the batch",
   })
   notes?: string;
+
+  @ApiPropertyOptional({
+    maxLength: 1000,
+    description:
+      "Only with status REJECTED — one shared feedback text shown to each talent. OFFERED is not allowed in bulk (offers need per-candidate details).",
+  })
+  reason?: string;
 }
 
 class BulkUpdateFailureDto {
@@ -451,6 +488,14 @@ class BulkUpdateFailureDto {
 export class BulkUpdateApplicationsResponseDto {
   @ApiProperty({ type: [String], example: ["clapp1a2b3c4d5e6f7g8h9i0"] })
   updated!: string[];
+
+  @ApiProperty({
+    type: [String],
+    example: [],
+    description:
+      "Already WITHDRAWN / OFFER_ACCEPTED (hired) / OFFER_DECLINED / REJECTED — skipped (PB59)",
+  })
+  skipped!: string[];
 
   @ApiProperty({ type: [BulkUpdateFailureDto] })
   failed!: BulkUpdateFailureDto[];

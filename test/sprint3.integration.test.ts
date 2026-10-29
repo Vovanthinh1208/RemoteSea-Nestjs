@@ -37,10 +37,26 @@ const aiResult = {
   strengths: ["React"],
   gaps: ["Redis"],
   suggestedQuestions: [],
-  recommendation: "ADVANCE",
+  recommendation: "PROCEED",
   recommendationReason: "Relevant skills.",
 };
 const runId = randomUUID().slice(0, 8);
+// 2026-10-28: payloads follow the implemented contract — PB60 AC2 (title,
+// platform, meeting link), PB64 AC2–4 (criteria field names) and PB71 AC3
+// (title + >= 20-char comment). Assertions are unchanged.
+const proposal = {
+  title: "Vòng 1 - Kỹ thuật",
+  platform: "GOOGLE_MEET",
+  meetingUrl: "https://meet.google.com/abc-defg-hij",
+};
+const scorecard = {
+  technicalRating: 5,
+  communicationRating: 4,
+  cultureFitRating: 3,
+  strengths: "Clear reasoning",
+  improvements: "More examples",
+  recommendation: "RECOMMEND",
+};
 
 it.each(["OWNER", "RECRUITER", "HIRING_MANAGER", "INTERVIEWER"] as const)(
   "S3-PB57-TC04 company role %s has only its allowed applicant-list access [BR1]",
@@ -491,6 +507,7 @@ it.each(["ACCEPTED", "DECLINED"])(
     });
     await http("patch", `${talentPath()}/offer-response`, f.talentUser, {
       response,
+      ...(response === "DECLINED" && { reason: "Accepted another offer" }),
     }).expect(200);
     const stored = await db.application.findUniqueOrThrow({
       where: { id: f.application.id },
@@ -498,6 +515,7 @@ it.each(["ACCEPTED", "DECLINED"])(
     expect(stored.status).toBe(`OFFER_${response}`);
     await http("patch", `${talentPath()}/offer-response`, f.talentUser, {
       response,
+      ...(response === "DECLINED" && { reason: "Accepted another offer" }),
     }).expect(400);
     expect(
       await db.applicationStatusEvent.count({
@@ -629,7 +647,9 @@ it("S3-PB59-TC01 bulk updates valid own items and isolates terminal/foreign/miss
     status: "REVIEWING",
   }).expect(200);
   expect(res.body.updated).toEqual([f.application.id]);
-  expect(res.body.failed).toHaveLength(3);
+  // BR1: the WITHDRAWN item is skipped; foreign + missing are failures.
+  expect(res.body.skipped).toEqual([withdrawn.id]);
+  expect(res.body.failed).toHaveLength(2);
   expect(
     (
       await db.application.findUniqueOrThrow({
@@ -663,6 +683,7 @@ it("S3-PB60-TC01 one future slot persists a proposal [AC3,AC4,AC5]", async () =>
   });
   const slot = future().toISOString();
   await http("post", `${employerPath()}/interview`, f.owner, {
+    ...proposal,
     durationMinutes: 30,
     proposedSlots: [slot],
   }).expect(201);
@@ -680,6 +701,7 @@ it.each([0, 3])(
       data: { status: "INTERVIEW" },
     });
     await http("post", `${employerPath()}/interview`, f.owner, {
+      ...proposal,
       durationMinutes: 30,
       proposedSlots: Array.from({ length: count }, (_, i) =>
         new Date(future().getTime() + i * 60000).toISOString(),
@@ -696,6 +718,7 @@ it("S3-PB60-TC03 cannot assign interviewer from another company [AC2,AUTH]", asy
     data: { status: "INTERVIEW" },
   });
   await http("post", `${employerPath()}/interview`, f.owner, {
+    ...proposal,
     durationMinutes: 30,
     proposedSlots: [future().toISOString()],
     interviewerId: f.otherOwner.id,
@@ -778,22 +801,17 @@ it("S3-PB63-TC02 calendar is forbidden before confirmation and to another talent
 it("S3-PB64-TC01 documented scorecard ratings and recommendation are accepted [AC2,AC3,AC4,AC5,AC6]", async () => {
   await interview("CONFIRMED", new Date(Date.now() - 60000));
   await http("post", `${employerPath()}/scorecards`, f.owner, {
-    technical: 5,
-    communication: 4,
-    culture: 3,
-    strengths: "Clear reasoning",
-    improvements: "More examples",
-    recommendation: "RECOMMEND",
+    ...scorecard,
   }).expect(201);
 });
 it("S3-PB64-TC02 scorecards are private and duplicates cannot persist [BR1,BR2]", async () => {
   await interview("CONFIRMED", new Date(Date.now() - 60000));
   await http("post", `${employerPath()}/scorecards`, f.owner, {
-    recommendation: "YES",
+    ...scorecard,
     note: "Strong reasoning",
   }).expect(201);
   await http("post", `${employerPath()}/scorecards`, f.owner, {
-    recommendation: "YES",
+    ...scorecard,
   }).expect(409);
   await http("get", `${employerPath()}/scorecards`, f.talentUser).expect(403);
   expect(
@@ -807,7 +825,10 @@ it("S3-PB65-TC01 aggregate contains numeric criterion averages [AC2,AC3]", async
     data: {
       applicationId: f.application.id,
       authorId: f.owner.id,
-      recommendation: "YES",
+      recommendation: "RECOMMEND",
+      technicalRating: 4,
+      communicationRating: 3,
+      cultureFitRating: 5,
       note: "Strong",
     },
   });
@@ -971,16 +992,19 @@ it("S3-PB71-TC01 both directions persist one review each and update averages [AC
   await http("post", "/reviews", f.talentUser, {
     applicationId: f.application.id,
     overallRating: 4,
+    title: "Professional",
     comment: "A thoughtful and professional interview.",
   }).expect(201);
   await http("post", "/reviews", f.owner, {
     applicationId: f.application.id,
     overallRating: 5,
+    title: "Clear communicator",
     comment: "The candidate communicated very clearly.",
   }).expect(201);
   await http("post", "/reviews", f.talentUser, {
     applicationId: f.application.id,
     overallRating: 3,
+    title: "Second review",
     comment: "Another review of the same interaction.",
   }).expect(409);
   expect(
@@ -996,6 +1020,7 @@ it("S3-PB71-TC02 detailed comment shorter than 20 characters is rejected [AC3]",
   await http("post", "/reviews", f.talentUser, {
     applicationId: f.application.id,
     overallRating: 5,
+    title: "Short",
     comment: "ok",
   }).expect(400);
   expect(
@@ -1006,6 +1031,7 @@ it("S3-PB71-TC03 absent confirmed interview cannot create a review [PRE]", async
   await http("post", "/reviews", f.talentUser, {
     applicationId: f.application.id,
     overallRating: 5,
+    title: "Too early",
     comment: "No confirmed interview has happened yet.",
   }).expect(403);
   expect(
@@ -1106,4 +1132,335 @@ it("S3-PB74-TC01 unread count decreases on own read, rejects other user's mark-r
   ).toBeNull();
   await http("patch", `/notifications/${n.id}/read`).expect(200);
   await http("get", "/notifications/unread-count").expect(200, { count: 0 });
+});
+
+// ─── Round 2 (2026-10-28): behaviour added for the open Sprint 3 gaps ───────
+// Same real Nest app + PostgreSQL; e-mail is the recorded stub above.
+const waitFor = async (check: () => Promise<boolean> | boolean) => {
+  for (let n = 0; n < 50; n++) {
+    if (await check()) return;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+};
+const emailMock = (name: string) => email[name] as jest.Mock;
+
+it("S3R2-PB53-TC01 contact phone is stored and shown to both sides [AC2]", async () => {
+  await db.application.delete({ where: { id: f.application.id } });
+  const res = await http("post", "/applications", f.talentUser, {
+    jobId: f.job.id,
+    contactPhone: "+84 912 345 678",
+  }).expect(201);
+  expect(res.body.contactPhone).toBe("+84 912 345 678");
+  await http("post", "/applications", f.otherTalent, {
+    jobId: f.job.id,
+    contactPhone: "not a phone",
+  }).expect(400);
+  const list = await http(
+    "get",
+    `/employer/jobs/${f.job.id}/applications`,
+    f.owner,
+  ).expect(200);
+  expect(list.body.applications[0].contactPhone).toBe("+84 912 345 678");
+});
+it("S3R2-PB73-TC01 new application notification is typed APPLICATION_RECEIVED and links to the applicant [AC1,AC4]", async () => {
+  await db.application.delete({ where: { id: f.application.id } });
+  const res = await http("post", "/applications", f.talentUser, {
+    jobId: f.job.id,
+  }).expect(201);
+  await waitFor(
+    async () =>
+      (await db.notification.count({ where: { userId: f.owner.id } })) > 0,
+  );
+  const n = await db.notification.findFirstOrThrow({
+    where: { userId: f.owner.id },
+  });
+  expect(n.type).toBe("APPLICATION_RECEIVED");
+  expect(n.link).toBe(`/employer-dashboard/applications/${res.body.id}`);
+});
+it("S3R2-PB56-TC01 offer requires details, talent sees them, decline reason persists [AC1,AC2,AC4]", async () => {
+  await db.application.update({
+    where: { id: f.application.id },
+    data: { status: "INTERVIEW" },
+  });
+  await http("patch", employerPath(), f.owner, { status: "OFFERED" }).expect(
+    400,
+  );
+  const start = new Date(Date.now() + 7 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  await http("patch", employerPath(), f.owner, {
+    status: "OFFERED",
+    offer: {
+      salary: "USD 4,000 / month",
+      benefits: "Remote stipend",
+      startDate: start,
+    },
+  }).expect(200);
+  const own = await http("get", talentPath()).expect(200);
+  expect(own.body).toMatchObject({
+    status: "OFFERED",
+    offerSalary: "USD 4,000 / month",
+    offerBenefits: "Remote stipend",
+  });
+  expect(own.body.offerStartDate.slice(0, 10)).toBe(start);
+  await http("patch", `${talentPath()}/offer-response`, f.talentUser, {
+    response: "DECLINED",
+    reason: "Relocation is not possible",
+  }).expect(200);
+  const stored = await db.application.findUniqueOrThrow({
+    where: { id: f.application.id },
+  });
+  expect(stored.offerDeclineReason).toBe("Relocation is not possible");
+});
+it("S3R2-PB57-TC01 name search matches case-insensitively and cards carry the AI score [AC3,AC4]", async () => {
+  await db.cvAnalysis.create({
+    data: {
+      applicationId: f.application.id,
+      fitScore: 77,
+      summary: "s",
+      model: "fixture-model",
+    },
+  });
+  const res = await http(
+    "get",
+    `/employer/jobs/${f.job.id}/applications?q=candidate%20al`,
+    f.owner,
+  ).expect(200);
+  expect(res.body.applications.map((a: { id: string }) => a.id)).toEqual([
+    f.application.id,
+  ]);
+  expect(res.body.applications[0].cvAnalysis).toEqual({ fitScore: 77 });
+  expect(res.body.applications[0].talent.user.name).toBe("Candidate Alpha");
+});
+it("S3R2-PB58-TC01 rejection feedback is stored and visible to the talent, never the private notes [BR2]", async () => {
+  await http("patch", employerPath(), f.owner, {
+    status: "REJECTED",
+    reason: "Looking for more Go experience",
+  }).expect(200);
+  const own = await http("get", talentPath()).expect(200);
+  expect(own.body.rejectionReason).toBe("Looking for more Go experience");
+  expect(own.body).not.toHaveProperty("notes");
+});
+it("S3R2-PB60-TC01 proposal stores title/platform/link and e-mails the talent [AC2,AC5]", async () => {
+  await db.application.update({
+    where: { id: f.application.id },
+    data: { status: "INTERVIEW" },
+  });
+  emailMock("sendInterviewProposedEmail").mockClear();
+  await http("post", `${employerPath()}/interview`, f.owner, {
+    durationMinutes: 30,
+    proposedSlots: [future().toISOString()],
+  }).expect(400);
+  await http("post", `${employerPath()}/interview`, f.owner, {
+    ...proposal,
+    durationMinutes: 30,
+    proposedSlots: [future().toISOString()],
+  }).expect(201);
+  const row = await db.interview.findUniqueOrThrow({
+    where: { applicationId: f.application.id },
+  });
+  expect(row).toMatchObject({
+    title: proposal.title,
+    platform: "GOOGLE_MEET",
+    meetingUrl: proposal.meetingUrl,
+  });
+  await waitFor(
+    () => emailMock("sendInterviewProposedEmail").mock.calls.length > 0,
+  );
+  expect(emailMock("sendInterviewProposedEmail").mock.calls[0]![0]).toBe(
+    f.talentUser.email,
+  );
+});
+it("S3R2-PB61-TC01 confirmation e-mails calendar.ics to both sides [AC4]", async () => {
+  const i = await interview();
+  emailMock("sendInterviewConfirmedEmail").mockClear();
+  await http("patch", `${talentPath()}/interview/confirm`, f.talentUser, {
+    slot: i.proposedSlots[0]!.toISOString(),
+  }).expect(200);
+  await waitFor(
+    () => emailMock("sendInterviewConfirmedEmail").mock.calls.length >= 2,
+  );
+  const calls = emailMock("sendInterviewConfirmedEmail").mock.calls;
+  expect(calls.map((c) => c[0]).sort()).toEqual(
+    [f.owner.email, f.talentUser.email].sort(),
+  );
+  for (const call of calls) {
+    expect(String(call[4])).toContain("BEGIN:VCALENDAR");
+  }
+});
+it("S3R2-PB62-TC01 cancellation reason is stored, shown to the talent and e-mailed [AC4,BR1]", async () => {
+  await interview("CONFIRMED");
+  emailMock("sendInterviewCancelledEmail").mockClear();
+  await http("patch", `${employerPath()}/interview/cancel`, f.owner, {
+    reason: "Hiring manager is ill",
+  }).expect(200);
+  const own = await http("get", `${talentPath()}/interview`).expect(200);
+  expect(own.body.interview).toMatchObject({
+    status: "CANCELLED",
+    cancelReason: "Hiring manager is ill",
+  });
+  await waitFor(
+    () => emailMock("sendInterviewCancelledEmail").mock.calls.length > 0,
+  );
+  expect(emailMock("sendInterviewCancelledEmail").mock.calls[0]![3]).toBe(
+    "Hiring manager is ill",
+  );
+});
+it("S3R2-PB63-TC01 calendar lists the organizer and attendees [AC3,BR1]", async () => {
+  await interview("CONFIRMED");
+  const res = await http("get", `${talentPath()}/interview/ics`).expect(200);
+  const unfolded = res.text.replace(/\r\n /g, "");
+  expect(unfolded).toContain(
+    `ORGANIZER;CN="QA Company":mailto:${f.owner.email}`,
+  );
+  expect(unfolded).toContain(`mailto:${f.talentUser.email}`);
+  expect(
+    (res.text as string)
+      .split("\r\n")
+      .every((line: string) => Buffer.byteLength(line) <= 75),
+  ).toBe(true);
+});
+it("S3R2-PB65-TC01 summary averages per criterion across interviewers [AC2]", async () => {
+  await interview("CONFIRMED", new Date(Date.now() - 60000));
+  const colleague = await user("EMPLOYER", "Colleague");
+  await db.companyMember.create({
+    data: {
+      userId: colleague.id,
+      employerId: f.employer.id,
+      role: "RECRUITER",
+    },
+  });
+  await http("post", `${employerPath()}/scorecards`, f.owner, scorecard).expect(
+    201,
+  );
+  await http("post", `${employerPath()}/scorecards`, colleague, {
+    ...scorecard,
+    technicalRating: 3,
+    recommendation: "NEUTRAL",
+  }).expect(201);
+  const res = await http("get", `${employerPath()}/scorecards`, f.owner).expect(
+    200,
+  );
+  expect(res.body.summary.averages).toEqual({
+    technical: 4,
+    communication: 4,
+    cultureFit: 3,
+    overall: 3.7,
+  });
+  expect(res.body.summary.recommendations).toMatchObject({
+    RECOMMEND: 1,
+    NEUTRAL: 1,
+  });
+  expect(res.body.scorecards[0]).toMatchObject({
+    strengths: "Clear reasoning",
+    improvements: "More examples",
+  });
+});
+it("S3R2-PB70-TC01 partnerId eligibility reports the reason and the application [AC2,AC3]", async () => {
+  const before = await http(
+    "get",
+    `/reviews/eligibility?partnerId=${f.owner.id}`,
+  ).expect(200);
+  expect(before.body).toMatchObject({
+    eligible: false,
+    reason: "NO_INTERVIEW",
+  });
+  await interview("CONFIRMED", future());
+  const upcoming = await http(
+    "get",
+    `/reviews/eligibility?partnerId=${f.owner.id}`,
+  ).expect(200);
+  expect(upcoming.body.reason).toBe("INTERVIEW_NOT_YET_HELD");
+  await db.interview.update({
+    where: { applicationId: f.application.id },
+    data: { confirmedSlot: new Date(Date.now() - 60000) },
+  });
+  const ok = await http(
+    "get",
+    `/reviews/eligibility?partnerId=${f.owner.id}`,
+  ).expect(200);
+  expect(ok.body).toMatchObject({
+    eligible: true,
+    reason: null,
+    applicationId: f.application.id,
+    direction: "TALENT_TO_EMPLOYER",
+  });
+  const stranger = await http(
+    "get",
+    `/reviews/eligibility?partnerId=${f.otherOwner.id}`,
+  ).expect(200);
+  expect(stranger.body.eligible).toBe(false);
+});
+it("S3R2-PB71-TC01 title is required and profanity is rejected without a write [AC3,BR2]", async () => {
+  await interview("CONFIRMED", new Date(Date.now() - 60000));
+  const base = {
+    applicationId: f.application.id,
+    overallRating: 2,
+    comment: "The interviewer was late and unprepared for the call.",
+  };
+  await http("post", "/reviews", f.talentUser, base).expect(400);
+  const bad = await http("post", "/reviews", f.talentUser, {
+    ...base,
+    title: "Đồ chó",
+  }).expect(400);
+  expect(bad.body.code).toBe("REVIEW_CONTENT_REJECTED");
+  expect(
+    await db.review.count({ where: { applicationId: f.application.id } }),
+  ).toBe(0);
+  await http("post", "/reviews", f.talentUser, {
+    ...base,
+    title: "Disorganised",
+  }).expect(201);
+  const list = await http("get", `/reviews/user/${f.owner.id}`, null).expect(
+    200,
+  );
+  expect(list.body.reviews[0].title).toBe("Disorganised");
+});
+it("S3R2-PB72-TC01 star distribution, star filter and oldest-first sort [AC2,AC3]", async () => {
+  const reviewers = [
+    f.talentUser,
+    f.otherTalent,
+    await user("TALENT", "Third"),
+  ];
+  const ratings = [5, 5, 3];
+  for (const [i, reviewer] of reviewers.entries()) {
+    await db.review.create({
+      data: {
+        applicationId: f.application.id,
+        reviewerId: reviewer.id,
+        revieweeId: f.owner.id,
+        direction: "TALENT_TO_EMPLOYER",
+        overallRating: ratings[i]!,
+        createdAt: new Date(Date.UTC(2026, 9, 10 + i)),
+      },
+    });
+  }
+  const all = await http(
+    "get",
+    `/reviews/user/${f.owner.id}?sort=oldest`,
+    null,
+  ).expect(200);
+  expect(all.body.distribution).toEqual({ 1: 0, 2: 0, 3: 1, 4: 0, 5: 2 });
+  expect(
+    all.body.reviews.map((r: { overallRating: number }) => r.overallRating),
+  ).toEqual([5, 5, 3]);
+  const fives = await http(
+    "get",
+    `/reviews/user/${f.owner.id}?rating=5`,
+    null,
+  ).expect(200);
+  expect(fives.body.reviews).toHaveLength(2);
+  expect(fives.body.totalReviews).toBe(3);
+  expect(fives.body.pagination.total).toBe(2);
+  await http("get", `/reviews/user/${f.owner.id}?rating=6`, null).expect(400);
+});
+it("S3R2-PB68-TC01 a new message e-mails the other party [AC6]", async () => {
+  emailMock("sendNewMessageEmail").mockClear();
+  await http("post", `${talentPath()}/messages`, f.talentUser, {
+    body: "Is the role fully remote?",
+  }).expect(201);
+  await waitFor(() => emailMock("sendNewMessageEmail").mock.calls.length > 0);
+  expect(emailMock("sendNewMessageEmail").mock.calls[0]!.slice(0, 1)).toEqual([
+    f.owner.email,
+  ]);
 });

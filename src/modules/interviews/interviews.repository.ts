@@ -4,6 +4,7 @@ import { applicationPartiesSelect } from "@/common/interfaces/application-partie
 import {
   interviewSelect,
   upcomingInterviewSelect,
+  type InterviewContacts,
   type InterviewRecord,
   type UpcomingInterviewRow,
   type UpsertInterviewInput,
@@ -47,11 +48,16 @@ export class InterviewsRepository {
   // reaches.
   upsertPending(input: UpsertInterviewInput): Promise<InterviewRecord> {
     const data = {
+      title: input.title,
+      platform: input.platform,
       durationMinutes: input.durationMinutes,
       proposedSlots: input.proposedSlots,
       meetingUrl: input.meetingUrl,
       interviewerId: input.interviewerId,
       status: "PENDING" as const,
+      // A fresh proposal after a cancellation starts clean.
+      cancelReason: null,
+      cancelledAt: null,
     };
     return this.prisma.interview.upsert({
       where: { applicationId: input.applicationId },
@@ -64,10 +70,17 @@ export class InterviewsRepository {
   // CAS: only cancels while PENDING or CONFIRMED — a nonexistent interview or
   // one that's already CANCELLED both match zero rows and return null, same
   // no-op-on-race shape as confirmSlot above.
-  async cancel(applicationId: string): Promise<InterviewRecord | null> {
+  async cancel(
+    applicationId: string,
+    reason: string,
+  ): Promise<InterviewRecord | null> {
     const { count } = await this.prisma.interview.updateMany({
       where: { applicationId, status: { in: ["PENDING", "CONFIRMED"] } },
-      data: { status: "CANCELLED" },
+      data: {
+        status: "CANCELLED",
+        cancelReason: reason,
+        cancelledAt: new Date(),
+      },
     });
     if (count === 0) return null;
     return this.findByApplicationId(applicationId);
@@ -107,6 +120,56 @@ export class InterviewsRepository {
       orderBy: { confirmedSlot: "asc" },
       select: upcomingInterviewSelect,
     });
+  }
+
+  async findContacts(applicationId: string): Promise<InterviewContacts | null> {
+    const row = await this.prisma.application.findUnique({
+      where: { id: applicationId },
+      select: {
+        talent: {
+          select: {
+            user: {
+              select: {
+                name: true,
+                email: true,
+                notificationPreference: {
+                  select: { applicationUpdates: true },
+                },
+              },
+            },
+          },
+        },
+        job: {
+          select: {
+            employer: {
+              select: {
+                companyName: true,
+                user: { select: { name: true, email: true } },
+              },
+            },
+          },
+        },
+        interview: {
+          select: { interviewer: { select: { name: true, email: true } } },
+        },
+      },
+    });
+    if (!row) return null;
+    const talentUser = row.talent.user;
+    return {
+      talent: {
+        name: talentUser.name,
+        email: talentUser.email,
+        // No preference row yet means the schema default (on).
+        emailEnabled:
+          talentUser.notificationPreference?.applicationUpdates ?? true,
+      },
+      employer: {
+        name: row.job.employer.companyName,
+        email: row.job.employer.user.email,
+      },
+      interviewer: row.interview?.interviewer ?? null,
+    };
   }
 
   /** Self-contained narrow query (not a cross-import of ApplicationsRepository)

@@ -37,7 +37,7 @@ export const ApiListScorecards = () =>
     ApiOperation({
       summary: "List internal hiring feedback for an application",
       description:
-        "Private to the company — never shown to the talent. Open to any team member with access to this application (APPLICATION_REVIEW_ROLES, or the specific INTERVIEWER assigned to it), not just whoever ran the interview. `summary.hireCount` counts STRONG_YES/YES recommendations.",
+        "Private to the company — never shown to the talent. Open to any team member with access to this application (APPLICATION_REVIEW_ROLES, or the specific INTERVIEWER assigned to it), not just whoever ran the interview. `summary.hireCount` counts STRONGLY_RECOMMEND/RECOMMEND; `summary.averages` holds the per-criterion (1–5) and overall means; `summary.recommendations` counts each recommendation.",
     }),
     ApiParam({ name: "id", description: "Application id" }),
     ApiOkResponse({

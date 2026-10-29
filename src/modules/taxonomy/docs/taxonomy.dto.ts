@@ -20,6 +20,12 @@ export class CategoryDto {
 
   @ApiPropertyOptional({ example: "code", nullable: true })
   icon?: string | null;
+
+  @ApiProperty({
+    example: 12,
+    description: "Live (ACTIVE, not expired) jobs currently in this category.",
+  })
+  jobCount!: number;
 }
 
 export class SkillDto {

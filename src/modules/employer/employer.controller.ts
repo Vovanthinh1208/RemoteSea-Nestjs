@@ -59,6 +59,10 @@ import {
   type ProposeInterviewDto,
 } from "@/modules/interviews/dto/propose-interview.dto";
 import {
+  cancelInterviewSchema,
+  type CancelInterviewDto,
+} from "@/modules/interviews/dto/cancel-interview.dto";
+import {
   createScorecardSchema,
   type CreateScorecardDto,
 } from "@/modules/scorecards/dto/create-scorecard.dto";
@@ -389,13 +393,15 @@ export class EmployerController {
   cancelInterview(
     @CurrentUser() user: AuthenticatedUser,
     @CurrentResource() application: ApplicationWithJobOwner,
+    @Body(new ZodValidationPipe(cancelInterviewSchema))
+    body: CancelInterviewDto,
   ) {
     this.rateLimitService.enforce(
       `cancel-interview:${user.id}`,
       INTERVIEW_RATE_LIMITS.CANCEL_INTERVIEW.limit,
       INTERVIEW_RATE_LIMITS.CANCEL_INTERVIEW.windowMs,
     );
-    return this.employerService.cancelInterview(application);
+    return this.employerService.cancelInterview(application, body);
   }
 
   // Registered before "applications/:id" for the same reason as

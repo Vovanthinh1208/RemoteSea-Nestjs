@@ -18,6 +18,10 @@ import {
   listUserReviewsSchema,
   type ListUserReviewsDto,
 } from "./dto/list-user-reviews.dto";
+import {
+  reviewEligibilityQuerySchema,
+  type ReviewEligibilityQueryDto,
+} from "./dto/review-eligibility.dto";
 import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
@@ -27,6 +31,7 @@ import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.i
 import {
   ApiCreateReview,
   ApiGetEligibility,
+  ApiGetPartnerEligibility,
   ApiListUserReviews,
   ApiReviewsTag,
 } from "./docs/reviews.swagger";
@@ -44,6 +49,20 @@ export class ReviewsController {
   // is derived server-side from which party the caller is, never taken from
   // the request, so one implementation covers both directions instead of
   // two mirrored ones.
+  // PB70 AC2: GET /reviews/eligibility?partnerId=… — the backlog's contract.
+  // The per-application route below stays for callers that already know the
+  // application.
+  @ApiGetPartnerEligibility()
+  @Get("eligibility")
+  @UseGuards(JwtAuthGuard)
+  getPartnerEligibility(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query(new ZodValidationPipe(reviewEligibilityQuerySchema))
+    query: ReviewEligibilityQueryDto,
+  ) {
+    return this.reviewsService.getEligibilityForPartner(user.id, query);
+  }
+
   @ApiGetEligibility()
   @Get("eligibility/:applicationId")
   @UseGuards(JwtAuthGuard)

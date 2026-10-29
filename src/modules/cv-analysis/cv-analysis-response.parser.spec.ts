@@ -6,7 +6,7 @@ const VALID_RESPONSE = JSON.stringify({
   strengths: ["5 years Node.js", "Led a team of 3"],
   gaps: ["No GraphQL experience listed"],
   suggestedQuestions: ["Have you worked with GraphQL before?"],
-  recommendation: "ADVANCE",
+  recommendation: "PROCEED",
   recommendationReason: "Strong technical overlap outweighs the GraphQL gap.",
 });
 
@@ -19,7 +19,7 @@ describe("parseCvAnalysisResponse", () => {
       strengths: ["5 years Node.js", "Led a team of 3"],
       gaps: ["No GraphQL experience listed"],
       suggestedQuestions: ["Have you worked with GraphQL before?"],
-      recommendation: "ADVANCE",
+      recommendation: "PROCEED",
       recommendationReason:
         "Strong technical overlap outweighs the GraphQL gap.",
     });
@@ -37,7 +37,7 @@ describe("parseCvAnalysisResponse", () => {
       strengths: [],
       gaps: [],
       suggestedQuestions: [],
-      recommendation: "HOLD",
+      recommendation: "REVIEW",
       recommendationReason: "r",
       ...overrides,
     });

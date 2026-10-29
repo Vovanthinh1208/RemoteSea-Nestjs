@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { REVIEW_COMMENT_MAX_LENGTH } from "../constants";
+import {
+  REVIEW_COMMENT_MAX_LENGTH,
+  REVIEW_COMMENT_MIN_LENGTH,
+  REVIEW_TITLE_MAX_LENGTH,
+} from "../constants";
 
 const ratingSchema = z.number().int().min(1).max(5);
 
@@ -14,10 +18,14 @@ export const createReviewSchema = z.object({
   professionalismRating: ratingSchema.optional(),
   interviewProcessRating: ratingSchema.optional(),
   reliabilityRating: ratingSchema.optional(),
-  // trim() then min(1): an explicit empty/whitespace-only comment is
-  // rejected rather than silently accepted as "no comment" — the field
-  // being present at all means the caller meant to say something.
-  comment: z.string().trim().min(1).max(REVIEW_COMMENT_MAX_LENGTH).optional(),
+  // PB71 AC3: a title and a detailed comment of at least 20 characters
+  // (counted after trimming) are both required.
+  title: z.string().trim().min(1).max(REVIEW_TITLE_MAX_LENGTH),
+  comment: z
+    .string()
+    .trim()
+    .min(REVIEW_COMMENT_MIN_LENGTH)
+    .max(REVIEW_COMMENT_MAX_LENGTH),
 });
 
 export type CreateReviewDto = z.infer<typeof createReviewSchema>;

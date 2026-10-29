@@ -18,6 +18,15 @@ export const ownApplicationSelect = {
   // applicant themselves (unlike `notes`): they're the timeline of their
   // own application, not anything employer-private.
   viewedAt: true,
+  // PB53/PB56/PB58: fields written for the applicant to see — the contact
+  // phone they entered, the offer they received (and their own decline
+  // reason), and any rejection feedback the employer chose to share.
+  contactPhone: true,
+  rejectionReason: true,
+  offerSalary: true,
+  offerBenefits: true,
+  offerStartDate: true,
+  offerDeclineReason: true,
   statusEvents: {
     select: { status: true, createdAt: true },
     orderBy: { createdAt: "asc" },
@@ -35,6 +44,7 @@ export type CreateApplicationInput = {
   talentId: string;
   coverLetter?: string;
   resumeUrl?: string;
+  contactPhone?: string;
 };
 
 // Backlog-reminder cron (Employer Response SLA) — only what the digest email

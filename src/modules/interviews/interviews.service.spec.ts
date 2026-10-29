@@ -16,11 +16,40 @@ const companyMembershipService = {
   resolveMembership: jest.fn().mockResolvedValue(null),
 };
 
+const emailService = {
+  sendInterviewProposedEmail: jest.fn().mockResolvedValue(undefined),
+  sendInterviewConfirmedEmail: jest.fn().mockResolvedValue(undefined),
+  sendInterviewCancelledEmail: jest.fn().mockResolvedValue(undefined),
+};
+
+const contacts = {
+  talent: {
+    name: "Talent One",
+    email: "talent@example.com",
+    emailEnabled: true,
+  },
+  employer: { name: "Acme Inc", email: "owner@acme.example" },
+  interviewer: { name: "Interviewer One", email: "interviewer@acme.example" },
+};
+
+// runInBackground fire-and-forget: let queued e-mail tasks settle.
+const flushBackground = () => new Promise((resolve) => setImmediate(resolve));
+
+// PB60 AC2: title, platform and meeting link are part of every proposal.
+const proposal = {
+  title: "Vòng 1 - Kỹ thuật",
+  platform: "GOOGLE_MEET" as const,
+  meetingUrl: "https://meet.google.com/abc-defg-hij",
+};
+
 const makeService = (
   repoOverrides: Partial<InterviewsRepository> = {},
   companyMembershipOverrides: Record<string, jest.Mock> = {},
 ) => {
-  const repo = { ...repoOverrides } as unknown as InterviewsRepository;
+  const repo = {
+    findContacts: jest.fn().mockResolvedValue(contacts),
+    ...repoOverrides,
+  } as unknown as InterviewsRepository;
   const company = {
     ...companyMembershipService,
     ...companyMembershipOverrides,
@@ -30,6 +59,7 @@ const makeService = (
       repo,
       notificationsService as never,
       company as never,
+      emailService as never,
     ),
     repo,
     companyMembershipService: company,
@@ -52,6 +82,9 @@ const pastSlot = () => new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
 
 beforeEach(() => {
   notificationsService.create.mockClear();
+  emailService.sendInterviewProposedEmail.mockClear();
+  emailService.sendInterviewConfirmedEmail.mockClear();
+  emailService.sendInterviewCancelledEmail.mockClear();
 });
 
 describe("InterviewsService.propose", () => {
@@ -62,6 +95,7 @@ describe("InterviewsService.propose", () => {
       .propose(
         { ...parties, status: "SHORTLISTED" },
         {
+          ...proposal,
           durationMinutes: 30,
           proposedSlots: [futureSlot().toISOString()],
         },
@@ -81,6 +115,7 @@ describe("InterviewsService.propose", () => {
 
     const error = await service
       .propose(parties, {
+        ...proposal,
         durationMinutes: 30,
         proposedSlots: [pastSlot().toISOString()],
       })
@@ -102,6 +137,7 @@ describe("InterviewsService.propose", () => {
 
     const error = await service
       .propose(parties, {
+        ...proposal,
         durationMinutes: 30,
         proposedSlots: [futureSlot().toISOString()],
       })
@@ -119,6 +155,10 @@ describe("InterviewsService.propose", () => {
       id: "intv-1",
       status: "PENDING",
       proposedSlots: [slot],
+      title: proposal.title,
+      platform: proposal.platform,
+      durationMinutes: 45,
+      meetingUrl: proposal.meetingUrl,
     });
     const { service } = makeService({
       findByApplicationId: jest.fn().mockResolvedValue(null),
@@ -126,13 +166,16 @@ describe("InterviewsService.propose", () => {
     });
 
     await service.propose(parties, {
+      ...proposal,
       durationMinutes: 45,
       proposedSlots: [slot.toISOString()],
-      meetingUrl: "https://meet.google.com/abc-defg-hij",
     });
+    await flushBackground();
 
     expect(upsertPending).toHaveBeenCalledWith({
       applicationId: "app-1",
+      title: "Vòng 1 - Kỹ thuật",
+      platform: "GOOGLE_MEET",
       durationMinutes: 45,
       proposedSlots: [slot],
       meetingUrl: "https://meet.google.com/abc-defg-hij",
@@ -141,9 +184,49 @@ describe("InterviewsService.propose", () => {
       userId: "talent-user-1",
       type: "INTERVIEW_PROPOSED",
       title: "Acme Inc proposed interview times",
-      body: "1 option(s) for a 45-min interview for Backend Engineer.",
+      body: "Vòng 1 - Kỹ thuật: 1 option(s) for a 45-min interview for Backend Engineer.",
       link: "/applications/app-1/interview",
     });
+    // PB60 AC5: e-mail as well as in-app.
+    expect(emailService.sendInterviewProposedEmail).toHaveBeenCalledWith(
+      "talent@example.com",
+      "Talent One",
+      expect.objectContaining({
+        title: "Vòng 1 - Kỹ thuật",
+        platform: "Google Meet",
+        meetingUrl: proposal.meetingUrl,
+      }),
+      [slot],
+      "app-1",
+    );
+  });
+
+  it("skips the proposal e-mail when the talent turned application e-mails off", async () => {
+    const slot = futureSlot();
+    const { service } = makeService({
+      findByApplicationId: jest.fn().mockResolvedValue(null),
+      upsertPending: jest.fn().mockResolvedValue({
+        id: "intv-1",
+        status: "PENDING",
+        proposedSlots: [slot],
+        ...proposal,
+        durationMinutes: 30,
+      }),
+      findContacts: jest.fn().mockResolvedValue({
+        ...contacts,
+        talent: { ...contacts.talent, emailEnabled: false },
+      }),
+    });
+
+    await service.propose(parties, {
+      ...proposal,
+      durationMinutes: 30,
+      proposedSlots: [slot.toISOString()],
+    });
+    await flushBackground();
+
+    expect(notificationsService.create).toHaveBeenCalled();
+    expect(emailService.sendInterviewProposedEmail).not.toHaveBeenCalled();
   });
 });
 
@@ -238,6 +321,8 @@ describe("InterviewsService.confirm", () => {
       id: "intv-1",
       status: "CONFIRMED",
       confirmedSlot: slot,
+      ...proposal,
+      durationMinutes: 30,
     });
     const { service } = makeService({
       findByApplicationId: jest.fn().mockResolvedValue({
@@ -259,6 +344,74 @@ describe("InterviewsService.confirm", () => {
       body: "Talent One confirmed the interview for Backend Engineer.",
       link: "/applications/app-1/interview",
     });
+
+    // PB61 AC4: a confirmation with calendar.ics goes to both sides — the
+    // talent, the company contact and the assigned interviewer.
+    await flushBackground();
+    const sent = emailService.sendInterviewConfirmedEmail.mock.calls;
+    expect(sent.map((call) => call[0])).toEqual([
+      "talent@example.com",
+      "owner@acme.example",
+      "interviewer@acme.example",
+    ]);
+    for (const call of sent) {
+      expect(call[3]).toEqual(slot);
+      const ics = (call[4] as string).replace(/\r\n /g, "");
+      expect(ics).toContain("BEGIN:VCALENDAR");
+      expect(ics).toContain('ATTENDEE;CN="Talent One"');
+    }
+  });
+});
+
+describe("InterviewsService.cancel", () => {
+  it("stores the reason, notifies in-app and e-mails the talent the reason", async () => {
+    const cancel = jest.fn().mockResolvedValue({
+      id: "intv-1",
+      status: "CANCELLED",
+      cancelReason: "The hiring manager is unavailable.",
+      ...proposal,
+      durationMinutes: 30,
+    });
+    const { service } = makeService({ cancel });
+
+    const result = await service.cancel(parties, {
+      reason: "The hiring manager is unavailable.",
+    });
+    await flushBackground();
+
+    expect(cancel).toHaveBeenCalledWith(
+      "app-1",
+      "The hiring manager is unavailable.",
+    );
+    expect(result.status).toBe("CANCELLED");
+    expect(notificationsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "talent-user-1",
+        type: "INTERVIEW_CANCELLED",
+        body: expect.stringContaining(
+          "Reason: The hiring manager is unavailable.",
+        ),
+      }),
+    );
+    expect(emailService.sendInterviewCancelledEmail).toHaveBeenCalledWith(
+      "talent@example.com",
+      "Talent One",
+      expect.objectContaining({ title: "Vòng 1 - Kỹ thuật" }),
+      "The hiring manager is unavailable.",
+    );
+  });
+
+  it("404s when there is nothing left to cancel", async () => {
+    const { service } = makeService({
+      cancel: jest.fn().mockResolvedValue(null),
+    });
+
+    const error = await service
+      .cancel(parties, { reason: "No longer needed." })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(NotFoundApiException);
+    expect(emailService.sendInterviewCancelledEmail).not.toHaveBeenCalled();
   });
 });
 
@@ -306,6 +459,7 @@ describe("InterviewsService.isComplete", () => {
 
 const upcomingRow = (overrides: Record<string, unknown> = {}) => ({
   id: "intv-1",
+  title: null,
   applicationId: "app-1",
   confirmedSlot: futureSlot(),
   durationMinutes: 30,
@@ -336,6 +490,7 @@ describe("InterviewsService.listUpcomingForCompany", () => {
       interviews: [
         {
           id: "intv-1",
+          title: null,
           applicationId: "app-1",
           confirmedSlot: expect.any(Date),
           durationMinutes: 30,
@@ -437,5 +592,13 @@ describe("InterviewsService.getIcsFile", () => {
     expect(ics).toContain("interview-intv-1@remotesea.io");
     expect(ics).toContain(parties.job.title);
     expect(ics).toContain(parties.job.employer.companyName);
+    // PB63 AC3: participants. Long lines are folded per RFC 5545 §3.1, so
+    // compare against the unfolded text.
+    const unfolded = ics.replace(/\r\n /g, "");
+    expect(unfolded).toContain(
+      'ORGANIZER;CN="Acme Inc":mailto:owner@acme.example',
+    );
+    expect(unfolded).toContain("mailto:talent@example.com");
+    expect(unfolded).toContain("mailto:interviewer@acme.example");
   });
 });

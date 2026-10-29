@@ -129,13 +129,20 @@ export const ApiRespondToOffer = () =>
     ApiOperation({
       summary: "Accept or decline an extended offer",
       description:
-        "Only allowed while the application is exactly OFFERED. Sets the application to OFFER_ACCEPTED or OFFER_DECLINED and notifies the employer via the Notification Center.",
+        "Only allowed while the application is exactly OFFERED. Sets the application to OFFER_ACCEPTED or OFFER_DECLINED (final — PB56 BR1) and notifies the employer via the Notification Center. Declining requires a `reason` (PB56 AC4), which is stored and passed on to the employer.",
     }),
     ApiParam({ name: "id", example: "capp1a2b0000ug0h9x1n1a2" }),
     ApiBody({
       schema: {
         example: { response: "ACCEPTED" },
-        properties: { response: { enum: ["ACCEPTED", "DECLINED"] } },
+        properties: {
+          response: { enum: ["ACCEPTED", "DECLINED"] },
+          reason: {
+            type: "string",
+            maxLength: 1000,
+            description: "Required when response is DECLINED",
+          },
+        },
       },
     }),
     ApiOkResponse({

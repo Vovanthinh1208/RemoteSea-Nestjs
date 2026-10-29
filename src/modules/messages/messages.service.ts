@@ -8,6 +8,7 @@ import type {
 import type { SendMessageDto } from "./dto/send-message.dto";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { runInBackground } from "@/common/utils/background-task.util";
+import { EmailService } from "@/common/services/email.service";
 
 const NOTIFICATION_PREVIEW_LENGTH = 100;
 
@@ -18,6 +19,7 @@ export class MessagesService {
   constructor(
     private readonly messagesRepository: MessagesRepository,
     private readonly notificationsService: NotificationsService,
+    private readonly emailService: EmailService,
   ) {}
 
   // Bundles thread + header context in one response — parties is already
@@ -47,10 +49,10 @@ export class MessagesService {
       body: dto.body,
     });
 
-    const recipientId =
-      senderId === parties.talent.userId
-        ? parties.job.employer.userId
-        : parties.talent.userId;
+    const senderIsTalent = senderId === parties.talent.userId;
+    const recipientId = senderIsTalent
+      ? parties.job.employer.userId
+      : parties.talent.userId;
 
     const preview =
       dto.body.length > NOTIFICATION_PREVIEW_LENGTH
@@ -67,6 +69,28 @@ export class MessagesService {
       }),
       this.logger,
       `Failed to create message notification for application ${parties.id}`,
+    );
+
+    runInBackground(
+      (async () => {
+        const recipient = await this.messagesRepository.findRecipientContact(
+          recipientId,
+          !senderIsTalent,
+        );
+        if (!recipient) return;
+        await this.emailService.sendNewMessageEmail(
+          recipient.email,
+          recipient.name ?? "there",
+          senderIsTalent
+            ? (parties.talent.user.name ?? "A candidate")
+            : parties.job.employer.companyName,
+          parties.job.title,
+          preview,
+          parties.id,
+        );
+      })(),
+      this.logger,
+      `Failed to send message email for application ${parties.id}`,
     );
 
     return message;

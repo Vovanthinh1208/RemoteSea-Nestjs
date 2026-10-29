@@ -11,6 +11,15 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 const INTERVIEW_STATUS_VALUES = ["PENDING", "CONFIRMED"] as const;
 
 export class ProposeInterviewRequestDto {
+  @ApiProperty({ maxLength: 120, example: "Vòng 1 - Kỹ thuật" })
+  title!: string;
+
+  @ApiProperty({
+    enum: ["GOOGLE_MEET", "ZOOM", "MS_TEAMS", "OTHER"],
+    example: "GOOGLE_MEET",
+  })
+  platform!: "GOOGLE_MEET" | "ZOOM" | "MS_TEAMS" | "OTHER";
+
   @ApiProperty({ minimum: 15, maximum: 180, example: 30 })
   durationMinutes!: number;
 
@@ -22,11 +31,26 @@ export class ProposeInterviewRequestDto {
   })
   proposedSlots!: string[];
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     format: "url",
     example: "https://meet.google.com/abc-defg-hij",
   })
-  meetingUrl?: string;
+  meetingUrl!: string;
+
+  @ApiPropertyOptional({
+    description: "User id of the company member running the interview",
+  })
+  interviewerId?: string;
+}
+
+export class CancelInterviewRequestDto {
+  @ApiProperty({
+    minLength: 5,
+    maxLength: 1000,
+    example: "The hiring manager is unavailable that week.",
+    description: "Sent to the talent in the cancellation e-mail (PB62)",
+  })
+  reason!: string;
 }
 
 export class ConfirmInterviewRequestDto {

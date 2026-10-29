@@ -97,6 +97,19 @@ export type ProfileWithJobCount = Prisma.EmployerProfileGetPayload<{
   select: typeof profileWithJobCountSelect;
 }>;
 
+// PB53/PB56/PB57/PB58 fields the hiring team reads on each applicant: the
+// contact phone from the apply form, the decision details already sent to
+// the talent, and the cached AI CV score (PB57 AC3 "AI Score nếu có").
+const applicantDecisionFieldsSelect = {
+  contactPhone: true,
+  rejectionReason: true,
+  offerSalary: true,
+  offerBenefits: true,
+  offerStartDate: true,
+  offerDeclineReason: true,
+  cvAnalysis: { select: { fitScore: true } },
+} satisfies Prisma.ApplicationSelect;
+
 @Injectable()
 export class EmployerRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -547,13 +560,18 @@ export class EmployerRepository {
 
   async findApplicationsForJob(
     jobId: string,
-    status: ApplicationStatus | undefined,
+    filter: { status?: ApplicationStatus; q?: string },
     skip: number,
     take: number,
   ) {
+    const { status, q } = filter;
     const where: Prisma.ApplicationWhereInput = {
       jobId,
       ...(status && { status }),
+      // PB57 AC4: applicant name search.
+      ...(q && {
+        talent: { user: { name: { contains: q, mode: "insensitive" } } },
+      }),
     };
     const [applications, total] = await Promise.all([
       this.prisma.application.findMany({
@@ -573,6 +591,7 @@ export class EmployerRepository {
           updatedAt: true,
           coverLetter: true,
           resumeUrl: true,
+          ...applicantDecisionFieldsSelect,
           // Previously write-only from the frontend's perspective (only ever
           // sent alongside a status-change PATCH, never read back) — the
           // Candidate Notes UI needs to display an existing note before
@@ -644,6 +663,7 @@ export class EmployerRepository {
         updatedAt: true,
         coverLetter: true,
         resumeUrl: true,
+        ...applicantDecisionFieldsSelect,
         notes: true,
         viewedAt: true,
         jobId: true,
@@ -750,11 +770,14 @@ export class EmployerRepository {
     expectedStatus: ApplicationStatus,
     status: ApplicationStatus,
     notes: string | undefined,
+    // PB56/PB58: rejection feedback / offer details written in the same CAS
+    // update as the status, so they can never land on the wrong stage.
+    decision: Prisma.ApplicationUpdateManyMutationInput = {},
   ): Promise<Application | null> {
     return this.prisma.$transaction(async (tx) => {
       const { count } = await tx.application.updateMany({
         where: { id, status: expectedStatus },
-        data: { status, ...(notes !== undefined && { notes }) },
+        data: { status, ...(notes !== undefined && { notes }), ...decision },
       });
       if (count === 0) return null;
 
@@ -813,6 +836,7 @@ export class EmployerRepository {
     items: { id: string; expectedStatus: ApplicationStatus }[],
     status: ApplicationStatus,
     notes: string | undefined,
+    rejectionReason?: string,
   ): Promise<string[]> {
     return this.prisma.$transaction(async (tx) => {
       const rows = Prisma.join(
@@ -830,6 +854,7 @@ export class EmployerRepository {
         UPDATE "applications" AS a
         SET "status" = ${status}::"ApplicationStatus"
           ${notes !== undefined ? Prisma.sql`, "notes" = ${notes}` : Prisma.empty}
+          ${rejectionReason !== undefined ? Prisma.sql`, "rejectionReason" = ${rejectionReason}` : Prisma.empty}
         FROM (VALUES ${rows}) AS v(id, expected_status)
         WHERE a.id = v.id AND a.status = v.expected_status
         RETURNING a.id

@@ -3,6 +3,8 @@ import type { ApplicationParties as BaseApplicationParties } from "@/common/inte
 
 export const interviewSelect = {
   id: true,
+  title: true,
+  platform: true,
   durationMinutes: true,
   proposedSlots: true,
   confirmedSlot: true,
@@ -10,6 +12,8 @@ export const interviewSelect = {
   status: true,
   interviewerId: true,
   interviewer: { select: { name: true } },
+  cancelReason: true,
+  cancelledAt: true,
   createdAt: true,
 } satisfies Prisma.InterviewSelect;
 
@@ -19,9 +23,11 @@ export type InterviewRecord = Prisma.InterviewGetPayload<{
 
 export type UpsertInterviewInput = {
   applicationId: string;
+  title: string;
+  platform: string;
   durationMinutes: number;
   proposedSlots: Date[];
-  meetingUrl: string | undefined;
+  meetingUrl: string;
   // undefined = "don't touch" on a re-propose (Prisma skips undefined update
   // fields) — leaves an existing assignment alone unless the caller
   // explicitly changes it.
@@ -51,6 +57,7 @@ export type InterviewWithHeader = {
 // applicationPartiesSelect (which is keyed by application id, not interview).
 export const upcomingInterviewSelect = {
   id: true,
+  title: true,
   applicationId: true,
   confirmedSlot: true,
   durationMinutes: true,
@@ -73,6 +80,7 @@ export type UpcomingInterviewRow = Prisma.InterviewGetPayload<{
 // agenda came from Interview.application.{talent,job}.
 export type UpcomingInterviewItem = {
   id: string;
+  title: string | null;
   applicationId: string;
   confirmedSlot: Date;
   durationMinutes: number;
@@ -94,4 +102,13 @@ export type UpcomingInterviewsScope = "mine" | "team";
 export type UpcomingInterviewsResult = {
   scope: UpcomingInterviewsScope;
   interviews: UpcomingInterviewItem[];
+};
+
+// E-mail addresses + display names of everyone an interview e-mail / .ics
+// goes to (PB60–PB63). Loaded only when a send needs them — the parties
+// shape the guards load deliberately carries no e-mail addresses.
+export type InterviewContacts = {
+  talent: { name: string | null; email: string; emailEnabled: boolean };
+  employer: { name: string | null; email: string };
+  interviewer: { name: string | null; email: string } | null;
 };

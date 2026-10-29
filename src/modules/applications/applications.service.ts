@@ -175,6 +175,7 @@ export class ApplicationsService {
         talentId: talent.id,
         coverLetter: dto.coverLetter,
         resumeUrl: dto.resumeUrl,
+        contactPhone: dto.contactPhone,
       });
     } catch (error) {
       // The findByJobAndTalent check above is only a fast path — a concurrent
@@ -195,6 +196,21 @@ export class ApplicationsService {
       throw error;
     }
     const { application, job } = result;
+    const talentName = talent.user.name ?? "A candidate";
+
+    // PB73 AC1 / BR1: the employer's in-app "new application" event, always
+    // recorded regardless of any email preference.
+    runInBackground(
+      this.notificationsService.create({
+        userId: job.employer.userId,
+        type: "APPLICATION_RECEIVED",
+        title: "New application received",
+        body: `${talentName} applied to ${job.title}.`,
+        link: `/employer-dashboard/applications/${application.id}`,
+      }),
+      this.logger,
+      `Failed to create application-received notification for application ${application.id}`,
+    );
 
     // The application is already committed above — a notification-email failure
     // must not turn a successful apply into a 500 (a retry would then wrongly
@@ -205,7 +221,7 @@ export class ApplicationsService {
       this.emailService.sendApplicationReceivedEmail(
         job.employer.user.email,
         job.title,
-        talent.user.name ?? "A candidate",
+        talentName,
       ),
       this.logger,
       `Failed to send application-received email for application ${application.id}`,
@@ -366,10 +382,12 @@ export class ApplicationsService {
 
     const status =
       dto.response === "ACCEPTED" ? "OFFER_ACCEPTED" : "OFFER_DECLINED";
+    const declineReason = dto.response === "DECLINED" ? dto.reason : undefined;
     const updated = await this.applicationsRepository.respondToOffer(
       applicationId,
       talent.id,
       status,
+      declineReason,
     );
     if (!updated) {
       throw new ConflictApiException(
@@ -391,7 +409,7 @@ export class ApplicationsService {
           body:
             status === "OFFER_ACCEPTED"
               ? `${talentName} accepted your offer for ${parties.job.title}.`
-              : `${talentName} declined your offer for ${parties.job.title}.`,
+              : `${talentName} declined your offer for ${parties.job.title}. Reason: ${declineReason}`,
           link: `/employer-dashboard/applications/${applicationId}`,
         }),
         this.logger,

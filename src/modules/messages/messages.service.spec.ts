@@ -6,13 +6,29 @@ const notificationsService = {
   create: jest.fn().mockResolvedValue(undefined),
 };
 
+const emailService = {
+  sendNewMessageEmail: jest.fn().mockResolvedValue(undefined),
+};
+
 const makeService = (repoOverrides: Partial<MessagesRepository> = {}) => {
-  const repo = { ...repoOverrides } as unknown as MessagesRepository;
+  const repo = {
+    findRecipientContact: jest
+      .fn()
+      .mockResolvedValue({ email: "recipient@example.com", name: "Recipient" }),
+    ...repoOverrides,
+  } as unknown as MessagesRepository;
   return {
-    service: new MessagesService(repo, notificationsService as never),
+    service: new MessagesService(
+      repo,
+      notificationsService as never,
+      emailService as never,
+    ),
     repo,
   };
 };
+
+// runInBackground fire-and-forget: let the queued e-mail task settle.
+const flushBackground = () => new Promise((resolve) => setImmediate(resolve));
 
 const parties: ApplicationParties = {
   id: "app-1",
@@ -26,6 +42,7 @@ const parties: ApplicationParties = {
 
 beforeEach(() => {
   notificationsService.create.mockClear();
+  emailService.sendNewMessageEmail.mockClear();
 });
 
 describe("MessagesService.list", () => {
@@ -102,5 +119,68 @@ describe("MessagesService.send", () => {
 
     const notified = notificationsService.create.mock.calls[0][0];
     expect(notified.body).toBe(`${"a".repeat(100)}…`);
+  });
+
+  // PB68 AC6: in-app *and* e-mail to the other party.
+  it("e-mails the employer side when the talent sends a message", async () => {
+    const create = jest
+      .fn()
+      .mockResolvedValue({ id: "m4", senderId: "talent-user-1", body: "hi" });
+    const { service, repo } = makeService({ create });
+
+    await service.send(parties, "talent-user-1", { body: "hi" });
+    await flushBackground();
+
+    expect(repo.findRecipientContact).toHaveBeenCalledWith(
+      "employer-user-1",
+      false,
+    );
+    expect(emailService.sendNewMessageEmail).toHaveBeenCalledWith(
+      "recipient@example.com",
+      "Recipient",
+      "Talent One",
+      "Backend Engineer",
+      "hi",
+      "app-1",
+    );
+  });
+
+  it("e-mails the talent, labelled with the company name, when the employer replies", async () => {
+    const create = jest
+      .fn()
+      .mockResolvedValue({ id: "m5", senderId: "employer-user-1", body: "ok" });
+    const { service, repo } = makeService({ create });
+
+    await service.send(parties, "employer-user-1", { body: "ok" });
+    await flushBackground();
+
+    expect(repo.findRecipientContact).toHaveBeenCalledWith(
+      "talent-user-1",
+      true,
+    );
+    expect(emailService.sendNewMessageEmail).toHaveBeenCalledWith(
+      "recipient@example.com",
+      "Recipient",
+      "Acme Inc",
+      "Backend Engineer",
+      "ok",
+      "app-1",
+    );
+  });
+
+  it("skips the e-mail (but still notifies in-app) when the recipient opted out", async () => {
+    const create = jest
+      .fn()
+      .mockResolvedValue({ id: "m6", senderId: "employer-user-1", body: "ok" });
+    const { service } = makeService({
+      create,
+      findRecipientContact: jest.fn().mockResolvedValue(null),
+    });
+
+    await service.send(parties, "employer-user-1", { body: "ok" });
+    await flushBackground();
+
+    expect(notificationsService.create).toHaveBeenCalled();
+    expect(emailService.sendNewMessageEmail).not.toHaveBeenCalled();
   });
 });

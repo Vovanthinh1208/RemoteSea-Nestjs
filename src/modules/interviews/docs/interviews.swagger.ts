@@ -15,6 +15,7 @@ import {
   rateLimitResponse,
 } from "@/core/swagger/common.responses";
 import {
+  CancelInterviewRequestDto,
   ConfirmInterviewRequestDto,
   InterviewResponseDto,
   InterviewWithHeaderResponseDto,
@@ -174,9 +175,10 @@ export const ApiCancelInterview = () =>
     ApiOperation({
       summary: "Cancel a scheduled interview (employer only)",
       description:
-        "Cancels a PENDING or CONFIRMED interview and notifies the talent via the Notification Center. Terminal for this row, but the employer can propose a fresh set of times afterward — that resets it back to PENDING rather than leaving the application permanently unable to schedule.",
+        "Cancels a PENDING or CONFIRMED interview. A `reason` is required (PB62) — it is stored on the interview and sent to the talent both in-app and by e-mail. Terminal for this row, but the employer can propose a fresh set of times afterward — that resets it back to PENDING rather than leaving the application permanently unable to schedule.",
     }),
     ApiParam({ name: "id", description: "Application id" }),
+    ApiBody({ type: CancelInterviewRequestDto }),
     ApiOkResponse({
       description: "Interview cancelled",
       type: InterviewResponseDto,

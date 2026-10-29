@@ -104,9 +104,11 @@ enum JobModerationRiskLevel {
 // ApplicationStatus — this is a lightweight opinion for the recruiter to
 // weigh, not a hiring-stage value, and nothing transitions
 // Application.status off the back of it.
+// Values named as in PB66 AC3 (PROCEED / REVIEW / REJECT) — renamed in place
+// from the earlier ADVANCE/HOLD by 20261028100000_sprint3_hiring_workflow.
 enum CvRecommendation {
-  ADVANCE
-  HOLD
+  PROCEED
+  REVIEW
   REJECT
 }
 
@@ -222,6 +224,8 @@ enum NotificationType {
   INTERVIEW_PROPOSED
   INTERVIEW_CONFIRMED
   APPLICATION_WITHDRAWN
+  // PB73: the employer side's "new application" event.
+  APPLICATION_RECEIVED
   OFFER_ACCEPTED
   OFFER_DECLINED
   INTERVIEW_CANCELLED
@@ -720,8 +724,19 @@ model Application {
   // null until the first reminder fires, then re-stamped each time so the
   // same stuck application isn't re-emailed every run.
   lastReminderSentAt DateTime?
+  // PB53 AC2: contact phone entered on the apply form.
+  contactPhone       String?
+  // PB58 BR2: optional feedback shown to the talent when the employer rejects
+  // — unlike `notes`, this one is meant for the applicant.
+  rejectionReason    String?           @db.Text
+  // PB56: offer details, set by the employer when moving to OFFERED and shown
+  // to the talent; offerDeclineReason is the talent's mandatory reason.
+  offerSalary        String?
+  offerBenefits      String?           @db.Text
+  offerStartDate     DateTime?
+  offerDeclineReason String?           @db.Text
 
-  job          Job                      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  job          Job                     @relation(fields: [jobId], references: [id], onDelete: Cascade)
   talent       TalentProfile            @relation(fields: [talentId], references: [id], onDelete: Cascade)
   statusEvents ApplicationStatusEvent[]
   messages     Message[]
@@ -794,6 +809,14 @@ model Interview {
   // Cascade) so removing a team member's account never deletes interview
   // history — the interview just becomes unassigned.
   interviewerId   String?
+  // PB60 AC2: e.g. "Vòng 1 - Kỹ thuật" and the meeting platform
+  // (GOOGLE_MEET/ZOOM/MS_TEAMS/OTHER, validated in ProposeInterviewDto).
+  // Nullable only for rows proposed before these fields existed.
+  title           String?
+  platform        String?
+  // PB62: the mandatory cancellation reason sent to the talent.
+  cancelReason    String?         @db.Text
+  cancelledAt     DateTime?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -1017,6 +1040,9 @@ model Review {
   professionalismRating  Int?
   interviewProcessRating Int?
   reliabilityRating      Int?
+  // PB71 AC3: title + detailed comment (>= 20 chars) are required for new
+  // reviews; nullable only for rows created before that rule.
+  title                  String?
   comment                String?         @db.Text
   status                 ReviewStatus    @default(PUBLISHED)
   createdAt              DateTime        @default(now())
@@ -1036,11 +1062,14 @@ model Review {
   @@map("reviews")
 }
 
+// PB64 AC4's five-point scale. Earlier rows (STRONG_YES/YES/NO/STRONG_NO) were
+// mapped onto it by 20261028100000_sprint3_hiring_workflow.
 enum ScorecardRecommendation {
-  STRONG_YES
-  YES
-  NO
-  STRONG_NO
+  STRONGLY_RECOMMEND
+  RECOMMEND
+  NEUTRAL
+  NOT_RECOMMEND
+  STRONGLY_NOT_RECOMMEND
 }
 
 // Internal hiring feedback from a company team member — distinct from Review
@@ -1058,6 +1087,13 @@ model InterviewScorecard {
   authorId       String
   recommendation ScorecardRecommendation
   note           String?                 @db.Text
+  // PB64 AC2–3: 1–5 per criterion plus strengths / areas to improve.
+  // Required by CreateScorecardDto; nullable only for pre-existing rows.
+  technicalRating     Int?
+  communicationRating Int?
+  cultureFitRating    Int?
+  strengths           String?            @db.Text
+  improvements        String?            @db.Text
   createdAt      DateTime                @default(now())
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)

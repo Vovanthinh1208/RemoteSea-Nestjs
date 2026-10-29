@@ -3,14 +3,21 @@ import type { CompanyMemberRole } from "@prisma/client";
 import { InterviewsRepository } from "./interviews.repository";
 import type {
   ApplicationParties,
+  InterviewContacts,
   InterviewRecord,
   InterviewWithHeader,
   UpcomingInterviewsResult,
 } from "./interfaces";
 import type { ProposeInterviewDto } from "./dto/propose-interview.dto";
 import type { ConfirmInterviewDto } from "./dto/confirm-interview.dto";
+import type { CancelInterviewDto } from "./dto/cancel-interview.dto";
 import { isInterviewComplete } from "./interview-eligibility.util";
-import { buildInterviewIcs } from "./ics.util";
+import { buildInterviewIcs, type IcsParticipant } from "./ics.util";
+import { INTERVIEW_PLATFORM_LABELS, INTERVIEW_PLATFORMS } from "./constants";
+import {
+  EmailService,
+  type InterviewEmailDetails,
+} from "@/common/services/email.service";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { runInBackground } from "@/common/utils/background-task.util";
 import {
@@ -29,7 +36,60 @@ export class InterviewsService {
     private readonly interviewsRepository: InterviewsRepository,
     private readonly notificationsService: NotificationsService,
     private readonly companyMembershipService: CompanyMembershipService,
+    private readonly emailService: EmailService,
   ) {}
+
+  private emailDetails(
+    parties: ApplicationParties,
+    interview: Pick<
+      InterviewRecord,
+      "title" | "platform" | "durationMinutes" | "meetingUrl"
+    >,
+  ): InterviewEmailDetails {
+    const platform = INTERVIEW_PLATFORMS.find((p) => p === interview.platform);
+    return {
+      title: interview.title ?? `Interview for ${parties.job.title}`,
+      jobTitle: parties.job.title,
+      companyName: parties.job.employer.companyName,
+      durationMinutes: interview.durationMinutes,
+      platform: platform ? INTERVIEW_PLATFORM_LABELS[platform] : null,
+      meetingUrl: interview.meetingUrl,
+    };
+  }
+
+  // PB63 AC3: the company contact organizes, the talent and (if assigned and
+  // different from the company contact) the interviewer attend.
+  private icsParticipants(contacts: InterviewContacts): {
+    organizer: IcsParticipant;
+    attendees: IcsParticipant[];
+  } {
+    const attendees: IcsParticipant[] = [contacts.talent];
+    if (
+      contacts.interviewer &&
+      contacts.interviewer.email !== contacts.employer.email
+    ) {
+      attendees.push(contacts.interviewer);
+    }
+    return { organizer: contacts.employer, attendees };
+  }
+
+  private buildIcs(
+    parties: ApplicationParties,
+    interview: InterviewRecord & { confirmedSlot: Date },
+    contacts: InterviewContacts | null,
+  ): string {
+    return buildInterviewIcs({
+      interviewId: interview.id,
+      title: interview.title,
+      jobTitle: parties.job.title,
+      employerName: parties.job.employer.companyName,
+      talentName: parties.talent.user.name,
+      confirmedSlot: interview.confirmedSlot,
+      durationMinutes: interview.durationMinutes,
+      meetingUrl: interview.meetingUrl,
+      ...(contacts ? this.icsParticipants(contacts) : {}),
+    });
+  }
 
   // Single source of truth for "has this application's interview actually
   // happened" — Interview is this module's aggregate, so modules that gate
@@ -70,6 +130,7 @@ export class InterviewsService {
       scope: mineOnly ? "mine" : "team",
       interviews: rows.map((row) => ({
         id: row.id,
+        title: row.title,
         applicationId: row.applicationId,
         // Never actually null here — the repository's own where-clause only
         // ever matches rows with confirmedSlot >= now — but the column
@@ -121,15 +182,12 @@ export class InterviewsService {
         ErrorCode.INTERVIEW_NOT_CONFIRMED,
       );
     }
-    return buildInterviewIcs({
-      interviewId: header.interview.id,
-      jobTitle: header.jobTitle,
-      employerName: header.employerName,
-      talentName: header.talentName,
-      confirmedSlot: header.interview.confirmedSlot,
-      durationMinutes: header.interview.durationMinutes,
-      meetingUrl: header.interview.meetingUrl,
-    });
+    const contacts = await this.interviewsRepository.findContacts(parties.id);
+    return this.buildIcs(
+      parties,
+      { ...header.interview, confirmedSlot: header.interview.confirmedSlot },
+      contacts,
+    );
   }
 
   async propose(parties: ApplicationParties, dto: ProposeInterviewDto) {
@@ -177,6 +235,8 @@ export class InterviewsService {
 
     const interview = await this.interviewsRepository.upsertPending({
       applicationId: parties.id,
+      title: dto.title,
+      platform: dto.platform,
       durationMinutes: dto.durationMinutes,
       proposedSlots,
       meetingUrl: dto.meetingUrl,
@@ -188,11 +248,31 @@ export class InterviewsService {
         userId: parties.talent.userId,
         type: "INTERVIEW_PROPOSED",
         title: `${parties.job.employer.companyName} proposed interview times`,
-        body: `${proposedSlots.length} option(s) for a ${dto.durationMinutes}-min interview for ${parties.job.title}.`,
+        body: `${dto.title}: ${proposedSlots.length} option(s) for a ${dto.durationMinutes}-min interview for ${parties.job.title}.`,
         link: `/applications/${parties.id}/interview`,
       }),
       this.logger,
       `Failed to create interview-proposed notification for application ${parties.id}`,
+    );
+
+    // PB60 AC5: e-mail as well as in-app, gated by the talent's
+    // applicationUpdates preference like other application e-mails.
+    runInBackground(
+      (async () => {
+        const contacts = await this.interviewsRepository.findContacts(
+          parties.id,
+        );
+        if (!contacts?.talent.emailEnabled) return;
+        await this.emailService.sendInterviewProposedEmail(
+          contacts.talent.email,
+          contacts.talent.name ?? "there",
+          this.emailDetails(parties, interview),
+          proposedSlots,
+          parties.id,
+        );
+      })(),
+      this.logger,
+      `Failed to send interview-proposed email for application ${parties.id}`,
     );
 
     return interview;
@@ -249,6 +329,41 @@ export class InterviewsService {
       `Failed to create interview-confirmed notification for application ${parties.id}`,
     );
 
+    // PB61 AC4: confirmation e-mail with calendar.ics to both sides — the
+    // talent who just confirmed it is still sent their copy of the file.
+    runInBackground(
+      (async () => {
+        const contacts = await this.interviewsRepository.findContacts(
+          parties.id,
+        );
+        if (!contacts) return;
+        const ics = this.buildIcs(
+          parties,
+          { ...updated, confirmedSlot: slot },
+          contacts,
+        );
+        const details = this.emailDetails(parties, updated);
+        const recipients = [
+          contacts.talent,
+          contacts.employer,
+          ...this.icsParticipants(contacts).attendees.slice(1),
+        ];
+        await Promise.all(
+          recipients.map((recipient) =>
+            this.emailService.sendInterviewConfirmedEmail(
+              recipient.email,
+              recipient.name ?? "there",
+              details,
+              slot,
+              ics,
+            ),
+          ),
+        );
+      })(),
+      this.logger,
+      `Failed to send interview-confirmed emails for application ${parties.id}`,
+    );
+
     return updated;
   }
 
@@ -257,8 +372,14 @@ export class InterviewsService {
   // Terminal at the data layer, but the employer can always schedule a fresh
   // one afterward: propose()'s upsertPending resets a CANCELLED row back to
   // PENDING rather than treating the applicationId as permanently spent.
-  async cancel(parties: ApplicationParties): Promise<InterviewRecord> {
-    const cancelled = await this.interviewsRepository.cancel(parties.id);
+  async cancel(
+    parties: ApplicationParties,
+    dto: CancelInterviewDto,
+  ): Promise<InterviewRecord> {
+    const cancelled = await this.interviewsRepository.cancel(
+      parties.id,
+      dto.reason,
+    );
     if (!cancelled) {
       throw new NotFoundApiException(
         "No interview to cancel, or it's already cancelled",
@@ -271,11 +392,30 @@ export class InterviewsService {
         userId: parties.talent.userId,
         type: "INTERVIEW_CANCELLED",
         title: "Interview cancelled",
-        body: `${parties.job.employer.companyName} cancelled the interview for ${parties.job.title}.`,
+        body: `${parties.job.employer.companyName} cancelled the interview for ${parties.job.title}. Reason: ${dto.reason}`,
         link: `/applications/${parties.id}/interview`,
       }),
       this.logger,
       `Failed to create interview-cancelled notification for application ${parties.id}`,
+    );
+
+    // PB62 AC4 / BR1: the reason always reaches the talent by e-mail — a
+    // cancellation is not something to silence with a preference.
+    runInBackground(
+      (async () => {
+        const contacts = await this.interviewsRepository.findContacts(
+          parties.id,
+        );
+        if (!contacts) return;
+        await this.emailService.sendInterviewCancelledEmail(
+          contacts.talent.email,
+          contacts.talent.name ?? "there",
+          this.emailDetails(parties, cancelled),
+          dto.reason,
+        );
+      })(),
+      this.logger,
+      `Failed to send interview-cancelled email for application ${parties.id}`,
     );
 
     return cancelled;

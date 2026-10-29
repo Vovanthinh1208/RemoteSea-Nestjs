@@ -1,19 +1,25 @@
 import { z } from "zod";
 import { httpUrlSchema } from "@/common/validation/http-url.schema";
 import {
+  INTERVIEW_PLATFORMS,
+  INTERVIEW_TITLE_MAX_LENGTH,
   MAX_DURATION_MINUTES,
   MAX_PROPOSED_SLOTS,
   MIN_DURATION_MINUTES,
 } from "../constants";
 
 export const proposeInterviewSchema = z.object({
+  // PB60 AC2: title (e.g. "Vòng 1 - Kỹ thuật"), platform and meeting link
+  // are all part of the proposal.
+  title: z.string().trim().min(1).max(INTERVIEW_TITLE_MAX_LENGTH),
+  platform: z.enum(INTERVIEW_PLATFORMS),
   durationMinutes: z
     .number()
     .int()
     .min(MIN_DURATION_MINUTES)
     .max(MAX_DURATION_MINUTES),
   proposedSlots: z.array(z.string().datetime()).min(1).max(MAX_PROPOSED_SLOTS),
-  meetingUrl: httpUrlSchema.optional(),
+  meetingUrl: httpUrlSchema,
   // Which company member actually runs this interview — optional (the
   // interview stays unassigned, visible only to OWNER/RECRUITER/
   // HIRING_MANAGER, until someone sets it). Validated server-side against

@@ -40,11 +40,11 @@ export class CvAnalysisResponseDto {
   @ApiPropertyOptional({
     enum: CV_RECOMMENDATION_VALUES,
     nullable: true,
-    example: "ADVANCE",
+    example: "PROCEED",
     description:
       "Decision support only — the recruiter always makes the actual call. Null for analyses generated before this field existed (never backfilled).",
   })
-  recommendation!: "ADVANCE" | "HOLD" | "REJECT" | null;
+  recommendation!: "PROCEED" | "REVIEW" | "REJECT" | null;
 
   @ApiPropertyOptional({
     nullable: true,

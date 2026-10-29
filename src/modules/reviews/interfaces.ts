@@ -9,6 +9,19 @@ import {
 // fields this module's eligibility rule needs — see the Review model's
 // schema comment for why "CONFIRMED and the slot has passed" is the source
 // of truth, not Application.status.
+// PB70 partner lookup: every application linking the caller and the partner,
+// with the interview fields the eligibility rule needs.
+export const partnerApplicationSelect = {
+  id: true,
+  talent: { select: { userId: true } },
+  job: { select: { employer: { select: { userId: true } } } },
+  interview: { select: { status: true, confirmedSlot: true } },
+} satisfies Prisma.ApplicationSelect;
+
+export type PartnerApplication = Prisma.ApplicationGetPayload<{
+  select: typeof partnerApplicationSelect;
+}>;
+
 export const reviewApplicationSelect = {
   ...applicationPartiesSelect,
   interview: { select: { status: true, confirmedSlot: true } },
@@ -26,6 +39,7 @@ export const reviewListItemSelect = {
   professionalismRating: true,
   interviewProcessRating: true,
   reliabilityRating: true,
+  title: true,
   comment: true,
   createdAt: true,
   // Public display label for the reviewer: a talent's own name, or the
@@ -53,7 +67,8 @@ export type CreateReviewInput = {
   professionalismRating?: number;
   interviewProcessRating?: number;
   reliabilityRating?: number;
-  comment?: string;
+  title: string;
+  comment: string;
 };
 
 export type ReviewRatingAverages = {

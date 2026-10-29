@@ -109,7 +109,7 @@ export class CvAnalysisService {
         "If the resume doesn't give you enough to judge a specific point, say so explicitly rather than guessing. " +
         "Respond with ONLY a single JSON object, no prose outside it, matching exactly: " +
         '{"fitScore": number 0-100, "summary": "2-3 sentence objective summary", "strengths": string[] (max 4, specific to this job), "gaps": string[] (max 4, specific to this job), "suggestedQuestions": string[] (max 3, interview questions probing the biggest gaps/unknowns), ' +
-        '"recommendation": "ADVANCE" | "HOLD" | "REJECT" (HOLD when evidence is genuinely mixed or insufficient — never guess toward ADVANCE or REJECT), "recommendationReason": "one sentence, the single biggest factor behind that recommendation"}.',
+        '"recommendation": "PROCEED" | "REVIEW" | "REJECT" (REVIEW when evidence is genuinely mixed or insufficient — never guess toward PROCEED or REJECT), "recommendationReason": "one sentence, the single biggest factor behind that recommendation"}.',
       prompt,
     });
 

@@ -152,6 +152,7 @@ export class ApplicationsRepository {
           talentId: input.talentId,
           coverLetter: input.coverLetter,
           resumeUrl: input.resumeUrl,
+          contactPhone: input.contactPhone,
         },
         select: { id: true },
       });
@@ -273,11 +274,12 @@ export class ApplicationsRepository {
     id: string,
     talentId: string,
     status: Extract<ApplicationStatus, "OFFER_ACCEPTED" | "OFFER_DECLINED">,
+    declineReason?: string,
   ): Promise<ApplicationWithJob | null> {
     return this.prisma.$transaction(async (tx) => {
       const { count } = await tx.application.updateMany({
         where: { id, talentId, status: "OFFERED" },
-        data: { status },
+        data: { status, offerDeclineReason: declineReason ?? null },
       });
       if (count === 0) return null;
 

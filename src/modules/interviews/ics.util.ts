@@ -6,7 +6,14 @@ export type InterviewIcsInput = {
   confirmedSlot: Date;
   durationMinutes: number;
   meetingUrl: string | null;
+  // PB60 AC2 interview title, e.g. "Vòng 1 - Kỹ thuật" (null on old rows).
+  title?: string | null;
+  // PB63 AC3: who takes part — organizer is the company contact.
+  organizer?: IcsParticipant | null;
+  attendees?: IcsParticipant[];
 };
+
+export type IcsParticipant = { name: string | null; email: string };
 
 // RFC 5545 requires CRLF line endings and TEXT values with `,`, `;`, `\`
 // and embedded newlines backslash-escaped — a raw title/company name with
@@ -19,6 +26,22 @@ const escapeIcsText = (value: string): string =>
     .replace(/;/g, "\\;")
     .replace(/,/g, "\\,")
     .replace(/\r\n|\r|\n/g, "\\n");
+
+// RFC 5545 §3.2: a quoted parameter value (CN="...") may not contain DQUOTE
+// or control characters — they're dropped rather than escaped, since the
+// grammar has no escape for them.
+const toIcsParamValue = (value: string): string =>
+  `"${value.replace(/["\p{Cc}]/gu, "").trim()}"`;
+
+const participantLine = (
+  property: "ORGANIZER" | "ATTENDEE",
+  participant: IcsParticipant,
+): string => {
+  const params =
+    property === "ATTENDEE" ? ";ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED" : "";
+  const cn = participant.name ? `;CN=${toIcsParamValue(participant.name)}` : "";
+  return `${property}${cn}${params}:mailto:${participant.email}`;
+};
 
 // RFC 5545 §3.1: a content line SHOULD NOT exceed 75 octets (not
 // characters — a company/candidate name with non-ASCII text is multi-byte
@@ -88,8 +111,11 @@ const buildAlarm = (trigger: string, summary: string): string[] => [
 export const buildInterviewIcs = (input: InterviewIcsInput): string => {
   const start = input.confirmedSlot;
   const end = new Date(start.getTime() + input.durationMinutes * 60_000);
-  const summary = `Interview: ${input.jobTitle} at ${input.employerName}`;
+  const summary = input.title
+    ? `${input.title} — ${input.jobTitle} at ${input.employerName}`
+    : `Interview: ${input.jobTitle} at ${input.employerName}`;
   const descriptionParts = [
+    input.title ?? null,
     `Interview for ${input.jobTitle} at ${input.employerName}`,
     input.talentName ? `Candidate: ${input.talentName}` : null,
     input.meetingUrl ? `Meeting link: ${input.meetingUrl}` : null,
@@ -116,8 +142,15 @@ export const buildInterviewIcs = (input: InterviewIcsInput): string => {
     // the backslash itself.
     `DESCRIPTION:${escapeIcsText(descriptionParts.join("\n\n"))}`,
     ...(input.meetingUrl
-      ? [`LOCATION:${escapeIcsText(input.meetingUrl)}`]
+      ? [
+          `LOCATION:${escapeIcsText(input.meetingUrl)}`,
+          `URL:${input.meetingUrl}`,
+        ]
       : []),
+    ...(input.organizer ? [participantLine("ORGANIZER", input.organizer)] : []),
+    ...(input.attendees ?? []).map((attendee) =>
+      participantLine("ATTENDEE", attendee),
+    ),
     ...ALARM_TRIGGERS.flatMap(({ trigger, label }) =>
       buildAlarm(trigger, `${summary} — ${label}`),
     ),

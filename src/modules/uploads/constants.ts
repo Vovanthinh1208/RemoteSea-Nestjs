@@ -13,7 +13,11 @@ export const CONTENT_TYPES = {
   logo: ["image/jpeg", "image/png", "image/webp"],
   // PB31 company cover image — same image rules as the logo.
   cover: ["image/jpeg", "image/png", "image/webp"],
-  resume: ["application/pdf"],
+  // PB53 AC2: PDF or Word (.docx).
+  resume: [
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ],
 } as const;
 
 export const MAX_FILE_SIZE_BYTES = {

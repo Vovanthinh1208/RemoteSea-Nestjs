@@ -15,6 +15,7 @@ import {
 import {
   ALLOWED_TRANSITIONS,
   APPLICATION_STATUS_LABELS,
+  BULK_SKIPPED_STATUSES,
   VERIFICATION_OTP_LENGTH,
   VERIFICATION_OTP_MAX_ATTEMPTS,
   VERIFICATION_OTP_TTL_MS,
@@ -45,6 +46,7 @@ import { NotificationsService } from "@/modules/notifications/notifications.serv
 import { MessagesService } from "@/modules/messages/messages.service";
 import type { SendMessageDto } from "@/modules/messages/dto/send-message.dto";
 import { InterviewsService } from "@/modules/interviews/interviews.service";
+import type { CancelInterviewDto } from "@/modules/interviews/dto/cancel-interview.dto";
 import type { ProposeInterviewDto } from "@/modules/interviews/dto/propose-interview.dto";
 import { ScorecardsService } from "@/modules/scorecards/scorecards.service";
 import { CommentsService } from "@/modules/comments/comments.service";
@@ -507,12 +509,12 @@ export class EmployerService {
 
   async listJobApplications(jobId: string, dto: ListJobApplicationsDto) {
     // Ownership is already enforced by EmployerJobOwnershipGuard before this runs.
-    const { status, page, limit } = dto;
+    const { status, q, page, limit } = dto;
     const skip = paginationSkip(page, limit);
     const { applications, total } =
       await this.employerRepository.findApplicationsForJob(
         jobId,
-        status,
+        { status, q },
         skip,
         limit,
       );
@@ -535,7 +537,7 @@ export class EmployerService {
     const { applications } =
       await this.employerRepository.findApplicationsForJob(
         jobId,
-        status,
+        { status },
         0,
         APPLICANTS_CSV_EXPORT_CAP,
       );
@@ -596,9 +598,10 @@ export class EmployerService {
     dto: UpdateApplicationDto,
   ) {
     // Ownership is already enforced by ApplicationOwnershipGuard before this runs.
-    const { status, notes } = dto;
+    const { status, notes, reason, offer } = dto;
+    const isTransition = status !== application.status;
     if (
-      status !== application.status &&
+      isTransition &&
       !ALLOWED_TRANSITIONS[application.status].includes(status)
     ) {
       throw new BadRequestApiException(
@@ -607,11 +610,52 @@ export class EmployerService {
       );
     }
 
+    // PB56 AC1–2: an offer always reaches the talent with its details.
+    if (isTransition && status === "OFFERED" && !offer) {
+      throw new BadRequestApiException(
+        "Salary, benefits and start date are required to extend an offer",
+        ErrorCode.OFFER_DETAILS_REQUIRED,
+      );
+    }
+    if (offer && status !== "OFFERED") {
+      throw new BadRequestApiException(
+        "Offer details can only be sent with status OFFERED",
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+    if (reason !== undefined && status !== "REJECTED") {
+      throw new BadRequestApiException(
+        "A reason can only be sent with status REJECTED",
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+    const offerStartDate = offer
+      ? new Date(`${offer.startDate}T00:00:00Z`)
+      : undefined;
+    if (offerStartDate) {
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+      if (offerStartDate < today) {
+        throw new BadRequestApiException(
+          "The proposed start date can't be in the past",
+          ErrorCode.VALIDATION_ERROR,
+        );
+      }
+    }
+
     const updated = await this.employerRepository.updateApplication(
       application.id,
       application.status,
       status,
       notes,
+      {
+        ...(reason !== undefined && { rejectionReason: reason }),
+        ...(offer && {
+          offerSalary: offer.salary,
+          offerBenefits: offer.benefits,
+          offerStartDate,
+        }),
+      },
     );
     if (!updated) {
       throw new ConflictApiException(
@@ -623,13 +667,19 @@ export class EmployerService {
     // Only a real transition is notification-worthy — a notes-only save
     // (status === application.status) already skips the audit-log event for
     // the same reason, see EmployerRepository.updateApplication's comment.
-    if (status !== application.status) {
+    if (isTransition) {
+      const detail =
+        status === "REJECTED" && reason
+          ? ` Feedback: ${reason}`
+          : status === "OFFERED"
+            ? " Open the application to review the offer details."
+            : "";
       runInBackground(
         this.notificationsService.create({
           userId: application.talent.userId,
           type: "APPLICATION_STATUS_CHANGED",
           title: "Your application status changed",
-          body: `Your application for ${application.job.title} is now ${APPLICATION_STATUS_LABELS[status]}.`,
+          body: `Your application for ${application.job.title} is now ${APPLICATION_STATUS_LABELS[status]}.${detail}`,
           link: `/applications/${application.id}`,
         }),
         this.logger,
@@ -651,6 +701,7 @@ export class EmployerService {
             application.talent.user.name ?? "there",
             application.job.title,
             APPLICATION_STATUS_LABELS[status],
+            status === "REJECTED" ? reason : undefined,
           ),
           this.logger,
           `Failed to send application-status email for application ${application.id}`,
@@ -666,11 +717,27 @@ export class EmployerService {
     dto: BulkUpdateApplicationsDto,
   ): Promise<{
     updated: string[];
+    skipped: string[];
     failed: {
       id: string;
       reason: "NOT_FOUND" | "INVALID_TRANSITION" | "STALE";
     }[];
   }> {
+    // PB56: each offer carries its own salary/benefits/start date, which a
+    // single shared bulk payload can't express — offers go one at a time.
+    if (dto.status === "OFFERED") {
+      throw new BadRequestApiException(
+        "Offers must be sent individually with their details",
+        ErrorCode.OFFER_DETAILS_REQUIRED,
+      );
+    }
+    if (dto.reason !== undefined && dto.status !== "REJECTED") {
+      throw new BadRequestApiException(
+        "A reason can only be sent with status REJECTED",
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
     // No single :id for a guard to load (see EmployerJobOwnershipGuard's
     // comment) — company + role are resolved once here instead, then
     // checked per item below, same shape as the guard-based routes.
@@ -688,6 +755,7 @@ export class EmployerService {
       id: string;
       reason: "NOT_FOUND" | "INVALID_TRANSITION" | "STALE";
     }[] = [];
+    const skipped: string[] = [];
     const validItems: {
       id: string;
       expectedStatus: ApplicationStatus;
@@ -710,6 +778,10 @@ export class EmployerService {
         failed.push({ id, reason: "NOT_FOUND" });
         continue;
       }
+      if (BULK_SKIPPED_STATUSES.has(application.status)) {
+        skipped.push(id);
+        continue;
+      }
       if (!ALLOWED_TRANSITIONS[application.status].includes(dto.status)) {
         failed.push({ id, reason: "INVALID_TRANSITION" });
         continue;
@@ -729,6 +801,7 @@ export class EmployerService {
         validItems.map(({ id, expectedStatus }) => ({ id, expectedStatus })),
         dto.status,
         dto.notes,
+        dto.reason,
       );
     const updatedSet = new Set(updatedIds);
 
@@ -753,7 +826,7 @@ export class EmployerService {
           userId: item.talentUserId,
           type: "APPLICATION_STATUS_CHANGED",
           title: "Your application status changed",
-          body: `Your application for ${item.jobTitle} is now ${APPLICATION_STATUS_LABELS[dto.status]}.`,
+          body: `Your application for ${item.jobTitle} is now ${APPLICATION_STATUS_LABELS[dto.status]}.${dto.reason ? ` Feedback: ${dto.reason}` : ""}`,
           link: `/applications/${item.id}`,
         }),
         this.logger,
@@ -767,6 +840,7 @@ export class EmployerService {
             item.talentName ?? "there",
             item.jobTitle,
             APPLICATION_STATUS_LABELS[dto.status],
+            dto.reason,
           ),
           this.logger,
           `Failed to send application-status email for application ${item.id}`,
@@ -774,7 +848,7 @@ export class EmployerService {
       }
     }
 
-    return { updated: updatedIds, failed };
+    return { updated: updatedIds, skipped, failed };
   }
 
   listApplicationMessages(application: ApplicationWithJobOwner) {
@@ -819,8 +893,11 @@ export class EmployerService {
     return this.interviewsService.propose(application, dto);
   }
 
-  cancelInterview(application: ApplicationWithJobOwner) {
-    return this.interviewsService.cancel(application);
+  cancelInterview(
+    application: ApplicationWithJobOwner,
+    dto: CancelInterviewDto,
+  ) {
+    return this.interviewsService.cancel(application, dto);
   }
 
   listApplicationScorecards(application: ApplicationWithJobOwner) {

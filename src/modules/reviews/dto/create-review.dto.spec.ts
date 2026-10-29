@@ -1,8 +1,11 @@
 import { createReviewSchema } from "./create-review.dto";
 
+// PB71 AC3: title + a comment of at least 20 characters are required.
 const validPayload = {
   applicationId: "capp1a2b0000ug0h9x1n1a2",
   overallRating: 5,
+  title: "Smooth process",
+  comment: "Clear communication at every step.",
 };
 
 describe("createReviewSchema", () => {
@@ -17,7 +20,7 @@ describe("createReviewSchema", () => {
       communicationRating: 5,
       professionalismRating: 1,
       interviewProcessRating: 5,
-      comment: "Solid experience overall.",
+      comment: "Solid experience overall, would recommend.",
     });
     expect(result.success).toBe(true);
   });
@@ -57,19 +60,51 @@ describe("createReviewSchema", () => {
     ).toBe(false);
   });
 
-  it("allows an omitted comment", () => {
-    const result = createReviewSchema.safeParse(validPayload);
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.comment).toBeUndefined();
+  // Previously "allows an omitted comment" — PB71 AC3 makes the detailed
+  // comment (and a title) mandatory.
+  it("rejects an omitted comment or title", () => {
+    const { comment: _comment, ...noComment } = validPayload;
+    const { title: _title, ...noTitle } = validPayload;
+    expect(createReviewSchema.safeParse(noComment).success).toBe(false);
+    expect(createReviewSchema.safeParse(noTitle).success).toBe(false);
+  });
+
+  it("requires at least 20 characters of comment after trimming", () => {
+    expect(
+      createReviewSchema.safeParse({
+        ...validPayload,
+        comment: "a".repeat(19),
+      }).success,
+    ).toBe(false);
+    expect(
+      createReviewSchema.safeParse({
+        ...validPayload,
+        comment: `  ${"a".repeat(19)}   `,
+      }).success,
+    ).toBe(false);
+    expect(
+      createReviewSchema.safeParse({
+        ...validPayload,
+        comment: "a".repeat(20),
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects a blank title", () => {
+    expect(
+      createReviewSchema.safeParse({ ...validPayload, title: "   " }).success,
+    ).toBe(false);
   });
 
   it("trims a comment with surrounding whitespace", () => {
     const result = createReviewSchema.safeParse({
       ...validPayload,
-      comment: "  Great experience.  ",
+      comment: "  Great experience overall.  ",
     });
     expect(result.success).toBe(true);
-    if (result.success) expect(result.data.comment).toBe("Great experience.");
+    if (result.success) {
+      expect(result.data.comment).toBe("Great experience overall.");
+    }
   });
 
   it("rejects a comment over the max length", () => {

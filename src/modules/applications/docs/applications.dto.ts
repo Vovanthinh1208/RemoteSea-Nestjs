@@ -29,8 +29,15 @@ export class ApplyRequestDto {
   @ApiPropertyOptional({
     format: "uri",
     example: "https://cdn.remotesea.com/resumes/jane-doe.pdf",
+    description: "PDF or DOCX uploaded via POST /uploads/presign (≤ 10 MB)",
   })
   resumeUrl?: string;
+
+  @ApiPropertyOptional({
+    example: "+84 912 345 678",
+    description: "Contact phone (PB53 AC2), 7–15 digits",
+  })
+  contactPhone?: string;
 }
 
 class JobEmployerSummaryDto {

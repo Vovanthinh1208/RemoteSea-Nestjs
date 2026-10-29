@@ -3,6 +3,7 @@ import { PDFParse } from "pdf-parse";
 import { MAX_RESUME_BYTES, MAX_RESUME_TEXT_CHARS } from "./constants";
 import { BadRequestApiException } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
+import { extractDocxText, isZipBuffer } from "./docx-text.util";
 
 @Injectable()
 export class ResumeExtractionService {
@@ -52,6 +53,20 @@ export class ResumeExtractionService {
   }
 
   private async parse(buffer: Buffer, resumeUrl: string): Promise<string> {
+    // PB53/PB66: Word CVs (.docx) are ZIP archives; everything else goes
+    // through the PDF parser as before.
+    if (isZipBuffer(buffer)) {
+      const text = extractDocxText(buffer);
+      if (!text) {
+        this.logger.warn(`Failed to read resume DOCX ${resumeUrl}`);
+        throw new BadRequestApiException(
+          "Couldn't read any text from this CV — the Word file may be empty or damaged.",
+          ErrorCode.CV_ANALYSIS_FAILED,
+        );
+      }
+      return text.slice(0, MAX_RESUME_TEXT_CHARS);
+    }
+
     const parser = new PDFParse({ data: buffer });
     try {
       const { text } = await parser.getText();

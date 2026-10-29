@@ -124,6 +124,7 @@ describe("EmployerService.updateApplication", () => {
       "PENDING",
       "REVIEWING",
       undefined,
+      {},
     );
     expect(result).toBe(updated);
     expect(notificationsService.create).toHaveBeenCalledWith({
@@ -158,6 +159,7 @@ describe("EmployerService.updateApplication", () => {
       "PENDING",
       "PENDING",
       "left a note",
+      {},
     );
     expect(notificationsService.create).not.toHaveBeenCalled();
   });
@@ -186,6 +188,7 @@ describe("EmployerService.updateApplication", () => {
       "Jane Talent",
       "Engineer",
       "In review",
+      undefined,
     );
   });
 
@@ -204,6 +207,131 @@ describe("EmployerService.updateApplication", () => {
     // In-app notifications are a separate, always-on channel — the email
     // toggle above must not suppress this.
     expect(notificationsService.create).toHaveBeenCalled();
+  });
+
+  // PB58 BR2: rejection feedback is stored for, and sent to, the talent.
+  it("stores the rejection reason and includes it in the notification and email", async () => {
+    const updated = { ...application, status: "REJECTED" };
+    const { service, repo, notificationsService, emailService } = makeService({
+      updateApplication: jest.fn().mockResolvedValue(updated),
+      applicationUpdatesEnabled: jest.fn().mockResolvedValue(true),
+    });
+
+    await service.updateApplication(application, {
+      status: "REJECTED",
+      reason: "We went with a candidate with more Go experience.",
+    });
+
+    expect(repo.updateApplication).toHaveBeenCalledWith(
+      "app-1",
+      "PENDING",
+      "REJECTED",
+      undefined,
+      { rejectionReason: "We went with a candidate with more Go experience." },
+    );
+    expect(notificationsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: "Your application for Engineer is now Rejected. Feedback: We went with a candidate with more Go experience.",
+      }),
+    );
+    expect(emailService.sendApplicationStatusChangedEmail).toHaveBeenCalledWith(
+      "jane@example.com",
+      "Jane Talent",
+      "Engineer",
+      "Rejected",
+      "We went with a candidate with more Go experience.",
+    );
+  });
+
+  it("rejects a reason sent with a non-REJECTED status", async () => {
+    const { service, repo } = makeService();
+
+    const error = await service
+      .updateApplication(application, { status: "REVIEWING", reason: "x" })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(BadRequestApiException);
+    expect(repo.updateApplication).not.toHaveBeenCalled();
+  });
+
+  // PB56 AC1–2: an offer must carry salary, benefits and start date.
+  describe("extending an offer (INTERVIEW -> OFFERED)", () => {
+    const atInterview = { ...application, status: "INTERVIEW" as const };
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+
+    it("requires the offer details", async () => {
+      const { service, repo } = makeService();
+
+      const error = await service
+        .updateApplication(atInterview, { status: "OFFERED" })
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(BadRequestApiException);
+      expect((error as BadRequestApiException).getResponse()).toMatchObject({
+        code: ErrorCode.OFFER_DETAILS_REQUIRED,
+      });
+      expect(repo.updateApplication).not.toHaveBeenCalled();
+    });
+
+    it("rejects a start date in the past", async () => {
+      const { service, repo } = makeService();
+
+      const error = await service
+        .updateApplication(atInterview, {
+          status: "OFFERED",
+          offer: {
+            salary: "USD 4,000/month",
+            benefits: "Remote stipend",
+            startDate: "2020-01-01",
+          },
+        })
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(BadRequestApiException);
+      expect(repo.updateApplication).not.toHaveBeenCalled();
+    });
+
+    it("stores the offer in the same CAS update as the status", async () => {
+      const { service, repo } = makeService({
+        updateApplication: jest
+          .fn()
+          .mockResolvedValue({ ...atInterview, status: "OFFERED" }),
+      });
+
+      await service.updateApplication(atInterview, {
+        status: "OFFERED",
+        offer: {
+          salary: "USD 4,000/month",
+          benefits: "Remote stipend, 20 days PTO",
+          startDate: tomorrow,
+        },
+      });
+
+      expect(repo.updateApplication).toHaveBeenCalledWith(
+        "app-1",
+        "INTERVIEW",
+        "OFFERED",
+        undefined,
+        {
+          offerSalary: "USD 4,000/month",
+          offerBenefits: "Remote stipend, 20 days PTO",
+          offerStartDate: new Date(`${tomorrow}T00:00:00Z`),
+        },
+      );
+    });
+
+    it("rejects offer details sent with a non-OFFERED status", async () => {
+      const { service } = makeService();
+
+      await expect(
+        service.updateApplication(application, {
+          status: "REVIEWING",
+          offer: { salary: "x", benefits: "y", startDate: tomorrow },
+        }),
+      ).rejects.toBeInstanceOf(BadRequestApiException);
+    });
   });
 });
 
@@ -242,7 +370,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
       findApplicationsForBulkUpdate: jest.fn().mockResolvedValue([
         {
           id: "app-1",
-          status: "REJECTED",
+          status: "PENDING",
           talent: {
             userId: "talent-user-1",
             user: { name: "Jane Talent", email: "jane@example.com" },
@@ -255,12 +383,65 @@ describe("EmployerService.bulkUpdateApplications", () => {
 
     const result = await service.bulkUpdateApplications("owner-1", {
       ids: ["app-1"],
-      status: "REJECTED",
+      status: "SHORTLISTED",
     });
 
     expect(result.failed).toEqual([
       { id: "app-1", reason: "INVALID_TRANSITION" },
     ]);
+  });
+
+  // PB59 BR1: end-state applications (WITHDRAWN, HIRED = OFFER_ACCEPTED, …)
+  // are skipped, not reported as failures, and never written.
+  it.each(["WITHDRAWN", "OFFER_ACCEPTED", "OFFER_DECLINED", "REJECTED"])(
+    "skips an application that is already %s",
+    async (status) => {
+      const bulkUpdateApplicationStatus = jest.fn().mockResolvedValue([]);
+      const { service, notificationsService } = makeService({
+        findApplicationsForBulkUpdate: jest.fn().mockResolvedValue([
+          {
+            id: "app-1",
+            status,
+            talent: {
+              userId: "talent-user-1",
+              user: { name: "Jane Talent", email: "jane@example.com" },
+            },
+            job: { title: "Backend Dev", employerId: "owner-1-company" },
+          },
+        ]),
+        bulkUpdateApplicationStatus,
+      });
+
+      const result = await service.bulkUpdateApplications("owner-1", {
+        ids: ["app-1"],
+        status: "REJECTED",
+      });
+
+      expect(result).toEqual({ updated: [], skipped: ["app-1"], failed: [] });
+      expect(bulkUpdateApplicationStatus).toHaveBeenCalledWith(
+        [],
+        "REJECTED",
+        undefined,
+        undefined,
+      );
+      expect(notificationsService.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refuses a bulk move to OFFERED (offers need per-candidate details)", async () => {
+    const { service, repo } = makeService({
+      findApplicationsForBulkUpdate: jest.fn(),
+    });
+
+    const error = await service
+      .bulkUpdateApplications("owner-1", { ids: ["app-1"], status: "OFFERED" })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(BadRequestApiException);
+    expect((error as BadRequestApiException).getResponse()).toMatchObject({
+      code: ErrorCode.OFFER_DETAILS_REQUIRED,
+    });
+    expect(repo.findApplicationsForBulkUpdate).not.toHaveBeenCalled();
   });
 
   it("reports STALE when the row moved between the fresh read and the write", async () => {
@@ -288,6 +469,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
     expect(bulkUpdateApplicationStatus).toHaveBeenCalledWith(
       [{ id: "app-1", expectedStatus: "PENDING" }],
       "REJECTED",
+      undefined,
       undefined,
     );
     expect(result.failed).toEqual([{ id: "app-1", reason: "STALE" }]);
@@ -335,10 +517,9 @@ describe("EmployerService.bulkUpdateApplications", () => {
     });
 
     expect(result.updated).toEqual(["app-1", "app-2"]);
-    expect(result.failed).toEqual([
-      { id: "app-3", reason: "INVALID_TRANSITION" },
-      { id: "app-4", reason: "NOT_FOUND" },
-    ]);
+    // app-3 is already REJECTED — skipped (PB59 BR1), not a failure.
+    expect(result.skipped).toEqual(["app-3"]);
+    expect(result.failed).toEqual([{ id: "app-4", reason: "NOT_FOUND" }]);
     expect(notificationsService.create).toHaveBeenCalledTimes(2);
     expect(notificationsService.create).toHaveBeenCalledWith(
       expect.objectContaining({ userId: "talent-user-1" }),
@@ -391,6 +572,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
       "Talent One",
       "Backend Dev",
       "In review",
+      undefined,
     );
   });
 });
@@ -673,6 +855,9 @@ describe("EmployerService.getApplicationInterview / proposeInterview", () => {
     interviewsService.propose.mockResolvedValue({ id: "intv-1" });
 
     const dto = {
+      title: "Round 1 - Technical",
+      platform: "ZOOM" as const,
+      meetingUrl: "https://zoom.us/j/123",
       durationMinutes: 30,
       proposedSlots: ["2026-08-25T07:00:00.000Z"],
     };
@@ -1033,7 +1218,7 @@ describe("EmployerService.exportJobApplicantsCsv", () => {
 
     expect(repo.findApplicationsForJob).toHaveBeenCalledWith(
       "job-1",
-      undefined,
+      { status: undefined },
       0,
       expect.any(Number),
     );
@@ -1052,7 +1237,7 @@ describe("EmployerService.exportJobApplicantsCsv", () => {
 
     expect(repo.findApplicationsForJob).toHaveBeenCalledWith(
       "job-1",
-      "SHORTLISTED",
+      { status: "SHORTLISTED" },
       0,
       expect.any(Number),
     );

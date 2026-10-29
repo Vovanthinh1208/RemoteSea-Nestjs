@@ -90,6 +90,7 @@ describe("ReviewsService.getEligibility", () => {
 
     expect(result).toEqual({
       eligible: false,
+      reason: "NO_INTERVIEW",
       direction: null,
       revieweeId: null,
       alreadyReviewed: false,
@@ -106,6 +107,7 @@ describe("ReviewsService.getEligibility", () => {
     const result = await service.getEligibility(TALENT_USER_ID, "app-1");
 
     expect(result.eligible).toBe(false);
+    expect(result.reason).toBe("INTERVIEW_NOT_CONFIRMED");
   });
 
   it("is not eligible when CONFIRMED but the slot hasn't happened yet", async () => {
@@ -120,6 +122,7 @@ describe("ReviewsService.getEligibility", () => {
     const result = await service.getEligibility(TALENT_USER_ID, "app-1");
 
     expect(result.eligible).toBe(false);
+    expect(result.reason).toBe("INTERVIEW_NOT_YET_HELD");
   });
 
   it("is eligible for the talent, with direction TALENT_TO_EMPLOYER, once the interview is CONFIRMED", async () => {
@@ -133,6 +136,7 @@ describe("ReviewsService.getEligibility", () => {
 
     expect(result).toEqual({
       eligible: true,
+      reason: null,
       direction: "TALENT_TO_EMPLOYER",
       revieweeId: EMPLOYER_USER_ID,
       alreadyReviewed: false,
@@ -150,6 +154,7 @@ describe("ReviewsService.getEligibility", () => {
 
     expect(result).toEqual({
       eligible: true,
+      reason: null,
       direction: "EMPLOYER_TO_TALENT",
       revieweeId: TALENT_USER_ID,
       alreadyReviewed: false,
@@ -170,11 +175,134 @@ describe("ReviewsService.getEligibility", () => {
 
     expect(result.eligible).toBe(false);
     expect(result.alreadyReviewed).toBe(true);
+    expect(result.reason).toBe("ALREADY_REVIEWED");
+  });
+});
+
+// PB70: GET /reviews/eligibility?partnerId=…
+describe("ReviewsService.getEligibilityForPartner", () => {
+  const partnerApp = (
+    id: string,
+    interview: { status: string; confirmedSlot: Date | null } | null,
+  ) => ({
+    id,
+    talent: { userId: TALENT_USER_ID },
+    job: { employer: { userId: EMPLOYER_USER_ID } },
+    interview,
+  });
+
+  it("is not eligible, with NO_INTERVIEW, when the two never interacted", async () => {
+    const { service } = makeService({
+      findApplicationsBetween: jest.fn().mockResolvedValue([]),
+    });
+
+    const result = await service.getEligibilityForPartner(TALENT_USER_ID, {
+      partnerId: EMPLOYER_USER_ID,
+    });
+
+    expect(result).toMatchObject({
+      eligible: false,
+      reason: "NO_INTERVIEW",
+      applicationId: null,
+    });
+  });
+
+  it("is not eligible, with INTERVIEW_NOT_YET_HELD, while the confirmed interview is still upcoming", async () => {
+    const { service } = makeService({
+      findApplicationsBetween: jest.fn().mockResolvedValue([
+        partnerApp("app-1", {
+          status: "CONFIRMED",
+          confirmedSlot: FUTURE_SLOT,
+        }),
+      ]),
+    });
+
+    const result = await service.getEligibilityForPartner(TALENT_USER_ID, {
+      partnerId: EMPLOYER_USER_ID,
+    });
+
+    expect(result).toMatchObject({
+      eligible: false,
+      reason: "INTERVIEW_NOT_YET_HELD",
+    });
+  });
+
+  it("is eligible on the completed, not-yet-reviewed interaction", async () => {
+    const { service } = makeService({
+      findApplicationsBetween: jest.fn().mockResolvedValue([
+        partnerApp("app-old", {
+          status: "CONFIRMED",
+          confirmedSlot: PAST_SLOT,
+        }),
+        partnerApp("app-new", {
+          status: "CONFIRMED",
+          confirmedSlot: PAST_SLOT,
+        }),
+      ]),
+      findReviewedApplicationIds: jest
+        .fn()
+        .mockResolvedValue([{ applicationId: "app-old" }]),
+    });
+
+    const result = await service.getEligibilityForPartner(EMPLOYER_USER_ID, {
+      partnerId: TALENT_USER_ID,
+    });
+
+    expect(result).toEqual({
+      eligible: true,
+      reason: null,
+      applicationId: "app-new",
+      direction: "EMPLOYER_TO_TALENT",
+      revieweeId: TALENT_USER_ID,
+      alreadyReviewed: false,
+    });
+  });
+
+  it("reports ALREADY_REVIEWED once every completed interaction is reviewed", async () => {
+    const { service } = makeService({
+      findApplicationsBetween: jest.fn().mockResolvedValue([
+        partnerApp("app-1", {
+          status: "CONFIRMED",
+          confirmedSlot: PAST_SLOT,
+        }),
+      ]),
+      findReviewedApplicationIds: jest
+        .fn()
+        .mockResolvedValue([{ applicationId: "app-1" }]),
+    });
+
+    const result = await service.getEligibilityForPartner(TALENT_USER_ID, {
+      partnerId: EMPLOYER_USER_ID,
+    });
+
+    expect(result).toMatchObject({
+      eligible: false,
+      reason: "ALREADY_REVIEWED",
+      alreadyReviewed: true,
+      applicationId: null,
+    });
+  });
+
+  it("never treats the caller as their own partner", async () => {
+    const findApplicationsBetween = jest.fn();
+    const { service } = makeService({ findApplicationsBetween });
+
+    const result = await service.getEligibilityForPartner(TALENT_USER_ID, {
+      partnerId: TALENT_USER_ID,
+    });
+
+    expect(findApplicationsBetween).not.toHaveBeenCalled();
+    expect(result.eligible).toBe(false);
   });
 });
 
 describe("ReviewsService.create", () => {
-  const dto = { applicationId: "app-1", overallRating: 5 };
+  const dto = {
+    applicationId: "app-1",
+    overallRating: 5,
+    title: "Smooth process",
+    comment: "Clear communication at every step.",
+  };
 
   it("throws APPLICATION_NOT_FOUND for a user uninvolved in the application", async () => {
     const { service } = makeService({
@@ -278,7 +406,7 @@ describe("ReviewsService.create", () => {
       communicationRating: 5,
       professionalismRating: 4,
       interviewProcessRating: 5,
-      comment: "Great process.",
+      comment: "Great process, very well organised.",
     });
 
     expect(create).toHaveBeenCalledWith({
@@ -291,11 +419,44 @@ describe("ReviewsService.create", () => {
       professionalismRating: 4,
       interviewProcessRating: 5,
       reliabilityRating: undefined,
-      comment: "Great process.",
+      title: "Smooth process",
+      comment: "Great process, very well organised.",
     });
   });
 
-  it("creates a review without a comment (optional)", async () => {
+  // PB71 BR2 — replaces "creates a review without a comment (optional)",
+  // which PB71 AC3 no longer allows.
+  it.each([
+    ["comment", { comment: "The interviewer was a total asshole to me." }],
+    ["title", { title: "Đồ chó" }],
+    [
+      "Vietnamese abbreviation",
+      { comment: "Quy trình như vcl, không chuyên nghiệp." },
+    ],
+  ])(
+    "rejects blocked language in the %s with REVIEW_CONTENT_REJECTED",
+    async (_label, override) => {
+      const create = jest.fn();
+      const { service } = makeService({
+        findApplicationForReview: jest
+          .fn()
+          .mockResolvedValue(baseApplication("CONFIRMED")),
+        create,
+      });
+
+      const error = await service
+        .create(TALENT_USER_ID, { ...dto, ...override })
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(BadRequestApiException);
+      expect((error as BadRequestApiException).getResponse()).toMatchObject({
+        code: ErrorCode.REVIEW_CONTENT_REJECTED,
+      });
+      expect(create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not flag ordinary words that merely contain a blocked term", async () => {
     const create = jest.fn().mockResolvedValue({ id: "review-1" });
     const { service } = makeService({
       findApplicationForReview: jest
@@ -304,11 +465,13 @@ describe("ReviewsService.create", () => {
       create,
     });
 
-    await service.create(TALENT_USER_ID, dto);
+    await service.create(TALENT_USER_ID, {
+      ...dto,
+      title: "Dickens fan, Scunthorpe office",
+      comment: "Du lịch, đúng giờ, rất chuyên nghiệp và thân thiện.",
+    });
 
-    expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ comment: undefined }),
-    );
+    expect(create).toHaveBeenCalled();
   });
 
   it("allows the employer to review the talent independently of the talent's own review", async () => {
@@ -344,6 +507,7 @@ describe("ReviewsService.create", () => {
     });
 
     await service.create(TALENT_USER_ID, {
+      ...dto,
       applicationId: "app-2",
       overallRating: 4,
     });
@@ -395,6 +559,8 @@ describe("ReviewsService.listForUser", () => {
       findForRevieweeWithAggregate: jest.fn().mockResolvedValue({
         reviews: [{ id: "review-1" }],
         total: 24,
+        filteredTotal: 24,
+        distribution: { 1: 0, 2: 1, 3: 2, 4: 6, 5: 15 },
         avg: {
           overallRating: 4.8,
           communicationRating: 4.9,
@@ -408,16 +574,19 @@ describe("ReviewsService.listForUser", () => {
     const result = await service.listForUser(EMPLOYER_USER_ID, {
       page: 1,
       limit: 20,
+      sort: "newest",
     });
 
     expect(repo.findForRevieweeWithAggregate).toHaveBeenCalledWith(
       EMPLOYER_USER_ID,
       0,
       20,
+      { rating: undefined, sort: "newest" },
     );
     expect(result).toEqual({
       averageRating: 4.8,
       totalReviews: 24,
+      distribution: { 1: 0, 2: 1, 3: 2, 4: 6, 5: 15 },
       ratings: {
         communication: 4.9,
         professionalism: 4.8,
@@ -426,6 +595,47 @@ describe("ReviewsService.listForUser", () => {
       },
       reviews: [{ id: "review-1" }],
       pagination: { page: 1, limit: 20, total: 24, pages: 2 },
+    });
+  });
+
+  // PB72 AC3: a star filter narrows the list and its pagination, never the
+  // aggregate figures above it.
+  it("passes the star filter through and paginates on the filtered total", async () => {
+    const { service, repo } = makeService({
+      findForRevieweeWithAggregate: jest.fn().mockResolvedValue({
+        reviews: [],
+        total: 24,
+        filteredTotal: 6,
+        distribution: { 1: 0, 2: 1, 3: 2, 4: 6, 5: 15 },
+        avg: {
+          overallRating: 4.5,
+          communicationRating: null,
+          professionalismRating: null,
+          interviewProcessRating: null,
+          reliabilityRating: null,
+        },
+      }),
+    });
+
+    const result = await service.listForUser(EMPLOYER_USER_ID, {
+      page: 1,
+      limit: 5,
+      rating: 4,
+      sort: "oldest",
+    });
+
+    expect(repo.findForRevieweeWithAggregate).toHaveBeenCalledWith(
+      EMPLOYER_USER_ID,
+      0,
+      5,
+      { rating: 4, sort: "oldest" },
+    );
+    expect(result.totalReviews).toBe(24);
+    expect(result.pagination).toEqual({
+      page: 1,
+      limit: 5,
+      total: 6,
+      pages: 2,
     });
   });
 });

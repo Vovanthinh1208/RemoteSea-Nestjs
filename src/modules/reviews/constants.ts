@@ -7,3 +7,6 @@ export const RATE_LIMITS = {
 } as const;
 
 export const REVIEW_COMMENT_MAX_LENGTH = 2000;
+// PB71 AC3.
+export const REVIEW_COMMENT_MIN_LENGTH = 20;
+export const REVIEW_TITLE_MAX_LENGTH = 120;
