@@ -7,7 +7,7 @@
 # whatever you actually choose, since flyctl reads this file's `app` value
 # on every subsequent `fly deploy`.
 
-app = 'remotesea-api'
+app = 'remotesea-api-vovanthinh2'
 primary_region = 'sin' # Singapore — matches remotesea-web's fly.toml, keeps API/frontend co-located
 
 [build]
@@ -26,12 +26,13 @@ primary_region = 'sin' # Singapore — matches remotesea-web's fly.toml, keeps A
   NODE_ENV = 'production'
   # Canonical public frontend origin; also used for reset-password email links.
   # Keep this aligned with remotesea-web's Fly app name/custom public domain.
-  FRONTEND_URL = 'https://remotesea-web.fly.dev'
+  FRONTEND_URL = 'https://remotesea-web-vovanthinh2.fly.dev'
   # Must match [http_service].internal_port below and the Dockerfile's
   # EXPOSE — env.validation.ts defaults PORT to 4000 if unset, so this is
   # belt-and-suspenders, not strictly required, but keeps the two files from
   # silently drifting apart if either default ever changes.
   PORT = '4000'
+  AI_SERVICE_URL = 'https://remotesea-ai.fly.dev'
 
 [http_service]
   internal_port = 4000

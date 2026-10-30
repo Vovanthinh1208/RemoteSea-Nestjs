@@ -1,3 +1,4 @@
+import Stripe from "stripe";
 import { BillingService } from "./billing.service";
 import {
   BadRequestApiException,
@@ -59,6 +60,90 @@ describe("BillingService.createCheckoutSession", () => {
     const result = await service.createCheckoutSession(job, "owner-1");
     expect(stripeCreate).toHaveBeenCalled();
     expect(result.url).toBe("https://checkout.stripe.com/cs_1");
+  });
+
+  // PB43: a cancelled payment returns to the dashboard ("Pay to publish" on
+  // the DRAFT row), not the wizard that would create a second job.
+  it("sends a cancelled checkout back to the employer dashboard", async () => {
+    const stripeCreate = jest
+      .fn()
+      .mockResolvedValue({ id: "cs_1", url: "https://checkout.stripe.com" });
+    const service = makeService(stripeCreate);
+    const job = {
+      id: "job-1",
+      status: "DRAFT",
+      planPaid: false,
+      planType: "STANDARD",
+      title: "Backend Engineer",
+    } as JobPayer;
+
+    await service.createCheckoutSession(job, "owner-1");
+    expect(stripeCreate.mock.calls[0][0].cancel_url).toBe(
+      "https://app.example.com/employer-dashboard?checkout=cancelled",
+    );
+  });
+
+  it("maps Stripe being unreachable to 503 and stores no session", async () => {
+    const stripeCreate = jest.fn().mockRejectedValue(
+      new Stripe.errors.StripeConnectionError({
+        type: "api_error",
+        message: "getaddrinfo ENOTFOUND api.stripe.com",
+      }),
+    );
+    const billingRepository = { setStripeSessionId: jest.fn() };
+    const service = new BillingService(
+      { checkout: { sessions: { create: stripeCreate } } } as never,
+      billingRepository as never,
+      {} as never,
+      { get: jest.fn().mockReturnValue("https://app.example.com") } as never,
+      {} as never,
+    );
+    const job = {
+      id: "job-1",
+      status: "DRAFT",
+      planPaid: false,
+      planType: "STANDARD",
+      title: "Backend Engineer",
+    } as JobPayer;
+
+    await expect(
+      service.createCheckoutSession(job, "owner-1"),
+    ).rejects.toBeInstanceOf(ServiceUnavailableApiException);
+    expect(billingRepository.setStripeSessionId).not.toHaveBeenCalled();
+  });
+
+  // Stripe rejects a reused idempotency key whose parameters changed, so a
+  // retry after switching plan (or editing the title) needs a different key,
+  // while a genuine double-submit must still share one.
+  it("keys idempotency on the request: same for a repeat, new after a plan or title change", async () => {
+    const stripeCreate = jest
+      .fn()
+      .mockResolvedValue({ id: "cs_1", url: "https://checkout.stripe.com" });
+    const service = makeService(stripeCreate);
+    const job = {
+      id: "job-1",
+      status: "DRAFT",
+      planPaid: false,
+      planType: "STANDARD",
+      title: "Backend Engineer",
+    } as JobPayer;
+
+    await service.createCheckoutSession(job, "owner-1");
+    await service.createCheckoutSession(job, "owner-1");
+    await service.createCheckoutSession(
+      { ...job, planType: "FEATURED" } as JobPayer,
+      "owner-1",
+    );
+    await service.createCheckoutSession(
+      { ...job, title: "Senior Backend Engineer" } as JobPayer,
+      "owner-1",
+    );
+    const keys = stripeCreate.mock.calls.map(
+      (call) => call[1].idempotencyKey as string,
+    );
+    expect(keys[0]).toBe(keys[1]);
+    expect(keys[0]).toMatch(/^checkout:job-1:[0-9a-f]{32}$/);
+    expect(new Set(keys).size).toBe(3);
   });
 
   // Same threshold/cooldown as EmailService's breaker (5 consecutive

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Stripe from "stripe";
@@ -31,6 +32,12 @@ import {
 // once the outage is already known.
 const BREAKER_FAILURE_THRESHOLD = 5;
 const BREAKER_COOLDOWN_MS = 30_000;
+
+export const checkoutIdempotencyKey = (
+  jobId: string,
+  params: Stripe.Checkout.SessionCreateParams,
+): string =>
+  `checkout:${jobId}:${createHash("sha256").update(JSON.stringify(params)).digest("hex").slice(0, 32)}`;
 
 @Injectable()
 export class BillingService {
@@ -83,39 +90,55 @@ export class BillingService {
 
     const appUrl = this.config.get("FRONTEND_URL", { infer: true });
 
+    const params: Stripe.Checkout.SessionCreateParams = {
+      mode: "payment",
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: "usd",
+            unit_amount: PLAN_PRICES[job.planType],
+            product_data: {
+              name: `${PLAN_LABELS[job.planType]} — ${job.title}`,
+            },
+          },
+        },
+      ],
+      success_url: `${appUrl}/post-job/success?session_id={CHECKOUT_SESSION_ID}`,
+      // PB43: an abandoned payment lands on the dashboard, where the DRAFT row
+      // offers "Pay to publish" again — not back in the wizard, whose local
+      // draft would create a second job on re-submit.
+      cancel_url: `${appUrl}/employer-dashboard?checkout=cancelled`,
+      metadata: { jobId: job.id, userId },
+    };
+
     let checkout: Stripe.Checkout.Session;
     try {
       checkout = await this.stripe.checkout.sessions.create(
-        {
-          mode: "payment",
-          line_items: [
-            {
-              quantity: 1,
-              price_data: {
-                currency: "usd",
-                unit_amount: PLAN_PRICES[job.planType],
-                product_data: {
-                  name: `${PLAN_LABELS[job.planType]} — ${job.title}`,
-                },
-              },
-            },
-          ],
-          success_url: `${appUrl}/post-job/success?session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${appUrl}/post-job?job=${job.id}`,
-          metadata: { jobId: job.id, userId },
-        },
+        params,
         // The client's own maxNetworkRetries only dedupes this SDK call's own
         // internal retries — it does nothing for a genuine double-submit
         // (double-click, a client-side retry after a perceived timeout). Since
         // checkout-session creation never flips job.status off DRAFT, two
         // concurrent requests both pass the guard above and would otherwise
-        // create two separate Stripe sessions for the same job. Keying on
-        // job.id makes a duplicate request return the original session instead.
-        { idempotencyKey: `checkout:${job.id}` },
+        // create two separate Stripe sessions for the same job. Keying on the
+        // job plus a digest of the request makes a duplicate return the
+        // original session, while a later retry with a different plan or an
+        // edited title (PB42) gets a new one — Stripe rejects a reused key
+        // whose parameters changed.
+        { idempotencyKey: checkoutIdempotencyKey(job.id, params) },
       );
       this.breaker.onSuccess();
     } catch (error) {
       this.breaker.onFailure();
+      // Stripe unreachable (DNS, timeout, reset) is an outage on our side of
+      // the payment, not a server bug: same 503 as the open circuit above, so
+      // the client can say "try again shortly". Other Stripe errors propagate.
+      if (error instanceof Stripe.errors.StripeConnectionError) {
+        throw new ServiceUnavailableApiException(
+          "Payment processing is temporarily unavailable. Please try again shortly.",
+        );
+      }
       throw error;
     }
 
