@@ -470,9 +470,13 @@ export class AuthService {
       // — see MetricsService.authFailuresTotal. Never logs the password
       // itself, only that an attempt against this account failed.
       this.metricsService.recordAuthFailure("2fa_disable_invalid_password");
-      throw new UnauthorizedApiException(
-        "Incorrect password",
-        ErrorCode.INVALID_CREDENTIALS,
+      // 400, not 401: the caller *is* authenticated, only the re-entered
+      // password is wrong. A 401 makes the web client treat the session as
+      // expired and sign the user out over a typo. Same response as the other
+      // re-auth checks (change password, delete account, transfer ownership).
+      throw new BadRequestApiException(
+        "Current password is incorrect",
+        ErrorCode.CURRENT_PASSWORD_INCORRECT,
       );
     }
     await this.authRepository.disableTwoFactor(userId);

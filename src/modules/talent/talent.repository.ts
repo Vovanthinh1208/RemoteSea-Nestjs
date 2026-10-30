@@ -63,10 +63,12 @@ export class TalentRepository {
     return employer?.isVerified ?? false;
   }
 
-  findProfileForVerification(userId: string): Promise<{ id: string } | null> {
+  findProfileForVerification(
+    userId: string,
+  ): Promise<{ id: string; user: { email: string } } | null> {
     return this.prisma.talentProfile.findUnique({
       where: { userId },
-      select: { id: true },
+      select: { id: true, user: { select: { email: true } } },
     });
   }
 

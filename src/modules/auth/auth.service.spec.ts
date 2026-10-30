@@ -735,9 +735,14 @@ describe("AuthService.disableTwoFactor", () => {
       },
     });
 
-    await expect(
-      service.disableTwoFactor("u1", "wrong-password"),
-    ).rejects.toBeInstanceOf(UnauthorizedApiException);
+    // 400 CURRENT_PASSWORD_INCORRECT, not 401: a 401 signs the web client out.
+    const error = await service
+      .disableTwoFactor("u1", "wrong-password")
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BadRequestApiException);
+    expect((error as BadRequestApiException).getResponse()).toMatchObject({
+      code: ErrorCode.CURRENT_PASSWORD_INCORRECT,
+    });
     expect(authRepository.disableTwoFactor).not.toHaveBeenCalled();
     expect(authRepository.revokeAllSessions).not.toHaveBeenCalled();
     expect(metricsService.recordAuthFailure).toHaveBeenCalledWith(

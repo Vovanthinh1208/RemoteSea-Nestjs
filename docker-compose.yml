@@ -24,6 +24,7 @@ services:
       - .env
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://remotesea:remotesea_password@postgres:5432/remotesea_dev}
+      DIRECT_URL: ${DIRECT_URL:-postgresql://remotesea:remotesea_password@postgres:5432/remotesea_dev}
     command: ["npx", "prisma", "migrate", "deploy"]
     depends_on:
       postgres:

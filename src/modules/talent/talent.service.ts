@@ -339,6 +339,17 @@ export class TalentService {
       "Profile not found",
       ErrorCode.TALENT_PROFILE_NOT_FOUND,
     );
+    // PB22 AC4: confirming sets emailVerified on the *account*, so only the
+    // account's own address can be verified — otherwise any inbox the user
+    // controls would earn the "Email verified" badge for a different email.
+    if (
+      dto.email.trim().toLowerCase() !== profile.user.email.trim().toLowerCase()
+    ) {
+      throw new BadRequestApiException(
+        "Only your account email can be verified",
+        ErrorCode.TALENT_VERIFICATION_EMAIL_MISMATCH,
+      );
+    }
 
     const token = crypto.randomBytes(32).toString("hex");
     await this.talentRepository.createEmailVerification(

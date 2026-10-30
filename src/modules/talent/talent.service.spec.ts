@@ -190,12 +190,37 @@ describe("TalentService.submitVerification", () => {
     });
   });
 
-  it("creates a verification token and emails it — no domain-match check", async () => {
+  // PB22 AC4: emailVerified is set on the account, so only the account's own
+  // address may be verified.
+  it("rejects an address other than the account email and emails nothing", async () => {
+    const createEmailVerification = jest.fn();
+    const { service, emailService } = makeService({
+      findProfileForVerification: jest.fn().mockResolvedValue({
+        id: "talent-1",
+        user: { email: "jane@gmail.com" },
+      }),
+      createEmailVerification,
+    });
+
+    const error = await service
+      .submitVerification("user-1", { email: "someone-else@example.com" })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(BadRequestApiException);
+    expect((error as BadRequestApiException).getResponse()).toMatchObject({
+      code: ErrorCode.TALENT_VERIFICATION_EMAIL_MISMATCH,
+    });
+    expect(createEmailVerification).not.toHaveBeenCalled();
+    expect(emailService.sendTalentVerificationEmail).not.toHaveBeenCalled();
+  });
+
+  it("creates a verification token for the account email (any domain, any case) and emails it", async () => {
     const createEmailVerification = jest.fn().mockResolvedValue(undefined);
     const { service, emailService } = makeService({
-      findProfileForVerification: jest
-        .fn()
-        .mockResolvedValue({ id: "talent-1" }),
+      findProfileForVerification: jest.fn().mockResolvedValue({
+        id: "talent-1",
+        user: { email: "Jane@Gmail.com" },
+      }),
       createEmailVerification,
     });
 

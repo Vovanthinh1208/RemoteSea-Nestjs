@@ -10,6 +10,7 @@ import type {
 import { AuthMapper } from "../auth.mapper";
 import { AuthRepository } from "../auth.repository";
 import { runInBackground } from "@/common/utils/background-task.util";
+import { ServiceUnavailableApiException } from "@/common/exceptions/api.exception";
 
 // Only bother writing lastSeenAt when it's gone stale by this much — every
 // authenticated request hits this path, so touching it unconditionally would
@@ -47,7 +48,21 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
     if (!payload.sid) {
       throw new Error("Session expired — please sign in again");
     }
-    const session = await this.authRepository.findSessionState(payload.sid);
+    let session: Awaited<ReturnType<AuthRepository["findSessionState"]>>;
+    try {
+      session = await this.authRepository.findSessionState(payload.sid);
+    } catch (error) {
+      // The database couldn't answer (pool timeout, pooler full, network) —
+      // that says nothing about the token. Answering 401 here made the web
+      // client treat a busy database as an expired session and sign the user
+      // out right after logging in; a 503 is retried instead.
+      this.logger.error(
+        `Session lookup failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new ServiceUnavailableApiException(
+        "We couldn't verify your session right now. Please try again shortly.",
+      );
+    }
     if (!session || session.revokedAt) {
       throw new Error("Session expired — please sign in again");
     }
