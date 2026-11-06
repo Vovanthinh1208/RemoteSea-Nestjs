@@ -293,4 +293,46 @@ describe("GlobalExceptionFilter", () => {
       });
     });
   });
+
+  // Outage, not a bug: the client should retry, so 503 rather than 500.
+  it.each([
+    [
+      "the Supabase pooler at its client limit",
+      new Prisma.PrismaClientUnknownRequestError(
+        "Error in connector: Error querying the database: FATAL: (EMAXCONNSESSION) max clients reached in session mode - max clients are limited to pool_size: 15",
+        { clientVersion: "5.22.0" },
+      ),
+    ],
+    [
+      "an exhausted connection pool (P2024)",
+      new Prisma.PrismaClientKnownRequestError(
+        "Timed out fetching a new connection",
+        {
+          code: "P2024",
+          clientVersion: "5.22.0",
+        },
+      ),
+    ],
+    [
+      "an unreachable database (P1001)",
+      new Prisma.PrismaClientKnownRequestError("Can't reach database server", {
+        code: "P1001",
+        clientVersion: "5.22.0",
+      }),
+    ],
+  ])("answers 503 when the database is unavailable: %s", (_label, error) => {
+    const filter = new GlobalExceptionFilter();
+    const { host, response } = makeHost({ id: "req-db" });
+
+    filter.catch(error, host);
+
+    expect(response.status).toHaveBeenCalledWith(503);
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: ErrorCode.SERVICE_UNAVAILABLE,
+        requestId: "req-db",
+      }),
+    );
+    expect(reportException).not.toHaveBeenCalled();
+  });
 });

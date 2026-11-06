@@ -31,6 +31,26 @@ const FALLBACK_CODE_BY_STATUS: Partial<Record<number, ErrorCode>> = {
   502: ErrorCode.SERVICE_UNAVAILABLE,
 };
 
+// Prisma errors meaning "the database couldn't be reached or had no free
+// connection", as opposed to a problem with the query itself.
+const DB_UNAVAILABLE_CODES = new Set([
+  "P1001",
+  "P1002",
+  "P1008",
+  "P1017",
+  "P2024",
+]);
+const DB_UNAVAILABLE_MESSAGE =
+  /EMAXCONN|max clients reached|too many (clients|connections)|Timed out fetching a new connection|Can't reach database server/i;
+
+const isDatabaseUnavailable = (exception: unknown): boolean =>
+  exception instanceof Prisma.PrismaClientInitializationError ||
+  (exception instanceof Prisma.PrismaClientKnownRequestError &&
+    DB_UNAVAILABLE_CODES.has(exception.code)) ||
+  ((exception instanceof Prisma.PrismaClientUnknownRequestError ||
+    exception instanceof Prisma.PrismaClientRustPanicError) &&
+    DB_UNAVAILABLE_MESSAGE.test(exception.message));
+
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalExceptionFilter.name);
@@ -150,6 +170,22 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       response.status(400).json({
         error: "salaryMax must be greater than or equal to salaryMin",
         code: ErrorCode.SALARY_RANGE_INVALID,
+        requestId,
+      });
+      return;
+    }
+
+    // The database can't serve the request right now (unreachable, pool
+    // exhausted, the Supabase pooler at its client limit). That's an outage,
+    // not a bug in this request: 503 tells the client to retry (the web
+    // retries GETs on 503) instead of a 500 that reads as a broken feature.
+    if (isDatabaseUnavailable(exception)) {
+      this.logger.error(
+        `Database unavailable: ${(exception as Error).message.split("\n").filter(Boolean).slice(-1)[0] ?? "unknown"}`,
+      );
+      response.status(503).json({
+        error: "The service is temporarily busy. Please try again in a moment.",
+        code: ErrorCode.SERVICE_UNAVAILABLE,
         requestId,
       });
       return;

@@ -400,6 +400,26 @@ export class EmployerRepository {
     });
   }
 
+  // PB34 AC2: listings per status, for the dashboard's overview. A status with
+  // no jobs is simply absent from the result; the service fills in the zeros.
+  async countJobsByStatus(
+    employerId: string,
+  ): Promise<Partial<Record<JobStatus, number>>> {
+    const rows = await this.prisma.job.groupBy({
+      by: ["status"],
+      where: { employerId },
+      _count: { _all: true },
+    });
+    return Object.fromEntries(rows.map((r) => [r.status, r._count._all]));
+  }
+
+  // PB34 AC2: applications nobody at the company has opened yet.
+  countUnseenApplications(employerId: string): Promise<number> {
+    return this.prisma.application.count({
+      where: { job: { employerId }, viewedAt: null },
+    });
+  }
+
   findJobsByEmployer(employerId: string, status?: JobStatus) {
     return this.prisma.job.findMany({
       where: { employerId, ...(status && { status }) },

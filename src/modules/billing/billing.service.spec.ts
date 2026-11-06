@@ -25,6 +25,25 @@ describe("BillingService.createCheckoutSession", () => {
     );
   };
 
+  // A missing key must never reach Stripe: the placeholder client would still
+  // get a session back, from an anonymous sandbox outside our account.
+  it("answers 503 without calling Stripe when no key is configured", async () => {
+    const stripeCreate = jest.fn();
+    const service = new BillingService(
+      { checkout: { sessions: { create: stripeCreate } } } as never,
+      { setStripeSessionId: jest.fn() } as never,
+      {} as never,
+      { get: jest.fn().mockReturnValue(undefined) } as never,
+      {} as never,
+    );
+    const job = { id: "job-1", status: "DRAFT", planPaid: false } as JobPayer;
+
+    await expect(
+      service.createCheckoutSession(job, "owner-1"),
+    ).rejects.toBeInstanceOf(ServiceUnavailableApiException);
+    expect(stripeCreate).not.toHaveBeenCalled();
+  });
+
   it("rejects a job that isn't DRAFT", async () => {
     const service = makeService(jest.fn());
     const job = { status: "ACTIVE", planPaid: false } as JobPayer;

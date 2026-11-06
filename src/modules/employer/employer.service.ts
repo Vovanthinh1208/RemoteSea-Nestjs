@@ -83,6 +83,9 @@ const PUBLIC_RESPONSE_STATS_CACHE_TTL_MS = 300_000;
 // page size.
 const APPLICANTS_CSV_EXPORT_CAP = 5000;
 
+// PB34 AC2: "interviews coming up in the next 7 days".
+const DASHBOARD_INTERVIEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
 @Injectable()
 export class EmployerService {
   private readonly logger = new Logger(EmployerService.name);
@@ -580,13 +583,54 @@ export class EmployerService {
   // one membership lookup), just run concurrently and returned as one HTTP
   // response instead of four.
   async getDashboard(userId: string) {
+    // First and on its own: loading the recent-applications feed below stamps
+    // those rows as viewed, which would otherwise race the "not viewed yet"
+    // count down to zero.
+    const overview =
+      await this.getDashboardOverview(userId).catch(nullOnExpectedError);
     const [profile, jobs, recentApplications, funnel] = await Promise.all([
       this.getProfile(userId).catch(nullOnExpectedError),
       this.listJobs(userId, {}).catch(nullOnExpectedError),
       this.getRecentApplications(userId).catch(nullOnExpectedError),
       this.getHiringFunnel(userId).catch(nullOnExpectedError),
     ]);
-    return { profile, jobs, recentApplications, funnel };
+    return { profile, jobs, recentApplications, funnel, overview };
+  }
+
+  // PB34 AC2: the summary every company member sees, INTERVIEWER included
+  // (who can't list jobs or applications, so this is aggregates only). The
+  // interview list keeps that role's assigned-only scope. `stats` carries the
+  // SLA figure for that same role; the others already get it from listJobs.
+  async getDashboardOverview(userId: string) {
+    const { employerId, role } = await this.requireRole(
+      userId,
+      ALL_COMPANY_ROLES,
+    );
+    const [counts, unseenApplications, upcoming, stats] = await Promise.all([
+      this.employerRepository.countJobsByStatus(employerId),
+      this.employerRepository.countUnseenApplications(employerId),
+      this.interviewsService.listUpcomingForCompany(employerId, role, userId),
+      role === "INTERVIEWER"
+        ? this.employerRepository.getEmployerJobStats(employerId)
+        : null,
+    ]);
+    const horizon = Date.now() + DASHBOARD_INTERVIEW_WINDOW_MS;
+    return {
+      jobCounts: {
+        ACTIVE: counts.ACTIVE ?? 0,
+        PENDING_REVIEW: counts.PENDING_REVIEW ?? 0,
+        DRAFT: counts.DRAFT ?? 0,
+        CLOSED: counts.CLOSED ?? 0,
+      },
+      unseenApplications,
+      upcomingInterviews: {
+        scope: upcoming.scope,
+        interviews: upcoming.interviews.filter(
+          (i) => i.confirmedSlot.getTime() <= horizon,
+        ),
+      },
+      stats,
+    };
   }
 
   async updateApplication(

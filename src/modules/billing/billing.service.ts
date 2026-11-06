@@ -82,6 +82,16 @@ export class BillingService {
       );
     }
 
+    // Without a key the client holds billing.module's placeholder, which Stripe
+    // still accepts and answers from an anonymous sandbox outside our account.
+    // Stop here so job details never leave for it and no unpayable session
+    // reaches the employer.
+    if (!this.config.get("STRIPE_SECRET_KEY", { infer: true })) {
+      throw new ServiceUnavailableApiException(
+        "Payment processing is not configured on this server.",
+      );
+    }
+
     if (this.breaker.isOpen()) {
       throw new ServiceUnavailableApiException(
         "Payment processing is temporarily unavailable. Please try again shortly.",

@@ -360,6 +360,13 @@ export class EmployerDashboardResponseDto {
   @ApiPropertyOptional({
     nullable: true,
     description:
+      "PB34 AC2 summary for any company member: jobCounts (ACTIVE, PENDING_REVIEW, DRAFT, CLOSED), unseenApplications, upcomingInterviews within 7 days (assigned-only for an INTERVIEWER), and stats (SLA; INTERVIEWER only, null otherwise).",
+  })
+  overview!: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
       "Same shape as GET /employer/analytics/funnel's response — see that route's docs.",
   })
   funnel!: object | null;

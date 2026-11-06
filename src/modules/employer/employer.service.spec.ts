@@ -35,6 +35,8 @@ const makeService = (
     // have to stub it.
     applicationUpdatesEnabled: jest.fn().mockResolvedValue(true),
     findApplicationUpdatesPreferences: jest.fn().mockResolvedValue(new Map()),
+    countJobsByStatus: jest.fn().mockResolvedValue({}),
+    countUnseenApplications: jest.fn().mockResolvedValue(0),
     ...repoOverrides,
   } as unknown as EmployerRepository;
   // "owner-1" resolves to owner-1-company/OWNER by default — matches every
@@ -62,7 +64,9 @@ const makeService = (
     get: jest.fn(),
     getIcsFile: jest.fn(),
     propose: jest.fn(),
-    listUpcomingForCompany: jest.fn(),
+    listUpcomingForCompany: jest
+      .fn()
+      .mockResolvedValue({ scope: "team", interviews: [] }),
   };
   const scorecardsService = {
     list: jest.fn(),
@@ -1032,7 +1036,119 @@ describe("EmployerService.getHiringFunnel", () => {
   });
 });
 
+describe("EmployerService.getDashboardOverview (PB34 AC2)", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const member = (role: string) => ({
+    resolveMembership: jest
+      .fn()
+      .mockResolvedValue({ employerId: "emp-1", role }),
+  });
+  const repo = {
+    countJobsByStatus: jest.fn().mockResolvedValue({ ACTIVE: 2, DRAFT: 1 }),
+    countUnseenApplications: jest.fn().mockResolvedValue(3),
+    getEmployerJobStats: jest
+      .fn()
+      .mockResolvedValue({ avgFirstResponseHours: 5 }),
+  };
+
+  it("counts every status (zero when absent) and scopes queries to the company", async () => {
+    const { service, interviewsService } = makeService(
+      repo,
+      {},
+      member("OWNER"),
+    );
+    interviewsService.listUpcomingForCompany.mockResolvedValue({
+      scope: "team",
+      interviews: [],
+    });
+
+    const result = await service.getDashboardOverview("owner-1");
+
+    expect(result.jobCounts).toEqual({
+      ACTIVE: 2,
+      PENDING_REVIEW: 0,
+      DRAFT: 1,
+      CLOSED: 0,
+    });
+    expect(result.unseenApplications).toBe(3);
+    expect(repo.countJobsByStatus).toHaveBeenCalledWith("emp-1");
+    expect(repo.countUnseenApplications).toHaveBeenCalledWith("emp-1");
+    expect(result.stats).toBeNull();
+  });
+
+  it("keeps only interviews inside the next 7 days", async () => {
+    const { service, interviewsService } = makeService(
+      repo,
+      {},
+      member("RECRUITER"),
+    );
+    const soon = { id: "soon", confirmedSlot: new Date(Date.now() + 6 * DAY) };
+    const later = {
+      id: "later",
+      confirmedSlot: new Date(Date.now() + 8 * DAY),
+    };
+    interviewsService.listUpcomingForCompany.mockResolvedValue({
+      scope: "team",
+      interviews: [soon, later],
+    });
+
+    const result = await service.getDashboardOverview("recruiter-1");
+
+    expect(result.upcomingInterviews.interviews).toEqual([soon]);
+  });
+
+  it("gives an INTERVIEWER the summary and SLA, with their assigned-only scope", async () => {
+    const { service, interviewsService } = makeService(
+      repo,
+      {},
+      member("INTERVIEWER"),
+    );
+    interviewsService.listUpcomingForCompany.mockResolvedValue({
+      scope: "mine",
+      interviews: [],
+    });
+
+    const result = await service.getDashboardOverview("int-1");
+
+    expect(interviewsService.listUpcomingForCompany).toHaveBeenCalledWith(
+      "emp-1",
+      "INTERVIEWER",
+      "int-1",
+    );
+    expect(result.upcomingInterviews.scope).toBe("mine");
+    expect(result.stats).toMatchObject({ avgFirstResponseHours: 5 });
+  });
+});
+
 describe("EmployerService.getDashboard", () => {
+  it("counts unseen applications before the recent feed stamps them viewed", async () => {
+    const order: string[] = [];
+    const { service } = makeService({
+      countUnseenApplications: jest.fn().mockImplementation(async () => {
+        order.push("count");
+        return 2;
+      }),
+      findRecentApplicationsForCompany: jest
+        .fn()
+        .mockImplementation(async () => {
+          order.push("feed");
+          return [];
+        }),
+      findProfileWithJobCount: jest
+        .fn()
+        .mockResolvedValue({ id: "profile-1", companyName: "Acme" }),
+      countApplicationsForOwner: jest.fn().mockResolvedValue(0),
+      findJobsByEmployer: jest.fn().mockResolvedValue([]),
+      getEmployerJobStats: jest.fn().mockResolvedValue({}),
+      getApplicationFunnelCounts: jest.fn().mockResolvedValue([]),
+    });
+
+    const result = await service.getDashboard("owner-1");
+
+    expect(order).toEqual(["count", "feed"]);
+    expect(result.overview?.unseenApplications).toBe(2);
+  });
+
   it("aggregates profile, jobs, recent applications, and funnel in one call", async () => {
     const { service } = makeService({
       findProfileWithJobCount: jest
@@ -1092,6 +1208,7 @@ describe("EmployerService.getDashboard", () => {
       jobs: null,
       recentApplications: null,
       funnel: null,
+      overview: null,
     });
   });
 
@@ -1102,6 +1219,9 @@ describe("EmployerService.getDashboard", () => {
           .fn()
           .mockResolvedValue({ id: "profile-1", companyName: "Acme" }),
         countApplicationsForOwner: jest.fn().mockResolvedValue(0),
+        getEmployerJobStats: jest.fn().mockResolvedValue({
+          avgFirstResponseHours: 5,
+        }),
       },
       {},
       {
@@ -1118,6 +1238,8 @@ describe("EmployerService.getDashboard", () => {
     expect(result.jobs).toBeNull();
     expect(result.recentApplications).toBeNull();
     expect(result.funnel).toBeNull();
+    // PB34: still a company member, so the aggregate summary is there.
+    expect(result.overview?.stats).toMatchObject({ avgFirstResponseHours: 5 });
   });
 
   it("still rejects a real failure (not a membership issue) instead of swallowing it to null", async () => {
