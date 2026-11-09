@@ -14,7 +14,14 @@ import {
 export const jobTypeSchema = z.enum(JOB_TYPE_VALUES);
 export const experienceLevelSchema = z.enum(EXPERIENCE_LEVEL_VALUES);
 export const jobStatusSchema = z.enum(JOB_STATUS_VALUES);
-export const applicationStatusSchema = z.enum(APPLICATION_STATUS_VALUES);
+// Older clients may still send the previous vocabulary in filters/mutations.
+// Normalize only input. Responses and persisted values use the official backlog.
+export const applicationStatusSchema = z.preprocess((value) => {
+  if (value === "PENDING") return "APPLIED";
+  if (value === "OFFER_ACCEPTED") return "ACCEPTED";
+  if (value === "OFFER_DECLINED") return "DECLINED";
+  return value;
+}, z.enum(APPLICATION_STATUS_VALUES));
 export const planTypeSchema = z.enum(PLAN_TYPE_VALUES);
 export const alertFrequencySchema = z.enum(ALERT_FREQUENCY_VALUES);
 export const jobReportReasonSchema = z.enum(JOB_REPORT_REASON_VALUES);

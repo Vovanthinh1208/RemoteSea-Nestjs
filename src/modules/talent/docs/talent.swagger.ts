@@ -71,7 +71,7 @@ export const ApiGetActivity = () =>
     ApiOperation({
       summary: "Get recent activity",
       description:
-        "Newest-first feed of things that happened on this talent's applications — status changes (excluding the initial PENDING event), messages received from an employer, interview proposed/confirmed, and job invitations received. Computed at request time from ApplicationStatusEvent/Message/Interview/JobInvitation, not a separate persisted feed — no read state, capped at 20 items. Returns an empty list (not 404) if the caller has no talent profile yet.",
+        "Newest-first feed of things that happened on this talent's applications — status changes (excluding the initial APPLIED event), messages received from an employer, interview proposed/confirmed, and job invitations received. Computed at request time from ApplicationStatusEvent/Message/Interview/JobInvitation, not a separate persisted feed — no read state, capped at 20 items. Returns an empty list (not 404) if the caller has no talent profile yet.",
     }),
     ApiOkResponse({
       description: "The caller's recent activity, newest first",
@@ -129,7 +129,7 @@ export const ApiGetDashboard = () =>
           },
           applicationStats: {
             total: 1,
-            byStatus: { PENDING: 0, REVIEWING: 1, INTERVIEW: 0, OFFERED: 0 },
+            byStatus: { APPLIED: 0, REVIEWING: 1, INTERVIEW: 0, OFFERED: 0 },
           },
           savedJobIds: ["cljob1a2b3c4d5e6f7g8h9i0"],
           profileViewAnalytics: ProfileViewAnalyticsExample,
@@ -143,7 +143,7 @@ export const ApiGetDashboard = () =>
           invitations: [
             {
               id: "clinv1a2b3c4d5e6f7g8h9i0",
-              status: "PENDING",
+              status: "APPLIED",
               employer: { companyName: "RemoteSEA Ltd" },
               job: {
                 id: "cljob1a2b3c4d5e6f7g8h9i0",

@@ -31,7 +31,7 @@ export const VERIFICATION_OTP_LENGTH = 6;
 // of brute-force reach.
 export const VERIFICATION_OTP_MAX_ATTEMPTS = 5;
 
-// OFFER_ACCEPTED/OFFER_DECLINED never appear as a target anywhere in this
+// ACCEPTED/DECLINED never appear as a target anywhere in this
 // table — they're the talent's own response to an offer (see
 // ApplicationsService.respondToOffer), set through a dedicated talent-only
 // endpoint, not something an employer PATCH can set directly. Since
@@ -42,24 +42,24 @@ export const ALLOWED_TRANSITIONS: Record<
   ApplicationStatus,
   ApplicationStatus[]
 > = {
-  PENDING: ["REVIEWING", "REJECTED"],
+  APPLIED: ["REVIEWING", "REJECTED"],
   REVIEWING: ["SHORTLISTED", "REJECTED"],
   SHORTLISTED: ["INTERVIEW", "REJECTED"],
   INTERVIEW: ["OFFERED", "REJECTED"],
   OFFERED: ["REJECTED"],
-  OFFER_ACCEPTED: [],
-  OFFER_DECLINED: [],
+  ACCEPTED: [],
+  DECLINED: [],
   REJECTED: [],
   WITHDRAWN: [],
 };
 
 // PB59 BR1: applications already at an end state are skipped (reported as
-// `skipped`, not as failures) by a bulk status change. OFFER_ACCEPTED is the
+// `skipped`, not as failures) by a bulk status change. ACCEPTED is the
 // backlog's "HIRED".
 export const BULK_SKIPPED_STATUSES: ReadonlySet<ApplicationStatus> = new Set([
   "WITHDRAWN",
-  "OFFER_ACCEPTED",
-  "OFFER_DECLINED",
+  "ACCEPTED",
+  "DECLINED",
   "REJECTED",
 ]);
 
@@ -68,13 +68,13 @@ export const BULK_SKIPPED_STATUSES: ReadonlySet<ApplicationStatus> = new Set([
 // display-label mapping, but this notification's body is baked in at
 // creation time on the backend).
 export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
-  PENDING: "Pending",
+  APPLIED: "Pending",
   REVIEWING: "In review",
   SHORTLISTED: "Shortlisted",
   INTERVIEW: "Interview",
   OFFERED: "Offer extended",
-  OFFER_ACCEPTED: "Offer accepted",
-  OFFER_DECLINED: "Offer declined",
+  ACCEPTED: "Offer accepted",
+  DECLINED: "Offer declined",
   REJECTED: "Rejected",
   WITHDRAWN: "Withdrawn",
 };

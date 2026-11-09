@@ -232,7 +232,7 @@ export class JobDetailEmployerDto extends JobListEmployerDto {
     example: 18.5,
     nullable: true,
     description:
-      "Average hours from application to this employer's first status change away from PENDING, computed across all their jobs. Null if they have fewer than 3 responded applications on record (not enough signal to publish).",
+      "Average hours from application to this employer's first status change away from APPLIED, computed across all their jobs. Null if they have fewer than 3 responded applications on record (not enough signal to publish).",
   })
   avgFirstResponseHours?: number | null;
 }

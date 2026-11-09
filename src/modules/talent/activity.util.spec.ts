@@ -69,7 +69,7 @@ describe("interviewsToActivity", () => {
   it("emits a single proposed entry for a still-pending interview", () => {
     const interview: InterviewActivitySource = {
       id: "iv-1",
-      status: "PENDING",
+      status: "PROPOSED",
       createdAt: new Date("2026-08-03T00:00:00.000Z"),
       updatedAt: new Date("2026-08-03T00:00:00.000Z"),
       application: { id: "app-1", job },

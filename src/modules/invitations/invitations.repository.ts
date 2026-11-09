@@ -138,7 +138,7 @@ export class InvitationsRepository {
         select: { id: true },
       });
       await tx.applicationStatusEvent.create({
-        data: { applicationId: created.id, status: "PENDING" },
+        data: { applicationId: created.id, status: "APPLIED" },
       });
       const [application, job] = await Promise.all([
         tx.application.findUniqueOrThrow({

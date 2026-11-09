@@ -8,7 +8,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
  * typed schema in /docs.
  */
 
-const INTERVIEW_STATUS_VALUES = ["PENDING", "CONFIRMED"] as const;
+const INTERVIEW_STATUS_VALUES = ["PROPOSED", "CONFIRMED"] as const;
 
 export class ProposeInterviewRequestDto {
   @ApiProperty({ maxLength: 120, example: "Vòng 1 - Kỹ thuật" })
@@ -81,7 +81,7 @@ export class InterviewResponseDto {
   })
   meetingUrl!: string | null;
 
-  @ApiProperty({ enum: INTERVIEW_STATUS_VALUES, example: "PENDING" })
+  @ApiProperty({ enum: INTERVIEW_STATUS_VALUES, example: "PROPOSED" })
   status!: (typeof INTERVIEW_STATUS_VALUES)[number];
 
   @ApiProperty({ format: "date-time", example: "2026-08-18T09:12:00.000Z" })

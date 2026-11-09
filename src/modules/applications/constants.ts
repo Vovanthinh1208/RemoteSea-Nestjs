@@ -10,9 +10,9 @@ export const RATE_LIMITS = {
 // status the talent is still actively waiting on. OFFERED is deliberately
 // excluded: once an offer is extended, the talent's response is
 // accept/decline (see ApplicationsService.respondToOffer), not withdraw.
-// REJECTED/WITHDRAWN/OFFER_ACCEPTED/OFFER_DECLINED are already terminal.
+// REJECTED/WITHDRAWN/ACCEPTED/DECLINED are already terminal.
 export const WITHDRAWABLE_STATUSES: ApplicationStatus[] = [
-  "PENDING",
+  "APPLIED",
   "REVIEWING",
   "SHORTLISTED",
   "INTERVIEW",
@@ -23,7 +23,7 @@ export const WITHDRAWABLE_STATUSES: ApplicationStatus[] = [
 // considered stuck. Named constants so they're easy to retune without
 // hunting through the query that uses them.
 export const BACKLOG_THRESHOLD_MS = {
-  PENDING: 3 * 24 * 60 * 60 * 1000,
+  APPLIED: 3 * 24 * 60 * 60 * 1000,
   REVIEWING: 7 * 24 * 60 * 60 * 1000,
 } as const;
 

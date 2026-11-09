@@ -38,6 +38,7 @@ const makeService = (
   const repository = {
     findByApplicationId: jest.fn().mockResolvedValue(null),
     findSourceForApplication: jest.fn().mockResolvedValue(source),
+    claimRegeneration: jest.fn().mockResolvedValue(true),
     create: jest
       .fn()
       .mockImplementation((input) =>
@@ -139,6 +140,28 @@ describe("CvAnalysisService.getOrCreate", () => {
 });
 
 describe("CvAnalysisService.regenerate", () => {
+  it("rejects regeneration without a previous analysis before spending provider tokens", async () => {
+    const { service, aiService, repository } = makeService();
+    await expect(service.regenerate("app-1")).rejects.toMatchObject({
+      response: { code: ErrorCode.NOT_FOUND },
+    });
+    expect(aiService.complete).not.toHaveBeenCalled();
+    expect(repository.claimRegeneration).not.toHaveBeenCalled();
+  });
+
+  it("honors the shared database cooldown even in a fresh service instance", async () => {
+    const { service, aiService, repository } = makeService({
+      repository: {
+        findByApplicationId: jest.fn().mockResolvedValue({ id: "cva-1" }),
+        claimRegeneration: jest.fn().mockResolvedValue(false),
+      },
+    });
+    await expect(service.regenerate("app-1")).rejects.toMatchObject({
+      retryAfter: 30,
+    });
+    expect(repository.claimRegeneration).toHaveBeenCalledWith("app-1", 30000);
+    expect(aiService.complete).not.toHaveBeenCalled();
+  });
   it("calls the AI and overwrites via replace even when an analysis already exists", async () => {
     const existing = { id: "cva-1", fitScore: 40 };
     const { service, repository, aiService } = makeService({
@@ -161,7 +184,15 @@ describe("CvAnalysisService.regenerate", () => {
   // paid LLM calls before either write lands — same guarantee getOrCreate
   // gives via the same SingleFlight instance/key.
   it("collapses a concurrent getOrCreate and regenerate for the same application into one AI call", async () => {
-    const { service, aiService } = makeService();
+    const { service, aiService } = makeService({
+      repository: {
+        // PB67 requires an existing analysis. Cache reads remain free while
+        // explicit regeneration performs exactly one new provider call.
+        findByApplicationId: jest
+          .fn()
+          .mockResolvedValue({ id: "cva-1", fitScore: 40 }),
+      },
+    });
 
     await Promise.all([
       service.getOrCreate("app-1"),

@@ -716,7 +716,7 @@ async function main(): Promise<void> {
           status,
           appliedAt,
           viewedAt:
-            status !== ApplicationStatus.PENDING
+            status !== ApplicationStatus.APPLIED
               ? daysAgo(randomInt(0, 5))
               : null,
         },
@@ -724,11 +724,11 @@ async function main(): Promise<void> {
       await prisma.applicationStatusEvent.create({
         data: {
           applicationId: application.id,
-          status: ApplicationStatus.PENDING,
+          status: ApplicationStatus.APPLIED,
           createdAt: appliedAt,
         },
       });
-      if (status !== ApplicationStatus.PENDING) {
+      if (status !== ApplicationStatus.APPLIED) {
         await prisma.applicationStatusEvent.create({
           data: {
             applicationId: application.id,
@@ -1016,7 +1016,7 @@ async function main(): Promise<void> {
         },
       });
       const pipeline: ApplicationStatus[] = [
-        ApplicationStatus.PENDING,
+        ApplicationStatus.APPLIED,
         ApplicationStatus.REVIEWING,
         ApplicationStatus.SHORTLISTED,
         ApplicationStatus.INTERVIEW,
@@ -1172,7 +1172,7 @@ async function main(): Promise<void> {
           applicationId: pendingCandidateApp.id,
           durationMinutes: 30,
           proposedSlots: [daysFromNow(2), daysFromNow(3)],
-          status: InterviewStatus.PENDING,
+          status: InterviewStatus.PROPOSED,
         },
       });
     }

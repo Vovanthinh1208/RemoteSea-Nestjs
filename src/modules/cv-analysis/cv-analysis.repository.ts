@@ -11,6 +11,23 @@ import {
 export class CvAnalysisRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  async claimRegeneration(
+    applicationId: string,
+    windowMs: number,
+  ): Promise<boolean> {
+    // A single compare-and-set in PostgreSQL: two instances cannot both pay
+    // for a regeneration. Use the database clock, including across restarts.
+    const claimed = await this.prisma.$queryRaw<{ id: string }[]>`
+      UPDATE applications
+      SET "cvAnalysisRegeneratedAt" = CURRENT_TIMESTAMP
+      WHERE id = ${applicationId}
+        AND ("cvAnalysisRegeneratedAt" IS NULL OR
+          "cvAnalysisRegeneratedAt" <= CURRENT_TIMESTAMP - ${windowMs} * INTERVAL '1 millisecond')
+      RETURNING id
+    `;
+    return claimed.length === 1;
+  }
+
   findByApplicationId(applicationId: string): Promise<CvAnalysis | null> {
     return this.prisma.cvAnalysis.findUnique({
       where: { applicationId },

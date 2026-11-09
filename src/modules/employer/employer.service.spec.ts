@@ -15,7 +15,7 @@ import type { ApplicationWithJobOwner } from "./guards/application-ownership.gua
 
 const application = {
   id: "app-1",
-  status: "PENDING",
+  status: "APPLIED",
   talent: {
     userId: "talent-user-1",
     user: { name: "Jane Talent", email: "jane@example.com" },
@@ -114,7 +114,7 @@ const makeService = (
 };
 
 describe("EmployerService.updateApplication", () => {
-  it("allows a valid transition (PENDING -> REVIEWING) and notifies the talent", async () => {
+  it("allows a valid transition (APPLIED -> REVIEWING) and notifies the talent", async () => {
     const updated = { ...application, status: "REVIEWING" };
     const { service, repo, notificationsService } = makeService({
       updateApplication: jest.fn().mockResolvedValue(updated),
@@ -125,7 +125,7 @@ describe("EmployerService.updateApplication", () => {
     });
     expect(repo.updateApplication).toHaveBeenCalledWith(
       "app-1",
-      "PENDING",
+      "APPLIED",
       "REVIEWING",
       undefined,
       {},
@@ -140,7 +140,7 @@ describe("EmployerService.updateApplication", () => {
     });
   });
 
-  it("rejects an invalid transition (PENDING -> OFFERED)", async () => {
+  it("rejects an invalid transition (APPLIED -> OFFERED)", async () => {
     const { service } = makeService();
 
     await expect(
@@ -155,13 +155,13 @@ describe("EmployerService.updateApplication", () => {
     });
 
     await service.updateApplication(application, {
-      status: "PENDING",
+      status: "APPLIED",
       notes: "left a note",
     });
     expect(repo.updateApplication).toHaveBeenCalledWith(
       "app-1",
-      "PENDING",
-      "PENDING",
+      "APPLIED",
+      "APPLIED",
       "left a note",
       {},
     );
@@ -228,7 +228,7 @@ describe("EmployerService.updateApplication", () => {
 
     expect(repo.updateApplication).toHaveBeenCalledWith(
       "app-1",
-      "PENDING",
+      "APPLIED",
       "REJECTED",
       undefined,
       { rejectionReason: "We went with a candidate with more Go experience." },
@@ -345,7 +345,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
       findApplicationsForBulkUpdate: jest.fn().mockResolvedValue([
         {
           id: "app-2",
-          status: "PENDING",
+          status: "APPLIED",
           talent: {
             userId: "talent-user-2",
             user: { name: "Talent Two", email: "talent2@example.com" },
@@ -374,7 +374,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
       findApplicationsForBulkUpdate: jest.fn().mockResolvedValue([
         {
           id: "app-1",
-          status: "PENDING",
+          status: "APPLIED",
           talent: {
             userId: "talent-user-1",
             user: { name: "Jane Talent", email: "jane@example.com" },
@@ -395,9 +395,9 @@ describe("EmployerService.bulkUpdateApplications", () => {
     ]);
   });
 
-  // PB59 BR1: end-state applications (WITHDRAWN, HIRED = OFFER_ACCEPTED, …)
+  // PB59 BR1: end-state applications (WITHDRAWN, HIRED = ACCEPTED, …)
   // are skipped, not reported as failures, and never written.
-  it.each(["WITHDRAWN", "OFFER_ACCEPTED", "OFFER_DECLINED", "REJECTED"])(
+  it.each(["WITHDRAWN", "ACCEPTED", "DECLINED", "REJECTED"])(
     "skips an application that is already %s",
     async (status) => {
       const bulkUpdateApplicationStatus = jest.fn().mockResolvedValue([]);
@@ -454,7 +454,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
       findApplicationsForBulkUpdate: jest.fn().mockResolvedValue([
         {
           id: "app-1",
-          status: "PENDING",
+          status: "APPLIED",
           talent: {
             userId: "talent-user-1",
             user: { name: "Jane Talent", email: "jane@example.com" },
@@ -471,7 +471,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
     });
 
     expect(bulkUpdateApplicationStatus).toHaveBeenCalledWith(
-      [{ id: "app-1", expectedStatus: "PENDING" }],
+      [{ id: "app-1", expectedStatus: "APPLIED" }],
       "REJECTED",
       undefined,
       undefined,
@@ -484,7 +484,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
       findApplicationsForBulkUpdate: jest.fn().mockResolvedValue([
         {
           id: "app-1",
-          status: "PENDING",
+          status: "APPLIED",
           talent: {
             userId: "talent-user-1",
             user: { name: "Talent One", email: "talent1@example.com" },
@@ -538,7 +538,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
       findApplicationsForBulkUpdate: jest.fn().mockResolvedValue([
         {
           id: "app-1",
-          status: "PENDING",
+          status: "APPLIED",
           talent: {
             userId: "talent-user-1",
             user: { name: "Talent One", email: "talent1@example.com" },
@@ -547,7 +547,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
         },
         {
           id: "app-2",
-          status: "PENDING",
+          status: "APPLIED",
           talent: {
             userId: "talent-user-2",
             user: { name: "Talent Two", email: "talent2@example.com" },
@@ -1000,8 +1000,8 @@ describe("EmployerService.getHiringFunnel", () => {
   it("resolves the caller's membership and builds the funnel from the company's raw counts", async () => {
     const { service, repo } = makeService({
       getApplicationFunnelCounts: jest.fn().mockResolvedValue([
-        { status: "PENDING", count: 10 },
-        { status: "OFFER_ACCEPTED", count: 2 },
+        { status: "APPLIED", count: 10 },
+        { status: "ACCEPTED", count: 2 },
       ]),
     });
 
@@ -1010,9 +1010,9 @@ describe("EmployerService.getHiringFunnel", () => {
     expect(repo.getApplicationFunnelCounts).toHaveBeenCalledWith(
       "owner-1-company",
     );
-    expect(result.stages[0]).toMatchObject({ status: "PENDING", count: 10 });
+    expect(result.stages[0]).toMatchObject({ status: "APPLIED", count: 10 });
     expect(result.stages.at(-1)).toMatchObject({
-      status: "OFFER_ACCEPTED",
+      status: "ACCEPTED",
       count: 2,
       conversionFromFirst: 20,
     });
@@ -1167,7 +1167,7 @@ describe("EmployerService.getDashboard", () => {
         .mockResolvedValue([{ id: "app-1" }]),
       getApplicationFunnelCounts: jest
         .fn()
-        .mockResolvedValue([{ status: "PENDING", count: 4 }]),
+        .mockResolvedValue([{ status: "APPLIED", count: 4 }]),
     });
 
     const result = await service.getDashboard("owner-1");
@@ -1189,7 +1189,7 @@ describe("EmployerService.getDashboard", () => {
       applications: [{ id: "app-1" }],
     });
     expect(result.funnel?.stages[0]).toMatchObject({
-      status: "PENDING",
+      status: "APPLIED",
       count: 4,
     });
   });

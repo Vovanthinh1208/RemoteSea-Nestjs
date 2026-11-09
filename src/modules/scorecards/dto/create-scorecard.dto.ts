@@ -5,6 +5,8 @@ import { SCORECARD_NOTE_MAX_LENGTH } from "../constants";
 const criterionRatingSchema = z.number().int().min(1).max(5);
 
 export const createScorecardSchema = z.object({
+  round: z.number().int().min(1).max(10).optional(),
+  roundName: z.string().trim().min(1).max(100).optional(),
   technicalRating: criterionRatingSchema,
   communicationRating: criterionRatingSchema,
   cultureFitRating: criterionRatingSchema,

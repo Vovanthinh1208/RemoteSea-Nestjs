@@ -5,9 +5,9 @@ describe("isInterviewComplete", () => {
     expect(isInterviewComplete(null)).toBe(false);
   });
 
-  it("is false while still PENDING", () => {
+  it("is false while still PROPOSED", () => {
     expect(
-      isInterviewComplete({ status: "PENDING", confirmedSlot: null }),
+      isInterviewComplete({ status: "PROPOSED", confirmedSlot: null }),
     ).toBe(false);
   });
 

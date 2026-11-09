@@ -157,12 +157,12 @@ export class ApplicationsRepository {
         select: { id: true },
       });
       // Application Transparency's timeline starts here — every application
-      // gets its initial PENDING event at creation, not just on later
+      // gets its initial APPLIED event at creation, not just on later
       // transitions (see ApplicationStatusEvent's schema comment). Written
       // before the re-select below so the returned `statusEvents` already
       // includes it, instead of reflecting the pre-event snapshot.
       await tx.applicationStatusEvent.create({
-        data: { applicationId: created.id, status: "PENDING" },
+        data: { applicationId: created.id, status: "APPLIED" },
       });
       const [application, job] = await Promise.all([
         // ownApplicationSelect: the created row goes straight back to the
@@ -184,12 +184,12 @@ export class ApplicationsRepository {
 
   /** Employer Response SLA — applications stuck past their stage's threshold
    * (see BACKLOG_THRESHOLD_MS) and not reminded within the cooldown window.
-   * PENDING is measured from appliedAt (never touched at all); REVIEWING
+   * APPLIED is measured from appliedAt (never touched at all); REVIEWING
    * from updatedAt (time since it entered that stage — updatedAt only moves
    * on a real transition, see EmployerRepository.updateApplication). */
   findBacklogged(): Promise<BackloggedApplication[]> {
     const now = Date.now();
-    const pendingCutoff = new Date(now - BACKLOG_THRESHOLD_MS.PENDING);
+    const pendingCutoff = new Date(now - BACKLOG_THRESHOLD_MS.APPLIED);
     const reviewingCutoff = new Date(now - BACKLOG_THRESHOLD_MS.REVIEWING);
     const cooldownCutoff = new Date(now - BACKLOG_REMINDER_COOLDOWN_MS);
 
@@ -198,7 +198,7 @@ export class ApplicationsRepository {
         AND: [
           {
             OR: [
-              { status: "PENDING", appliedAt: { lt: pendingCutoff } },
+              { status: "APPLIED", appliedAt: { lt: pendingCutoff } },
               { status: "REVIEWING", updatedAt: { lt: reviewingCutoff } },
             ],
           },
@@ -273,7 +273,7 @@ export class ApplicationsRepository {
   async respondToOffer(
     id: string,
     talentId: string,
-    status: Extract<ApplicationStatus, "OFFER_ACCEPTED" | "OFFER_DECLINED">,
+    status: Extract<ApplicationStatus, "ACCEPTED" | "DECLINED">,
     declineReason?: string,
   ): Promise<ApplicationWithJob | null> {
     return this.prisma.$transaction(async (tx) => {

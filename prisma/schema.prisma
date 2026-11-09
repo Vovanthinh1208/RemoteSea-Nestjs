@@ -40,7 +40,7 @@ enum ExperienceLevel {
 }
 
 enum ApplicationStatus {
-  PENDING
+  APPLIED
   REVIEWING
   SHORTLISTED
   INTERVIEW
@@ -49,8 +49,8 @@ enum ApplicationStatus {
   // offer-response endpoint (never reachable through the employer's own
   // ALLOWED_TRANSITIONS table, see employer/constants.ts), not a status an
   // employer can set directly.
-  OFFER_ACCEPTED
-  OFFER_DECLINED
+  ACCEPTED
+  DECLINED
   REJECTED
   WITHDRAWN
 }
@@ -262,18 +262,18 @@ model Notification {
 }
 
 model Account {
-  id                String  @id @default(cuid())
+  id                String    @id @default(cuid())
   userId            String
   createdAt         DateTime? @default(now())
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?   @db.Text
+  access_token      String?   @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?   @db.Text
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -711,38 +711,40 @@ model JobSkill {
 // ─── Applications ─────────────────────────────────────────────────────────────
 
 model Application {
-  id                 String            @id @default(cuid())
-  jobId              String
-  talentId           String
-  coverLetter        String?           @db.Text
-  resumeUrl          String?
-  status             ApplicationStatus @default(PENDING)
-  notes              String?           @db.Text
-  appliedAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  id                      String            @id @default(cuid())
+  jobId                   String
+  talentId                String
+  coverLetter             String?           @db.Text
+  resumeUrl               String?
+  status                  ApplicationStatus @default(APPLIED)
+  notes                   String?           @db.Text
+  appliedAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
   // Application Transparency — set once, the first time this row appears in
   // an employer's GET /employer/jobs/:id/applications response (see
   // EmployerRepository.findApplicationsForJob). Distinct from `status`
   // changing: an employer can see a candidate in the list without having
   // acted on them yet.
-  viewedAt           DateTime?
+  viewedAt                DateTime?
   // Backlog-reminder cron dedupe (ApplicationsService's cron/reminders) —
   // null until the first reminder fires, then re-stamped each time so the
   // same stuck application isn't re-emailed every run.
-  lastReminderSentAt DateTime?
+  lastReminderSentAt      DateTime?
   // PB53 AC2: contact phone entered on the apply form.
-  contactPhone       String?
+  contactPhone            String?
   // PB58 BR2: optional feedback shown to the talent when the employer rejects
   // — unlike `notes`, this one is meant for the applicant.
-  rejectionReason    String?           @db.Text
+  rejectionReason         String?           @db.Text
   // PB56: offer details, set by the employer when moving to OFFERED and shown
   // to the talent; offerDeclineReason is the talent's mandatory reason.
-  offerSalary        String?
-  offerBenefits      String?           @db.Text
-  offerStartDate     DateTime?
-  offerDeclineReason String?           @db.Text
+  offerSalary             String?
+  offerBenefits           String?           @db.Text
+  offerStartDate          DateTime?
+  offerDeclineReason      String?           @db.Text
+  // PB67: shared cooldown across API replicas and process restarts.
+  cvAnalysisRegeneratedAt DateTime?
 
-  job          Job                     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  job          Job                      @relation(fields: [jobId], references: [id], onDelete: Cascade)
   talent       TalentProfile            @relation(fields: [talentId], references: [id], onDelete: Cascade)
   statusEvents ApplicationStatusEvent[]
   messages     Message[]
@@ -786,7 +788,7 @@ model Message {
 }
 
 enum InterviewStatus {
-  PENDING
+  PROPOSED
   CONFIRMED
   CANCELLED
 }
@@ -805,7 +807,7 @@ model Interview {
   proposedSlots   DateTime[]
   confirmedSlot   DateTime?
   meetingUrl      String?
-  status          InterviewStatus @default(PENDING)
+  status          InterviewStatus @default(PROPOSED)
   // Multi-seat: which company member (any role, not necessarily role
   // INTERVIEWER) actually runs this interview — set by whoever proposes it
   // (OWNER/RECRUITER/HIRING_MANAGER, see ApplicationOwnershipGuard). The
@@ -1088,25 +1090,28 @@ enum ScorecardRecommendation {
 // updatedAt/edit path — a scorecard is a snapshot of one person's read right
 // after the interview, not a living document.
 model InterviewScorecard {
-  id             String                  @id @default(cuid())
-  applicationId  String
-  authorId       String
-  recommendation ScorecardRecommendation
-  note           String?                 @db.Text
+  id                  String                  @id @default(cuid())
+  applicationId       String
+  authorId            String
+  round               Int                     @default(1)
+  roundName           String?
+  recommendation      ScorecardRecommendation
+  note                String?                 @db.Text
   // PB64 AC2–3: 1–5 per criterion plus strengths / areas to improve.
   // Required by CreateScorecardDto; nullable only for pre-existing rows.
   technicalRating     Int?
   communicationRating Int?
   cultureFitRating    Int?
-  strengths           String?            @db.Text
-  improvements        String?            @db.Text
-  createdAt      DateTime                @default(now())
+  strengths           String?                 @db.Text
+  improvements        String?                 @db.Text
+  createdAt           DateTime                @default(now())
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   author      User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
-  @@unique([authorId, applicationId])
+  @@unique([authorId, applicationId, round])
   @@index([applicationId])
+  @@index([applicationId, round])
   @@map("interview_scorecards")
 }
 

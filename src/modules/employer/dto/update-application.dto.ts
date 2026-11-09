@@ -19,9 +19,18 @@ export const offerDetailsSchema = z.object({
   startDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD")
-    .refine((value) => !Number.isNaN(Date.parse(`${value}T00:00:00Z`)), {
-      message: "Invalid date",
-    }),
+    .refine(
+      (value) => {
+        const parsed = new Date(`${value}T00:00:00Z`);
+        return (
+          !Number.isNaN(parsed.getTime()) &&
+          parsed.toISOString().slice(0, 10) === value
+        );
+      },
+      {
+        message: "Invalid date",
+      },
+    ),
 });
 
 export type OfferDetailsDto = z.infer<typeof offerDetailsSchema>;

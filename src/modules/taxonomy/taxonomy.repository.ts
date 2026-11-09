@@ -45,7 +45,10 @@ export class TaxonomyRepository {
     return this.prisma.skill.findMany({
       where,
       orderBy: { name: "asc" },
-      take: 100,
+      // Editors resolve selected canonical names back to IDs from this list.
+      // Truncating the cached, unfiltered taxonomy makes every skill after
+      // the first 100 impossible to suggest or save. Search stays bounded.
+      take: where ? 100 : undefined,
       select: { id: true, name: true, slug: true },
     });
   }

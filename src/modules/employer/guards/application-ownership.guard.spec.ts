@@ -39,7 +39,7 @@ const makeGuard = (
 describe("ApplicationOwnershipGuard", () => {
   const application = {
     id: "app-1",
-    status: "PENDING",
+    status: "APPLIED",
     job: { employerId: "company-1" },
     interview: { interviewerId: null },
   };

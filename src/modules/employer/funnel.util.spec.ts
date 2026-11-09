@@ -3,38 +3,38 @@ import { buildHiringFunnel } from "./funnel.util";
 describe("buildHiringFunnel", () => {
   it("orders stages Applied -> Hired with counts from the raw rows", () => {
     const { stages } = buildHiringFunnel([
-      { status: "PENDING", count: 100 },
+      { status: "APPLIED", count: 100 },
       { status: "REVIEWING", count: 60 },
       { status: "SHORTLISTED", count: 30 },
       { status: "INTERVIEW", count: 20 },
       { status: "OFFERED", count: 10 },
-      { status: "OFFER_ACCEPTED", count: 6 },
+      { status: "ACCEPTED", count: 6 },
     ]);
 
     expect(stages.map((s) => s.status)).toEqual([
-      "PENDING",
+      "APPLIED",
       "REVIEWING",
       "SHORTLISTED",
       "INTERVIEW",
       "OFFERED",
-      "OFFER_ACCEPTED",
+      "ACCEPTED",
     ]);
     expect(stages.map((s) => s.count)).toEqual([100, 60, 30, 20, 10, 6]);
   });
 
-  it("computes conversionFromFirst relative to the PENDING stage", () => {
+  it("computes conversionFromFirst relative to the APPLIED stage", () => {
     const { stages } = buildHiringFunnel([
-      { status: "PENDING", count: 100 },
-      { status: "OFFER_ACCEPTED", count: 25 },
+      { status: "APPLIED", count: 100 },
+      { status: "ACCEPTED", count: 25 },
     ]);
 
-    const hired = stages.find((s) => s.status === "OFFER_ACCEPTED")!;
+    const hired = stages.find((s) => s.status === "ACCEPTED")!;
     expect(hired.conversionFromFirst).toBe(25);
   });
 
   it("computes conversionFromPrevious relative to the immediately preceding stage", () => {
     const { stages } = buildHiringFunnel([
-      { status: "PENDING", count: 100 },
+      { status: "APPLIED", count: 100 },
       { status: "REVIEWING", count: 50 },
       { status: "SHORTLISTED", count: 25 },
     ]);
@@ -48,12 +48,12 @@ describe("buildHiringFunnel", () => {
   });
 
   it("the first stage always converts 100% from previous (there is no previous)", () => {
-    const { stages } = buildHiringFunnel([{ status: "PENDING", count: 42 }]);
+    const { stages } = buildHiringFunnel([{ status: "APPLIED", count: 42 }]);
     expect(stages[0]!.conversionFromPrevious).toBe(100);
   });
 
   it("treats a status with no events as count 0, not a missing/undefined entry", () => {
-    const { stages } = buildHiringFunnel([{ status: "PENDING", count: 10 }]);
+    const { stages } = buildHiringFunnel([{ status: "APPLIED", count: 10 }]);
     expect(stages.map((s) => s.count)).toEqual([10, 0, 0, 0, 0, 0]);
   });
 
@@ -66,19 +66,19 @@ describe("buildHiringFunnel", () => {
     expect(stages[1]!.conversionFromFirst).toBe(0);
   });
 
-  it("separates REJECTED/WITHDRAWN/OFFER_DECLINED into dropOff, not the main stages", () => {
+  it("separates REJECTED/WITHDRAWN/DECLINED into dropOff, not the main stages", () => {
     const { stages, dropOff } = buildHiringFunnel([
-      { status: "PENDING", count: 100 },
+      { status: "APPLIED", count: 100 },
       { status: "REJECTED", count: 40 },
       { status: "WITHDRAWN", count: 5 },
-      { status: "OFFER_DECLINED", count: 2 },
+      { status: "DECLINED", count: 2 },
     ]);
 
     expect(stages.some((s) => s.status === "REJECTED")).toBe(false);
     expect(dropOff).toEqual([
       { status: "REJECTED", label: "Rejected", count: 40 },
       { status: "WITHDRAWN", label: "Withdrawn", count: 5 },
-      { status: "OFFER_DECLINED", label: "Offer declined", count: 2 },
+      { status: "DECLINED", label: "Offer declined", count: 2 },
     ]);
   });
 
@@ -88,7 +88,7 @@ describe("buildHiringFunnel", () => {
     // buildHiringFunnel just trusts whatever count it's given per status,
     // it doesn't re-derive distinctness itself.
     const { stages } = buildHiringFunnel([
-      { status: "PENDING", count: 1 },
+      { status: "APPLIED", count: 1 },
       { status: "REVIEWING", count: 1 },
     ]);
     expect(stages.find((s) => s.status === "REVIEWING")!.count).toBe(1);

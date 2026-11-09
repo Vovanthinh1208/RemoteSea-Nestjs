@@ -91,7 +91,7 @@ export const ApiProposeInterview = () =>
     ApiOperation({
       summary: "Propose interview times (employer only)",
       description:
-        "Requires the application to already be at the INTERVIEW stage. Calling this again while the interview is still PENDING revises the proposed times (upsert) — once the talent confirms, the interview is locked and this returns 409. Notifies the talent via the Notification Center.",
+        "Requires the application to already be at the INTERVIEW stage. Calling this again while the interview is still PROPOSED revises the proposed times (upsert) — once the talent confirms, the interview is locked and this returns 409. Notifies the talent via the Notification Center.",
     }),
     ApiParam({ name: "id", description: "Application id" }),
     ApiBody({
@@ -175,7 +175,7 @@ export const ApiCancelInterview = () =>
     ApiOperation({
       summary: "Cancel a scheduled interview (employer only)",
       description:
-        "Cancels a PENDING or CONFIRMED interview. A `reason` is required (PB62) — it is stored on the interview and sent to the talent both in-app and by e-mail. Terminal for this row, but the employer can propose a fresh set of times afterward — that resets it back to PENDING rather than leaving the application permanently unable to schedule.",
+        "Cancels a PROPOSED or CONFIRMED interview. A `reason` is required (PB62) — it is stored on the interview and sent to the talent both in-app and by e-mail. Terminal for this row, but the employer can propose a fresh set of times afterward — that resets it back to PROPOSED rather than leaving the application permanently unable to schedule.",
     }),
     ApiParam({ name: "id", description: "Application id" }),
     ApiBody({ type: CancelInterviewRequestDto }),

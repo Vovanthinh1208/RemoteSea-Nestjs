@@ -107,7 +107,7 @@ export const ApiWithdrawApplication = () =>
     ApiOperation({
       summary: "Withdraw my own application",
       description:
-        "Talent-initiated withdrawal — only allowed while the application is PENDING, REVIEWING, SHORTLISTED, or INTERVIEW. An extended offer (OFFERED) is handled by PATCH .../offer-response instead. Notifies the employer via the Notification Center.",
+        "Talent-initiated withdrawal — only allowed while the application is APPLIED, REVIEWING, SHORTLISTED, or INTERVIEW. An extended offer (OFFERED) is handled by PATCH .../offer-response instead. Notifies the employer via the Notification Center.",
     }),
     ApiParam({ name: "id", example: "capp1a2b0000ug0h9x1n1a2" }),
     ApiOkResponse({
@@ -129,7 +129,7 @@ export const ApiRespondToOffer = () =>
     ApiOperation({
       summary: "Accept or decline an extended offer",
       description:
-        "Only allowed while the application is exactly OFFERED. Sets the application to OFFER_ACCEPTED or OFFER_DECLINED (final — PB56 BR1) and notifies the employer via the Notification Center. Declining requires a `reason` (PB56 AC4), which is stored and passed on to the employer.",
+        "Only allowed while the application is exactly OFFERED. Sets the application to ACCEPTED or DECLINED (final — PB56 BR1) and notifies the employer via the Notification Center. Declining requires a `reason` (PB56 AC4), which is stored and passed on to the employer.",
     }),
     ApiParam({ name: "id", example: "capp1a2b0000ug0h9x1n1a2" }),
     ApiBody({
@@ -149,7 +149,7 @@ export const ApiRespondToOffer = () =>
       description: "Offer response recorded",
       type: ApplicationWithJobResponseDto,
       schema: {
-        example: { ...ApplicationDetailExample, status: "OFFER_ACCEPTED" },
+        example: { ...ApplicationDetailExample, status: "ACCEPTED" },
       },
     }),
     ValidationErrorResponse,
@@ -166,7 +166,7 @@ export const ApiDispatchBacklogReminders = () =>
     ApiOperation({
       summary: "Cron-triggered Employer Response SLA reminder dispatch",
       description:
-        "Finds applications stuck past their stage's threshold (PENDING > 3 days unviewed, REVIEWING > 7 days) not reminded within the last 3 days, groups them by employer, and emails each employer one digest. Meant for an external scheduler, not browser clients. " +
+        "Finds applications stuck past their stage's threshold (APPLIED > 3 days unviewed, REVIEWING > 7 days) not reminded within the last 3 days, groups them by employer, and emails each employer one digest. Meant for an external scheduler, not browser clients. " +
         "**Auth**: not JWT — requires the exact header `Authorization: Bearer <CRON_SECRET>`, same as `GET /alerts/cron/dispatch`.",
     }),
     ApiOkResponse({

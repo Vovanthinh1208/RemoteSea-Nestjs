@@ -380,8 +380,7 @@ export class ApplicationsService {
       );
     }
 
-    const status =
-      dto.response === "ACCEPTED" ? "OFFER_ACCEPTED" : "OFFER_DECLINED";
+    const status = dto.response === "ACCEPTED" ? "ACCEPTED" : "DECLINED";
     const declineReason = dto.response === "DECLINED" ? dto.reason : undefined;
     const updated = await this.applicationsRepository.respondToOffer(
       applicationId,
@@ -403,11 +402,11 @@ export class ApplicationsService {
       runInBackground(
         this.notificationsService.create({
           userId: parties.job.employer.userId,
-          type: status,
-          title:
-            status === "OFFER_ACCEPTED" ? "Offer accepted!" : "Offer declined",
+          // Notification event names are a separate, stable contract.
+          type: status === "ACCEPTED" ? "OFFER_ACCEPTED" : "OFFER_DECLINED",
+          title: status === "ACCEPTED" ? "Offer accepted!" : "Offer declined",
           body:
-            status === "OFFER_ACCEPTED"
+            status === "ACCEPTED"
               ? `${talentName} accepted your offer for ${parties.job.title}.`
               : `${talentName} declined your offer for ${parties.job.title}. Reason: ${declineReason}`,
           link: `/employer-dashboard/applications/${applicationId}`,

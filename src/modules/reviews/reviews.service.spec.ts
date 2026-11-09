@@ -21,7 +21,7 @@ const FUTURE_SLOT = new Date(Date.now() + 60 * 60 * 1000);
 // hour in the past. The one test that needs a still-upcoming confirmed
 // interview builds its own fixture instead of overloading this one.
 const baseApplication = (
-  interviewStatus: "PENDING" | "CONFIRMED" | null,
+  interviewStatus: "PROPOSED" | "CONFIRMED" | null,
 ): ReviewApplicationContext =>
   ({
     id: "app-1",
@@ -97,11 +97,11 @@ describe("ReviewsService.getEligibility", () => {
     });
   });
 
-  it("is not eligible when the interview is only PENDING, not CONFIRMED", async () => {
+  it("is not eligible when the interview is only PROPOSED, not CONFIRMED", async () => {
     const { service } = makeService({
       findApplicationForReview: jest
         .fn()
-        .mockResolvedValue(baseApplication("PENDING")),
+        .mockResolvedValue(baseApplication("PROPOSED")),
     });
 
     const result = await service.getEligibility(TALENT_USER_ID, "app-1");
@@ -322,7 +322,7 @@ describe("ReviewsService.create", () => {
     const { service } = makeService({
       findApplicationForReview: jest
         .fn()
-        .mockResolvedValue(baseApplication("PENDING")),
+        .mockResolvedValue(baseApplication("PROPOSED")),
     });
 
     const error = await service

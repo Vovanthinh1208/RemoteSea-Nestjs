@@ -5,13 +5,15 @@ import {
   parseCvAnalysisResponse,
   type CvAnalysisResult,
 } from "./cv-analysis-response.parser";
-import { CV_ANALYSIS_MAX_TOKENS } from "./constants";
+import { CV_ANALYSIS_MAX_TOKENS, RATE_LIMITS } from "./constants";
 import type { CvAnalysis } from "./interfaces";
 import { AiService } from "@/modules/ai/ai.service";
 import { SingleFlight } from "@/common/utils/single-flight.util";
 import {
   BadRequestApiException,
+  NotFoundApiException,
   ServiceUnavailableApiException,
+  TooManyRequestsApiException,
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 
@@ -49,9 +51,32 @@ export class CvAnalysisService {
   // getOrCreate for the same application collapses into one in-flight AI
   // call rather than paying for two.
   async regenerate(applicationId: string): Promise<CvAnalysis> {
-    return this.singleFlight.run(applicationId, () =>
-      this.generate(applicationId, { overwrite: true }),
-    );
+    return this.singleFlight.run(applicationId, async () => {
+      if (
+        !(await this.cvAnalysisRepository.findByApplicationId(applicationId))
+      ) {
+        throw new NotFoundApiException(
+          "Generate a CV analysis before regenerating it.",
+        );
+      }
+      if (!this.aiService.isConfigured) {
+        throw new ServiceUnavailableApiException(
+          "CV analysis is not configured.",
+          ErrorCode.CV_ANALYSIS_UNAVAILABLE,
+        );
+      }
+      if (
+        !(await this.cvAnalysisRepository.claimRegeneration(
+          applicationId,
+          RATE_LIMITS.REGENERATE.windowMs,
+        ))
+      ) {
+        throw new TooManyRequestsApiException(
+          RATE_LIMITS.REGENERATE.windowMs / 1000,
+        );
+      }
+      return this.generate(applicationId, { overwrite: true });
+    });
   }
 
   private async generate(

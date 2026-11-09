@@ -12,12 +12,12 @@ export const ApplyResponseExample = {
   talentId: "ctal1a2b0000ug0h9x1n1a2",
   coverLetter: "I'd love to bring my remote QA experience to this role.",
   resumeUrl: "https://cdn.remotesea.com/resumes/jane-doe.pdf",
-  status: "PENDING",
+  status: "APPLIED",
   notes: null,
   appliedAt: "2026-07-02T09:00:00.000Z",
   updatedAt: "2026-07-02T09:00:00.000Z",
   viewedAt: null,
-  statusEvents: [{ status: "PENDING", createdAt: "2026-07-02T09:00:00.000Z" }],
+  statusEvents: [{ status: "APPLIED", createdAt: "2026-07-02T09:00:00.000Z" }],
 };
 
 export const ApplicationsListExample = [
@@ -33,7 +33,7 @@ export const ApplicationsListExample = [
     updatedAt: "2026-07-03T10:30:00.000Z",
     viewedAt: "2026-07-03T09:15:00.000Z",
     statusEvents: [
-      { status: "PENDING", createdAt: "2026-07-02T09:00:00.000Z" },
+      { status: "APPLIED", createdAt: "2026-07-02T09:00:00.000Z" },
       { status: "REVIEWING", createdAt: "2026-07-03T10:30:00.000Z" },
     ],
     job: {

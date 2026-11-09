@@ -14,6 +14,9 @@ import { EmailService } from "@/common/services/email.service";
 import { AiService } from "@/modules/ai/ai.service";
 import { ResumeExtractionService } from "@/modules/cv-analysis/resume-extraction.service";
 import { InterviewsRepository } from "@/modules/interviews/interviews.repository";
+import { CvAnalysisRepository } from "@/modules/cv-analysis/cv-analysis.repository";
+import { CvAnalysisService } from "@/modules/cv-analysis/cv-analysis.service";
+import { TaxonomyRepository } from "@/modules/taxonomy/taxonomy.repository";
 // supertest has no @types in this repository; its runtime API is used here.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const request = require("supertest");
@@ -58,6 +61,23 @@ const scorecard = {
   recommendation: "RECOMMEND",
 };
 
+it("S3R3-PB52-TC01 unfiltered taxonomy includes canonical skills after the first 100 [AC2,AC3]", async () => {
+  const names = Array.from(
+    { length: 105 },
+    (_, n) => `Taxonomy ${runId} ${String(n).padStart(3, "0")}`,
+  );
+  await db.skill.createMany({
+    data: names.map((name, n) => ({ name, slug: `taxonomy-${runId}-${n}` })),
+  });
+  try {
+    const result = await app.get(TaxonomyRepository).findSkills();
+    expect(result.map((s) => s.name)).toEqual(expect.arrayContaining(names));
+    expect(result.length).toBeGreaterThan(100);
+  } finally {
+    await db.skill.deleteMany({ where: { name: { in: names } } });
+  }
+});
+
 it.each(["OWNER", "RECRUITER", "HIRING_MANAGER", "INTERVIEWER"] as const)(
   "S3-PB57-TC04 company role %s has only its allowed applicant-list access [BR1]",
   async (role) => {
@@ -99,7 +119,7 @@ it("S3-PB58-TC03 suspended company cannot mutate applications [AUTH]", async () 
         where: { id: f.application.id },
       })
     ).status,
-  ).toBe("PENDING");
+  ).toBe("APPLIED");
 });
 it("S3-PB73-TC02 new application creates an employer in-app notification regardless of email preference [AC1,BR1]", async () => {
   await db.application.delete({ where: { id: f.application.id } });
@@ -237,7 +257,7 @@ async function fixture() {
       notes: "INTERNAL SECRET",
       coverLetter: "My introduction",
       resumeUrl: `https://s3-fixtures.invalid/uploads/resume/${talentUser.id}/cv.pdf`,
-      statusEvents: { create: { status: "PENDING" } },
+      statusEvents: { create: { status: "APPLIED" } },
     },
   });
   return {
@@ -277,7 +297,7 @@ const talentPath = () => `/applications/${f.application.id}`;
 const employerPath = () => `/employer/applications/${f.application.id}`;
 const future = () => new Date(Date.now() + 86_400_000);
 async function interview(
-  status: "PENDING" | "CONFIRMED" | "CANCELLED" = "PENDING",
+  status: "PROPOSED" | "CONFIRMED" | "CANCELLED" = "PROPOSED",
   slot = future(),
 ) {
   await db.application.update({
@@ -456,12 +476,12 @@ it("S3-PB54-TC03 expired JWT cannot read application detail [AUTH]", async () =>
   );
   await http("get", talentPath(), { token }).expect(401);
 });
-it.each(["PENDING", "REVIEWING", "SHORTLISTED", "INTERVIEW"])(
+it.each(["APPLIED", "REVIEWING", "SHORTLISTED", "INTERVIEW"])(
   "S3-PB55-TC01 withdraw from %s persists timeline and notifies employer [AC4,PRE]",
   async (status) => {
     await db.application.update({
       where: { id: f.application.id },
-      data: { status: status as "PENDING" },
+      data: { status: status as "APPLIED" },
     });
     await http("patch", `${talentPath()}/withdraw`).expect(200);
     expect(
@@ -478,26 +498,23 @@ it.each(["PENDING", "REVIEWING", "SHORTLISTED", "INTERVIEW"])(
     ).toBe(1);
   },
 );
-it.each([
-  "OFFERED",
-  "WITHDRAWN",
-  "REJECTED",
-  "OFFER_ACCEPTED",
-  "OFFER_DECLINED",
-])("S3-PB55-TC02 cannot withdraw from %s [BR1,STATE]", async (status) => {
-  await db.application.update({
-    where: { id: f.application.id },
-    data: { status: status as "OFFERED" },
-  });
-  await http("patch", `${talentPath()}/withdraw`).expect(400);
-  expect(
-    (
-      await db.application.findUniqueOrThrow({
-        where: { id: f.application.id },
-      })
-    ).status,
-  ).toBe(status);
-});
+it.each(["OFFERED", "WITHDRAWN", "REJECTED", "ACCEPTED", "DECLINED"])(
+  "S3-PB55-TC02 cannot withdraw from %s [BR1,STATE]",
+  async (status) => {
+    await db.application.update({
+      where: { id: f.application.id },
+      data: { status: status as "OFFERED" },
+    });
+    await http("patch", `${talentPath()}/withdraw`).expect(400);
+    expect(
+      (
+        await db.application.findUniqueOrThrow({
+          where: { id: f.application.id },
+        })
+      ).status,
+    ).toBe(status);
+  },
+);
 it.each(["ACCEPTED", "DECLINED"])(
   "S3-PB56-TC01 offer response %s is final [AC3,AC4,BR1]",
   async (response) => {
@@ -512,7 +529,8 @@ it.each(["ACCEPTED", "DECLINED"])(
     const stored = await db.application.findUniqueOrThrow({
       where: { id: f.application.id },
     });
-    expect(stored.status).toBe(`OFFER_${response}`);
+    // PB56 AC3/4: canonical persisted enum, approved backlog vocabulary.
+    expect(stored.status).toBe(response);
     await http("patch", `${talentPath()}/offer-response`, f.talentUser, {
       response,
       ...(response === "DECLINED" && { reason: "Accepted another offer" }),
@@ -544,7 +562,7 @@ it("S3-PB56-TC02 decline requires a reason [AC4]", async () => {
 it("S3-PB57-TC01 company can list and filter applicants by state [AC2,AC3,AC4]", async () => {
   const res = await http(
     "get",
-    `/employer/jobs/${f.job.id}/applications?status=PENDING`,
+    `/employer/jobs/${f.job.id}/applications?status=APPLIED`,
     f.owner,
   ).expect(200);
   expect(res.body.applications.map((a: { id: string }) => a.id)).toContain(
@@ -617,7 +635,7 @@ it("S3-PB58-TC02 cannot jump initial stage directly to offer [BR1]", async () =>
         where: { id: f.application.id },
       })
     ).status,
-  ).toBe("PENDING");
+  ).toBe("APPLIED");
 });
 it("S3-PB59-TC01 bulk updates valid own items and isolates terminal/foreign/missing items [AC5,BR1]", async () => {
   const foreignJob = await db.job.create({
@@ -656,7 +674,7 @@ it("S3-PB59-TC01 bulk updates valid own items and isolates terminal/foreign/miss
         where: { id: foreignApplication.id },
       })
     ).status,
-  ).toBe("PENDING");
+  ).toBe("APPLIED");
   expect(
     (await db.application.findUniqueOrThrow({ where: { id: withdrawn.id } }))
       .status,
@@ -673,7 +691,7 @@ it("S3-PB59-TC02 empty selection is rejected without side effects [PRE]", async 
         where: { id: f.application.id },
       })
     ).status,
-  ).toBe("PENDING");
+  ).toBe("APPLIED");
 });
 
 it("S3-PB60-TC01 one future slot persists a proposal [AC3,AC4,AC5]", async () => {
@@ -740,13 +758,13 @@ it("S3-PB61-TC01 confirm an offered slot exactly once [AC3,AC4]", async () => {
   }).expect(409);
 });
 it("S3-PB61-TC02 expired proposal cannot be confirmed or changed [BR1]", async () => {
-  const i = await interview("PENDING", new Date(Date.now() - 60000));
+  const i = await interview("PROPOSED", new Date(Date.now() - 60000));
   await http("patch", `${talentPath()}/interview/confirm`, f.talentUser, {
     slot: i.proposedSlots[0]!.toISOString(),
   }).expect(400);
   expect(
     (await db.interview.findUniqueOrThrow({ where: { id: i.id } })).status,
-  ).toBe("PENDING");
+  ).toBe("PROPOSED");
 });
 it("S3-PB61-TC03 repository CAS refuses a replaced proposal [BR1,RACE]", async () => {
   const i = await interview();
@@ -760,7 +778,7 @@ it("S3-PB61-TC03 repository CAS refuses a replaced proposal [BR1,RACE]", async (
   ).toBeNull();
   expect(
     (await db.interview.findUniqueOrThrow({ where: { id: i.id } })).status,
-  ).toBe("PENDING");
+  ).toBe("PROPOSED");
 });
 it("S3-PB62-TC01 cancellation without reason is rejected [AC2,AC3,BR1]", async () => {
   const i = await interview();
@@ -769,7 +787,7 @@ it("S3-PB62-TC01 cancellation without reason is rejected [AC2,AC3,BR1]", async (
   );
   expect(
     (await db.interview.findUniqueOrThrow({ where: { id: i.id } })).status,
-  ).toBe("PENDING");
+  ).toBe("PROPOSED");
 });
 it("S3-PB62-TC02 valid cancellation persists and cannot be repeated [AC4,STATE]", async () => {
   const i = await interview("CONFIRMED");
@@ -820,6 +838,34 @@ it("S3-PB64-TC02 scorecards are private and duplicates cannot persist [BR1,BR2]"
     }),
   ).toBe(1);
 });
+it("S3-PB64-TC04 an interviewer can submit independent scorecards for distinct rounds on the same application [BR1]", async () => {
+  await interview("CONFIRMED", new Date(Date.now() - 60000));
+  await http("post", `${employerPath()}/scorecards`, f.owner, {
+    ...scorecard,
+    round: 1,
+    roundName: "Round 1 - Technical",
+    technicalRating: 4,
+    recommendation: "RECOMMEND",
+  }).expect(201);
+  await http("post", `${employerPath()}/scorecards`, f.owner, {
+    ...scorecard,
+    round: 2,
+    roundName: "Round 2 - Culture Fit",
+    technicalRating: 5,
+    recommendation: "STRONGLY_RECOMMEND",
+  }).expect(201);
+  await http("post", `${employerPath()}/scorecards`, f.owner, {
+    ...scorecard,
+    round: 2,
+    recommendation: "STRONGLY_RECOMMEND",
+  }).expect(409);
+  const res = await http("get", `${employerPath()}/scorecards`, f.owner).expect(
+    200,
+  );
+  expect(res.body.scorecards.length).toBe(2);
+  expect(res.body.summary.rounds["1"].count).toBe(1);
+  expect(res.body.summary.rounds["2"].count).toBe(1);
+});
 it("S3-PB65-TC01 aggregate contains numeric criterion averages [AC2,AC3]", async () => {
   await db.interviewScorecard.create({
     data: {
@@ -867,7 +913,7 @@ it("S3-PB66-TC01 analysis is persisted, cached and advisory [AC2,AC3,AC4,BR1,BR2
         where: { id: f.application.id },
       })
     ).status,
-  ).toBe("PENDING");
+  ).toBe("APPLIED");
   expect(first.body.fitScore).toBe(82);
 });
 it("S3-PB66-TC02 missing CV and invalid model output never persist analysis [PRE,NEG]", async () => {
@@ -923,6 +969,67 @@ it("S3-PB67-TC01 regeneration overwrites same row and enforces 30 second request
   ).toBe(1);
 });
 
+it("S3R3-PB67-TC01 database cooldown survives service restart and races between replicas [AC2,BR1]", async () => {
+  await http("get", `${employerPath()}/ai-cv-analysis`, f.owner).expect(200);
+  const repository = app.get(CvAnalysisRepository);
+  const replicas = [0, 1].map(
+    () =>
+      new CvAnalysisService(
+        repository,
+        app.get(ResumeExtractionService),
+        app.get(AiService),
+      ),
+  );
+  const outcomes = await Promise.allSettled(
+    replicas.map((s) => s.regenerate(f.application.id)),
+  );
+  expect(outcomes.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  expect(outcomes.filter((r) => r.status === "rejected")).toHaveLength(1);
+  expect(complete).toHaveBeenCalledTimes(2); // first analysis + one regeneration
+  const restarted = new CvAnalysisService(
+    repository,
+    app.get(ResumeExtractionService),
+    app.get(AiService),
+  );
+  await expect(restarted.regenerate(f.application.id)).rejects.toMatchObject({
+    retryAfter: 30,
+  });
+  await db.application.update({
+    where: { id: f.application.id },
+    data: {
+      cvAnalysisRegeneratedAt: new Date(Date.now() - 30001),
+    },
+  });
+  await expect(restarted.regenerate(f.application.id)).resolves.toMatchObject({
+    fitScore: 82,
+  });
+});
+
+it("S3R3-PB60-TC01 a stale proposal cannot overwrite an already confirmed interview [RACE,BR1]", async () => {
+  const row = await interview("CONFIRMED");
+  const result = await app.get(InterviewsRepository).upsertProposed({
+    applicationId: f.application.id,
+    ...proposal,
+    durationMinutes: 30,
+    proposedSlots: [future()],
+    interviewerId: undefined,
+  });
+  expect(result).toBeNull();
+  const saved = await db.interview.findUniqueOrThrow({ where: { id: row.id } });
+  expect(saved.status).toBe("CONFIRMED");
+  expect(saved.confirmedSlot).toEqual(row.confirmedSlot);
+});
+
+it("S3R3-PB57-TC01 legacy status filter is accepted and responses use APPLIED [COMPATIBILITY]", async () => {
+  const response = await http(
+    "get",
+    `/employer/jobs/${f.job.id}/applications?status=PENDING`,
+    f.owner,
+  ).expect(200);
+  expect(response.body.applications).toHaveLength(1);
+  expect(response.body.applications[0].status).toBe("APPLIED");
+});
+
 it("S3-PB68-TC01 participants exchange persisted messages in chronological order [AC2,AC3,AC4]", async () => {
   await http("post", `${talentPath()}/messages`, f.talentUser, {
     body: "Hello recruiter",
@@ -973,10 +1080,10 @@ it("S3-PB69-TC01 internal notes persist with author/time and never reach the tal
   await http("get", `${employerPath()}/comments`, f.otherOwner).expect(403);
 });
 
-it.each(["PENDING", "CANCELLED", "CONFIRMED"])(
+it.each(["PROPOSED", "CANCELLED", "CONFIRMED"])(
   "S3-PB70-TC01 %s interview eligibility follows confirmed past interaction [AC3.1,AC3.2,BR1]",
   async (status) => {
-    await interview(status as "PENDING", new Date(Date.now() - 60000));
+    await interview(status as "PROPOSED", new Date(Date.now() - 60000));
     const res = await http(
       "get",
       `/reviews/eligibility/${f.application.id}`,

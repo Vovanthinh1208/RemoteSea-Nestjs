@@ -305,7 +305,7 @@ export class EmployerRepository {
   // Deletes any prior unconsumed row for this employer first (an employer
   // resubmitting with a new/different address should invalidate the old
   // link, not leave two live tokens), then creates the fresh one and marks
-  // the profile PENDING — one transaction so a submit can't half-apply.
+  // the profile APPLIED — one transaction so a submit can't half-apply.
   async createEmailVerification(
     employerId: string,
     email: string,
@@ -487,10 +487,10 @@ export class EmployerRepository {
         WHERE j."employerId" = ${employerId} AND a.status = 'OFFERED'
       `),
         // Application Transparency's SLA metric: time from appliedAt to the
-        // first ApplicationStatusEvent that isn't the initial PENDING one —
+        // first ApplicationStatusEvent that isn't the initial APPLIED one —
         // i.e. the first real employer action, regardless of which status it
         // moved to. Only over applications that have such an event (an
-        // untouched PENDING application has no "response" to average yet).
+        // untouched APPLIED application has no "response" to average yet).
         this.prisma.$queryRaw<Array<{ avgHours: number | null }>>(Prisma.sql`
         SELECT AVG(EXTRACT(EPOCH FROM (first_event."createdAt" - a."appliedAt")) / 3600.0)::float AS "avgHours"
         FROM applications a
@@ -498,7 +498,7 @@ export class EmployerRepository {
         JOIN LATERAL (
           SELECT MIN(e."createdAt") AS "createdAt"
           FROM application_status_events e
-          WHERE e."applicationId" = a.id AND e.status != 'PENDING'
+          WHERE e."applicationId" = a.id AND e.status != 'APPLIED'
         ) first_event ON first_event."createdAt" IS NOT NULL
         WHERE j."employerId" = ${employerId}
       `),
@@ -541,7 +541,7 @@ export class EmployerRepository {
   }
 
   // Public-facing counterpart to getEmployerJobStats's avgFirstResponseHours —
-  // same "first non-PENDING ApplicationStatusEvent" definition of "response,"
+  // same "first non-APPLIED ApplicationStatusEvent" definition of "response,"
   // but also returns the sample count so the caller can gate on a minimum
   // before showing a number nobody asked this employer to publish. Unlike
   // the private version, does NOT collapse "no data" to 0 — respondedCount
@@ -560,7 +560,7 @@ export class EmployerRepository {
       JOIN LATERAL (
         SELECT MIN(e."createdAt") AS "createdAt"
         FROM application_status_events e
-        WHERE e."applicationId" = a.id AND e.status != 'PENDING'
+        WHERE e."applicationId" = a.id AND e.status != 'APPLIED'
       ) first_event ON first_event."createdAt" IS NOT NULL
       WHERE j."employerId" = ${employerId}
     `);

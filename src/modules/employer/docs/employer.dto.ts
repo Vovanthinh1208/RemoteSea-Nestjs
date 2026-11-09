@@ -209,7 +209,7 @@ export class EmployerJobStatsDto {
   @ApiProperty({
     example: 18.2,
     description:
-      "Average time from appliedAt to the first non-PENDING ApplicationStatusEvent (first real employer action, any status). Computed only over applications with at least one such event; 0 if none.",
+      "Average time from appliedAt to the first non-APPLIED ApplicationStatusEvent (first real employer action, any status). Computed only over applications with at least one such event; 0 if none.",
   })
   avgFirstResponseHours!: number;
 }
@@ -500,7 +500,7 @@ export class BulkUpdateApplicationsResponseDto {
     type: [String],
     example: [],
     description:
-      "Already WITHDRAWN / OFFER_ACCEPTED (hired) / OFFER_DECLINED / REJECTED — skipped (PB59)",
+      "Already WITHDRAWN / ACCEPTED (hired) / DECLINED / REJECTED — skipped (PB59)",
   })
   skipped!: string[];
 

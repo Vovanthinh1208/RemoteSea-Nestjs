@@ -112,7 +112,7 @@ describe("ApplicationsService.getStatusCounts", () => {
 
     const result = await service.getStatusCounts("user-1");
     expect(result.total).toBe(0);
-    expect(result.byStatus.PENDING).toBe(0);
+    expect(result.byStatus.APPLIED).toBe(0);
   });
 
   it("shapes the repository's groupBy rows into totals", async () => {
@@ -165,7 +165,7 @@ const makeBacklogged = (
 ): BackloggedApplication =>
   ({
     id: "app-1",
-    status: "PENDING",
+    status: "APPLIED",
     appliedAt: new Date("2026-08-01T00:00:00.000Z"),
     talent: { user: { name: "Jane Doe" } },
     job: {

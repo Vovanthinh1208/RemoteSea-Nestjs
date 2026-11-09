@@ -233,7 +233,7 @@ export class InterviewsService {
       }
     }
 
-    const interview = await this.interviewsRepository.upsertPending({
+    const interview = await this.interviewsRepository.upsertProposed({
       applicationId: parties.id,
       title: dto.title,
       platform: dto.platform,
@@ -242,6 +242,13 @@ export class InterviewsService {
       meetingUrl: dto.meetingUrl,
       interviewerId: dto.interviewerId,
     });
+
+    if (!interview) {
+      throw new ConflictApiException(
+        "This interview was confirmed while the proposal was being edited",
+        ErrorCode.INTERVIEW_ALREADY_CONFIRMED,
+      );
+    }
 
     runInBackground(
       this.notificationsService.create({
@@ -368,10 +375,10 @@ export class InterviewsService {
   }
 
   // Employer-only (see EmployerController's ApplicationOwnershipGuard on the
-  // route that calls this) — cancels a PENDING or CONFIRMED interview.
+  // route that calls this) — cancels a PROPOSED or CONFIRMED interview.
   // Terminal at the data layer, but the employer can always schedule a fresh
-  // one afterward: propose()'s upsertPending resets a CANCELLED row back to
-  // PENDING rather than treating the applicationId as permanently spent.
+  // one afterward: propose()'s upsertProposed resets a CANCELLED row back to
+  // PROPOSED rather than treating the applicationId as permanently spent.
   async cancel(
     parties: ApplicationParties,
     dto: CancelInterviewDto,

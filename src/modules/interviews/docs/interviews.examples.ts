@@ -14,7 +14,7 @@ export const InterviewExample = {
   proposedSlots: ["2026-08-25T07:00:00.000Z", "2026-08-25T09:00:00.000Z"],
   confirmedSlot: null,
   meetingUrl: "https://meet.google.com/abc-defg-hij",
-  status: "PENDING",
+  status: "PROPOSED",
   createdAt: "2026-08-18T09:12:00.000Z",
 };
 

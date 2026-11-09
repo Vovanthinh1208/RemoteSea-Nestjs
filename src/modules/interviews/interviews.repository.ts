@@ -36,17 +36,11 @@ export class InterviewsRepository {
     });
   }
 
-  // Single-actor action (only the owning employer ever calls this — no
-  // concurrent other-party race the way confirmSlot below has), so a plain
-  // upsert is enough; InterviewsService checks the "not already CONFIRMED"
-  // precondition before calling this.
-  // status: "PENDING" is explicit here (not left to the schema's @default)
-  // so re-proposing after a CANCELLED interview resets it back to PENDING —
-  // InterviewsService.propose only ever calls this when existing is
-  // undefined, PENDING, or CANCELLED (CONFIRMED is rejected before this
-  // runs), so unconditionally setting it is correct in every case this
-  // reaches.
-  upsertPending(input: UpsertInterviewInput): Promise<InterviewRecord> {
+  // A talent may confirm after the service's initial read. The write must
+  // check status atomically, otherwise a stale proposal erases confirmation.
+  async upsertProposed(
+    input: UpsertInterviewInput,
+  ): Promise<InterviewRecord | null> {
     const data = {
       title: input.title,
       platform: input.platform,
@@ -54,20 +48,47 @@ export class InterviewsRepository {
       proposedSlots: input.proposedSlots,
       meetingUrl: input.meetingUrl,
       interviewerId: input.interviewerId,
-      status: "PENDING" as const,
+      status: "PROPOSED" as const,
       // A fresh proposal after a cancellation starts clean.
       cancelReason: null,
       cancelledAt: null,
+      confirmedSlot: null,
     };
-    return this.prisma.interview.upsert({
-      where: { applicationId: input.applicationId },
-      create: { applicationId: input.applicationId, ...data },
-      update: data,
-      select: interviewSelect,
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.interview.findUnique({
+        where: { applicationId: input.applicationId },
+        select: { id: true },
+      });
+      if (!existing) {
+        // Lock the parent so two first proposals serialize without a unique
+        // constraint error. The transaction repeats the lookup after locking.
+        await tx.$queryRaw`SELECT id FROM applications WHERE id = ${input.applicationId} FOR UPDATE`;
+        const created = await tx.interview.findUnique({
+          where: { applicationId: input.applicationId },
+          select: { id: true },
+        });
+        if (!created)
+          return tx.interview.create({
+            data: { applicationId: input.applicationId, ...data },
+            select: interviewSelect,
+          });
+      }
+      const { count } = await tx.interview.updateMany({
+        where: {
+          applicationId: input.applicationId,
+          status: { in: ["PROPOSED", "CANCELLED"] },
+        },
+        data,
+      });
+      if (count === 0) return null;
+      return tx.interview.findUnique({
+        where: { applicationId: input.applicationId },
+        select: interviewSelect,
+      });
     });
   }
 
-  // CAS: only cancels while PENDING or CONFIRMED — a nonexistent interview or
+  // CAS: only cancels while PROPOSED or CONFIRMED — a nonexistent interview or
   // one that's already CANCELLED both match zero rows and return null, same
   // no-op-on-race shape as confirmSlot above.
   async cancel(
@@ -75,7 +96,7 @@ export class InterviewsRepository {
     reason: string,
   ): Promise<InterviewRecord | null> {
     const { count } = await this.prisma.interview.updateMany({
-      where: { applicationId, status: { in: ["PENDING", "CONFIRMED"] } },
+      where: { applicationId, status: { in: ["PROPOSED", "CONFIRMED"] } },
       data: {
         status: "CANCELLED",
         cancelReason: reason,
@@ -86,7 +107,7 @@ export class InterviewsRepository {
     return this.findByApplicationId(applicationId);
   }
 
-  // CAS: only succeeds while still PENDING — returns null if it's already
+  // CAS: only succeeds while still PROPOSED — returns null if it's already
   // CONFIRMED (a second confirm attempt) or a re-propose landed in between,
   // the real two-party race this flow has.
   async confirmSlot(
@@ -94,7 +115,11 @@ export class InterviewsRepository {
     slot: Date,
   ): Promise<InterviewRecord | null> {
     const { count } = await this.prisma.interview.updateMany({
-      where: { applicationId, status: "PENDING", proposedSlots: { has: slot } },
+      where: {
+        applicationId,
+        status: "PROPOSED",
+        proposedSlots: { has: slot },
+      },
       data: { status: "CONFIRMED", confirmedSlot: slot },
     });
     if (count === 0) return null;

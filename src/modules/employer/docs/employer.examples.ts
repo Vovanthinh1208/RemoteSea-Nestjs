@@ -95,14 +95,14 @@ export const EmployerDashboardResponseExample = {
   funnel: {
     stages: [
       {
-        status: "PENDING",
+        status: "APPLIED",
         label: "Applied",
         count: 120,
         conversionFromFirst: 100,
         conversionFromPrevious: 100,
       },
       {
-        status: "OFFER_ACCEPTED",
+        status: "ACCEPTED",
         label: "Hired",
         count: 6,
         conversionFromFirst: 5,

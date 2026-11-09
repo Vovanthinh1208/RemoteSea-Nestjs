@@ -79,6 +79,29 @@ export class ScorecardsService {
       ]),
     ) as Record<ScorecardRecommendation, number>;
 
+    const roundNumbers = Array.from(
+      new Set(scorecards.map((s) => s.round || 1)),
+    ).sort((a, b) => a - b);
+    const rounds = Object.fromEntries(
+      roundNumbers.map((r) => {
+        const roundScorecards = scorecards.filter((s) => (s.round || 1) === r);
+        return [
+          r,
+          {
+            round: r,
+            roundName:
+              roundScorecards.find((s) => s.roundName)?.roundName ??
+              `Round ${r}`,
+            count: roundScorecards.length,
+            hireCount: roundScorecards.filter((s) =>
+              HIRE_RECOMMENDATIONS.has(s.recommendation),
+            ).length,
+            averages: buildScorecardAverages(roundScorecards),
+          },
+        ];
+      }),
+    );
+
     return {
       scorecards,
       summary: {
@@ -86,6 +109,7 @@ export class ScorecardsService {
         hireCount,
         averages: buildScorecardAverages(scorecards),
         recommendations,
+        rounds,
       },
     };
   }
@@ -106,6 +130,8 @@ export class ScorecardsService {
       return await this.scorecardsRepository.create({
         applicationId,
         authorId,
+        round: dto.round ?? 1,
+        roundName: dto.roundName,
         recommendation: dto.recommendation,
         technicalRating: dto.technicalRating,
         communicationRating: dto.communicationRating,
@@ -124,7 +150,7 @@ export class ScorecardsService {
         error.code === "P2002"
       ) {
         throw new ConflictApiException(
-          "Already submitted feedback for this interview",
+          `Already submitted feedback for interview round ${dto.round ?? 1}`,
           ErrorCode.SCORECARD_ALREADY_EXISTS,
         );
       }

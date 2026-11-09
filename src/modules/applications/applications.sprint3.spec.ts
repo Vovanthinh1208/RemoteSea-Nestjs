@@ -30,7 +30,7 @@ const makeService = (repoOverrides: Partial<ApplicationsRepository> = {}) => {
   };
 };
 
-const createdApplication = { id: "app-1", status: "PENDING" };
+const createdApplication = { id: "app-1", status: "APPLIED" };
 const job = {
   id: "job-1",
   title: "Backend Engineer",
@@ -124,7 +124,7 @@ describe("ApplicationsService.respondToOffer (PB56)", () => {
     findByIdForTalent: jest.fn().mockResolvedValue(offered),
     respondToOffer: jest
       .fn()
-      .mockResolvedValue({ ...offered, status: "OFFER_DECLINED" }),
+      .mockResolvedValue({ ...offered, status: "DECLINED" }),
     findPartiesById: jest.fn().mockResolvedValue(parties),
     ...overrides,
   });
@@ -141,7 +141,7 @@ describe("ApplicationsService.respondToOffer (PB56)", () => {
     expect(repo.respondToOffer).toHaveBeenCalledWith(
       "app-1",
       "talent-1",
-      "OFFER_DECLINED",
+      "DECLINED",
       "I accepted another offer.",
     );
     expect(notifications.create).toHaveBeenCalledWith(
@@ -158,7 +158,7 @@ describe("ApplicationsService.respondToOffer (PB56)", () => {
       offerRepo({
         respondToOffer: jest
           .fn()
-          .mockResolvedValue({ ...offered, status: "OFFER_ACCEPTED" }),
+          .mockResolvedValue({ ...offered, status: "ACCEPTED" }),
       }),
     );
 
@@ -167,7 +167,7 @@ describe("ApplicationsService.respondToOffer (PB56)", () => {
     expect(repo.respondToOffer).toHaveBeenCalledWith(
       "app-1",
       "talent-1",
-      "OFFER_ACCEPTED",
+      "ACCEPTED",
       undefined,
     );
   });
@@ -178,7 +178,7 @@ describe("ApplicationsService.respondToOffer (PB56)", () => {
       offerRepo({
         findByIdForTalent: jest
           .fn()
-          .mockResolvedValue({ ...offered, status: "OFFER_ACCEPTED" }),
+          .mockResolvedValue({ ...offered, status: "ACCEPTED" }),
       }),
     );
 

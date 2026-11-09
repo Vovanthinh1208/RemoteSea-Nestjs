@@ -11,6 +11,8 @@ export const scorecardListItemSelect = {
   id: true,
   authorId: true,
   author: { select: { name: true } },
+  round: true,
+  roundName: true,
   recommendation: true,
   technicalRating: true,
   communicationRating: true,
@@ -28,6 +30,8 @@ export type ScorecardListItem = Prisma.InterviewScorecardGetPayload<{
 export type CreateScorecardInput = {
   applicationId: string;
   authorId: string;
+  round?: number;
+  roundName?: string;
   recommendation: ScorecardRecommendation;
   technicalRating: number;
   communicationRating: number;

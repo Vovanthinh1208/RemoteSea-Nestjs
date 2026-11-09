@@ -151,9 +151,9 @@ describe("InterviewsService.propose", () => {
 
   it("upserts and notifies the talent on success", async () => {
     const slot = futureSlot();
-    const upsertPending = jest.fn().mockResolvedValue({
+    const upsertProposed = jest.fn().mockResolvedValue({
       id: "intv-1",
-      status: "PENDING",
+      status: "PROPOSED",
       proposedSlots: [slot],
       title: proposal.title,
       platform: proposal.platform,
@@ -162,7 +162,7 @@ describe("InterviewsService.propose", () => {
     });
     const { service } = makeService({
       findByApplicationId: jest.fn().mockResolvedValue(null),
-      upsertPending,
+      upsertProposed,
     });
 
     await service.propose(parties, {
@@ -172,7 +172,7 @@ describe("InterviewsService.propose", () => {
     });
     await flushBackground();
 
-    expect(upsertPending).toHaveBeenCalledWith({
+    expect(upsertProposed).toHaveBeenCalledWith({
       applicationId: "app-1",
       title: "Vòng 1 - Kỹ thuật",
       platform: "GOOGLE_MEET",
@@ -205,9 +205,9 @@ describe("InterviewsService.propose", () => {
     const slot = futureSlot();
     const { service } = makeService({
       findByApplicationId: jest.fn().mockResolvedValue(null),
-      upsertPending: jest.fn().mockResolvedValue({
+      upsertProposed: jest.fn().mockResolvedValue({
         id: "intv-1",
-        status: "PENDING",
+        status: "PROPOSED",
         proposedSlots: [slot],
         ...proposal,
         durationMinutes: 30,
@@ -242,7 +242,7 @@ describe("InterviewsService.confirm", () => {
           .mockResolvedValue({ status: "CONFIRMED" });
         const { service } = makeService({
           findByApplicationId: jest.fn().mockResolvedValue({
-            status: "PENDING",
+            status: "PROPOSED",
             proposedSlots: [slot],
           }),
           confirmSlot,
@@ -279,7 +279,7 @@ describe("InterviewsService.confirm", () => {
     const { service } = makeService({
       findByApplicationId: jest.fn().mockResolvedValue({
         id: "intv-1",
-        status: "PENDING",
+        status: "PROPOSED",
         proposedSlots: [proposed],
       }),
     });
@@ -299,7 +299,7 @@ describe("InterviewsService.confirm", () => {
     const { service } = makeService({
       findByApplicationId: jest.fn().mockResolvedValue({
         id: "intv-1",
-        status: "PENDING",
+        status: "PROPOSED",
         proposedSlots: [slot],
       }),
       confirmSlot: jest.fn().mockResolvedValue(null),
@@ -327,7 +327,7 @@ describe("InterviewsService.confirm", () => {
     const { service } = makeService({
       findByApplicationId: jest.fn().mockResolvedValue({
         id: "intv-1",
-        status: "PENDING",
+        status: "PROPOSED",
         proposedSlots: [slot],
       }),
       confirmSlot,
@@ -424,11 +424,11 @@ describe("InterviewsService.isComplete", () => {
     expect(await service.isComplete("app-1")).toBe(false);
   });
 
-  it("is false while still PENDING", async () => {
+  it("is false while still PROPOSED", async () => {
     const { service } = makeService({
       findEligibilityByApplicationId: jest
         .fn()
-        .mockResolvedValue({ status: "PENDING", confirmedSlot: null }),
+        .mockResolvedValue({ status: "PROPOSED", confirmedSlot: null }),
     });
 
     expect(await service.isComplete("app-1")).toBe(false);
@@ -555,11 +555,11 @@ describe("InterviewsService.getIcsFile", () => {
     });
   });
 
-  it("rejects a PENDING (not yet confirmed) interview", async () => {
+  it("rejects a PROPOSED (not yet confirmed) interview", async () => {
     const { service } = makeService({
       findByApplicationId: jest.fn().mockResolvedValue({
         id: "intv-1",
-        status: "PENDING",
+        status: "PROPOSED",
         confirmedSlot: null,
         durationMinutes: 30,
         meetingUrl: null,

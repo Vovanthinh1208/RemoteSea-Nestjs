@@ -66,7 +66,7 @@ export const IllegalTransitionResponse = ApiBadRequestResponse({
     examples: {
       validation: { value: EmployerValidationErrorExample },
       illegalTransition: {
-        value: { error: "Cannot transition from PENDING to OFFERED" },
+        value: { error: "Cannot transition from APPLIED to OFFERED" },
       },
     },
   },

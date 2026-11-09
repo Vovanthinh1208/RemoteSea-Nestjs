@@ -71,15 +71,15 @@ class JobCategorySummaryDto {
 }
 
 class ApplicationStatusEventDto {
-  @ApiProperty({ enum: APPLICATION_STATUS_VALUES, example: "PENDING" })
+  @ApiProperty({ enum: APPLICATION_STATUS_VALUES, example: "APPLIED" })
   status!:
-    | "PENDING"
+    | "APPLIED"
     | "REVIEWING"
     | "SHORTLISTED"
     | "INTERVIEW"
     | "OFFERED"
-    | "OFFER_ACCEPTED"
-    | "OFFER_DECLINED"
+    | "ACCEPTED"
+    | "DECLINED"
     | "REJECTED"
     | "WITHDRAWN";
 
@@ -148,16 +148,16 @@ export class ApplicationResponseDto {
 
   @ApiProperty({
     enum: APPLICATION_STATUS_VALUES,
-    example: "PENDING",
+    example: "APPLIED",
   })
   status!:
-    | "PENDING"
+    | "APPLIED"
     | "REVIEWING"
     | "SHORTLISTED"
     | "INTERVIEW"
     | "OFFERED"
-    | "OFFER_ACCEPTED"
-    | "OFFER_DECLINED"
+    | "ACCEPTED"
+    | "DECLINED"
     | "REJECTED"
     | "WITHDRAWN";
 
@@ -178,7 +178,7 @@ export class ApplicationResponseDto {
   @ApiProperty({
     type: [ApplicationStatusEventDto],
     description:
-      "Full status history, oldest first — always starts with the initial PENDING event at creation. This is Application Transparency's timeline.",
+      "Full status history, oldest first — always starts with the initial APPLIED event at creation. This is Application Transparency's timeline.",
   })
   statusEvents!: ApplicationStatusEventDto[];
 }

@@ -485,7 +485,7 @@ describe("TalentService.getDashboard", () => {
           }),
           getStatusCounts: jest
             .fn()
-            .mockResolvedValue({ total: 1, byStatus: { PENDING: 1 } }),
+            .mockResolvedValue({ total: 1, byStatus: { APPLIED: 1 } }),
         },
         savedService: {
           findJobIdsForUser: jest.fn().mockResolvedValue(["job-1"]),
@@ -509,7 +509,7 @@ describe("TalentService.getDashboard", () => {
     });
     expect(result.applicationStats).toEqual({
       total: 1,
-      byStatus: { PENDING: 1 },
+      byStatus: { APPLIED: 1 },
     });
     expect(result.savedJobIds).toEqual(["job-1"]);
     expect(result.profileViewAnalytics).toEqual({

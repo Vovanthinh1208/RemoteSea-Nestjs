@@ -1,31 +1,31 @@
 import type { ApplicationStatus } from "@prisma/client";
 
-// The "grows down" pipeline — excludes REJECTED/WITHDRAWN/OFFER_DECLINED,
+// The "grows down" pipeline — excludes REJECTED/WITHDRAWN/DECLINED,
 // which are exits from the pipeline rather than stages within it (see
-// dropOffStages below). OFFER_ACCEPTED is the funnel's "hired" endpoint.
+// dropOffStages below). ACCEPTED is the funnel's "hired" endpoint.
 const FUNNEL_STAGE_ORDER: ApplicationStatus[] = [
-  "PENDING",
+  "APPLIED",
   "REVIEWING",
   "SHORTLISTED",
   "INTERVIEW",
   "OFFERED",
-  "OFFER_ACCEPTED",
+  "ACCEPTED",
 ];
 
 const DROP_OFF_STATUSES: ApplicationStatus[] = [
   "REJECTED",
   "WITHDRAWN",
-  "OFFER_DECLINED",
+  "DECLINED",
 ];
 
 const STAGE_LABEL: Record<ApplicationStatus, string> = {
-  PENDING: "Applied",
+  APPLIED: "Applied",
   REVIEWING: "Reviewing",
   SHORTLISTED: "Shortlisted",
   INTERVIEW: "Interview",
   OFFERED: "Offered",
-  OFFER_ACCEPTED: "Hired",
-  OFFER_DECLINED: "Offer declined",
+  ACCEPTED: "Hired",
+  DECLINED: "Offer declined",
   REJECTED: "Rejected",
   WITHDRAWN: "Withdrawn",
 };

@@ -20,7 +20,7 @@ const truncate = (text: string, maxLength: number): string =>
 const jobLine = (job: { title: string; employer: { companyName: string } }) =>
   `${job.title} at ${job.employer.companyName}`;
 
-/** Excludes PENDING upstream (see TalentRepository.findRecentStatusEvents) —
+/** Excludes APPLIED upstream (see TalentRepository.findRecentStatusEvents) —
  * that event is the applicant's own action, not something that happened to
  * them, so it isn't "activity" in the sense this feed reports. */
 export const statusEventsToActivity = (
@@ -51,7 +51,7 @@ export const messagesToActivity = (
 // its schema comment) — so a CONFIRMED interview surfaces as two separate
 // feed entries (proposed, then confirmed) derived from the same row's
 // createdAt/updatedAt rather than as two rows read from the database. A
-// still-PENDING interview only produces the first.
+// still-PROPOSED interview only produces the first.
 export const interviewsToActivity = (
   interviews: InterviewActivitySource[],
 ): ActivityItem[] =>

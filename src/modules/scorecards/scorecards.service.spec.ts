@@ -62,6 +62,8 @@ describe("ScorecardsService.create", () => {
     expect(repository.create).toHaveBeenCalledWith({
       applicationId: "app-1",
       authorId: "user-1",
+      round: 1,
+      roundName: undefined,
       recommendation: "STRONGLY_RECOMMEND",
       technicalRating: 4,
       communicationRating: 3,
@@ -70,6 +72,42 @@ describe("ScorecardsService.create", () => {
       improvements: "Testing strategy.",
       note: "Great signal.",
     });
+  });
+
+  it("supports submitting scorecards for distinct interview rounds by the same author", async () => {
+    const { service, repository } = makeService({}, true);
+
+    await service.create("app-1", "user-1", {
+      ...validDto,
+      round: 1,
+      roundName: "Round 1 - Technical",
+      recommendation: "RECOMMEND",
+    });
+
+    await service.create("app-1", "user-1", {
+      ...validDto,
+      round: 2,
+      roundName: "Round 2 - Culture Fit",
+      recommendation: "STRONGLY_RECOMMEND",
+    });
+
+    expect(repository.create).toHaveBeenCalledTimes(2);
+    expect(repository.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        round: 1,
+        roundName: "Round 1 - Technical",
+        recommendation: "RECOMMEND",
+      }),
+    );
+    expect(repository.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        round: 2,
+        roundName: "Round 2 - Culture Fit",
+        recommendation: "STRONGLY_RECOMMEND",
+      }),
+    );
   });
 
   it("turns a duplicate-submission race (P2002) into a domain conflict", async () => {
@@ -117,6 +155,7 @@ describe("ScorecardsService.list", () => {
           NOT_RECOMMEND: 0,
           STRONGLY_NOT_RECOMMEND: 0,
         },
+        rounds: {},
       },
     });
   });
@@ -163,6 +202,20 @@ describe("ScorecardsService.list", () => {
         NEUTRAL: 1,
         NOT_RECOMMEND: 1,
         STRONGLY_NOT_RECOMMEND: 1,
+      },
+      rounds: {
+        "1": {
+          round: 1,
+          roundName: "Round 1",
+          count: 5,
+          hireCount: 2,
+          averages: {
+            technical: 3.5,
+            communication: 3.3,
+            cultureFit: 3.5,
+            overall: 3.4,
+          },
+        },
       },
     });
   });

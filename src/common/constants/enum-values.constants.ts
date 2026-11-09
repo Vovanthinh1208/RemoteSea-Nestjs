@@ -30,13 +30,13 @@ export const CV_RECOMMENDATION_VALUES = [
   "REJECT",
 ] as const;
 export const APPLICATION_STATUS_VALUES = [
-  "PENDING",
+  "APPLIED",
   "REVIEWING",
   "SHORTLISTED",
   "INTERVIEW",
   "OFFERED",
-  "OFFER_ACCEPTED",
-  "OFFER_DECLINED",
+  "ACCEPTED",
+  "DECLINED",
   "REJECTED",
   "WITHDRAWN",
 ] as const;

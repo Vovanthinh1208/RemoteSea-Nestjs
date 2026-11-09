@@ -236,7 +236,7 @@ export class TalentRepository {
     });
   }
 
-  // PENDING is excluded here (not in activity.util's mapper) so the fetch
+  // APPLIED is excluded here (not in activity.util's mapper) so the fetch
   // itself never spends the ACTIVITY_FEED_LIMIT budget on rows that get
   // dropped downstream — every application's very first event.
   findRecentStatusEvents(
@@ -244,7 +244,7 @@ export class TalentRepository {
     limit: number,
   ): Promise<StatusEventActivitySource[]> {
     return this.prisma.applicationStatusEvent.findMany({
-      where: { status: { not: "PENDING" }, application: { talentId } },
+      where: { status: { not: "APPLIED" }, application: { talentId } },
       orderBy: { createdAt: "desc" },
       take: limit,
       select: statusEventActivitySelect,
