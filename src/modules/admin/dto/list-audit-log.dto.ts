@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@/common/dto/pagination-query.schema";
 import { adminAuditTargetTypeSchema } from "@/common/dto/enums.schema";
+import { AdminAuditAction } from "@prisma/client";
 
 export const listAuditLogSchema = paginationQuerySchema.extend({
   targetType: adminAuditTargetTypeSchema.optional(),
@@ -8,6 +9,8 @@ export const listAuditLogSchema = paginationQuerySchema.extend({
   // targetType (see AdminService.listAuditLog), since ids aren't unique
   // across target types.
   targetId: z.string().optional(),
+  action: z.nativeEnum(AdminAuditAction).optional(),
+  q: z.string().trim().max(200).optional(),
 });
 
 export type ListAuditLogDto = z.infer<typeof listAuditLogSchema>;

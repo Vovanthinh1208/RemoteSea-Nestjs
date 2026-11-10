@@ -48,6 +48,7 @@ const makeService = (
     ...overrides.authService,
   } as unknown as AuthService;
   const emailService = {
+    sendCompanyVerifiedEmail: jest.fn().mockResolvedValue(undefined),
     sendJobLiveEmail: jest.fn().mockResolvedValue(undefined),
     sendJobRejectedEmail: jest.fn().mockResolvedValue(undefined),
   };
@@ -62,7 +63,6 @@ const makeService = (
       employerService,
       jobsService,
       {} as never,
-      authService,
       emailService as never,
       auditLogService as unknown as AuditLogService,
       jobModerationService,
@@ -141,7 +141,7 @@ describe("AdminService.reviewJob", () => {
   });
 
   it("records a JOB_APPROVED audit entry with the before/after status", async () => {
-    const { service, auditLogService } = makeService({
+    const { service, jobsService } = makeService({
       adminRepository: {
         findJobWithEmployerEmail: jest.fn().mockResolvedValue(pendingJob),
       },
@@ -154,7 +154,7 @@ describe("AdminService.reviewJob", () => {
 
     await service.reviewJob("job-1", { action: "approve" }, admin);
 
-    expect(auditLogService.record).toHaveBeenCalledWith({
+    expect(jobsService.approveForReview).toHaveBeenCalledWith("job-1", {
       adminId: "admin-1",
       adminEmail: "admin@remotesea.io",
       action: "JOB_APPROVED",
@@ -167,7 +167,7 @@ describe("AdminService.reviewJob", () => {
   });
 
   it("records a JOB_REJECTED audit entry including the rejection note", async () => {
-    const { service, auditLogService } = makeService({
+    const { service, jobsService } = makeService({
       adminRepository: {
         findJobWithEmployerEmail: jest.fn().mockResolvedValue(pendingJob),
       },
@@ -182,16 +182,20 @@ describe("AdminService.reviewJob", () => {
       admin,
     );
 
-    expect(auditLogService.record).toHaveBeenCalledWith({
-      adminId: "admin-1",
-      adminEmail: "admin@remotesea.io",
-      action: "JOB_REJECTED",
-      targetType: "JOB",
-      targetId: "job-1",
-      targetLabel: "Engineer",
-      before: { status: "PENDING_REVIEW" },
-      after: { status: "REJECTED", note: "Missing salary range" },
-    });
+    expect(jobsService.rejectForReview).toHaveBeenCalledWith(
+      "job-1",
+      "Missing salary range",
+      {
+        adminId: "admin-1",
+        adminEmail: "admin@remotesea.io",
+        action: "JOB_REJECTED",
+        targetType: "JOB",
+        targetId: "job-1",
+        targetLabel: "Engineer",
+        before: { status: "PENDING_REVIEW" },
+        after: { status: "REJECTED", note: "Missing salary range" },
+      },
+    );
   });
 });
 
@@ -223,6 +227,7 @@ describe("AdminService.updateEmployer", () => {
         findEmployerById: jest.fn().mockResolvedValue({
           id: "emp-1",
           companyName: "Acme Inc",
+          user: { email: "owner@example.test" },
           isVerified: false,
         }),
       },
@@ -231,7 +236,11 @@ describe("AdminService.updateEmployer", () => {
 
     await service.updateEmployer("emp-1", { action: "verify" }, admin);
 
-    expect(employerService.setVerified).toHaveBeenCalledWith("emp-1", true);
+    expect(employerService.setVerified).toHaveBeenCalledWith(
+      "emp-1",
+      true,
+      expect.objectContaining({ action: "EMPLOYER_VERIFIED" }),
+    );
   });
 
   it("delegates suspend to EmployerService.suspend", async () => {
@@ -240,6 +249,7 @@ describe("AdminService.updateEmployer", () => {
         findEmployerById: jest.fn().mockResolvedValue({
           id: "emp-1",
           companyName: "Acme Inc",
+          user: { email: "owner@example.test" },
           isVerified: true,
         }),
       },
@@ -248,15 +258,19 @@ describe("AdminService.updateEmployer", () => {
 
     await service.updateEmployer("emp-1", { action: "suspend" }, admin);
 
-    expect(employerService.suspend).toHaveBeenCalledWith("emp-1");
+    expect(employerService.suspend).toHaveBeenCalledWith(
+      "emp-1",
+      expect.objectContaining({ action: "EMPLOYER_SUSPENDED" }),
+    );
   });
 
   it("records an EMPLOYER_VERIFIED audit entry with the before/after isVerified flag", async () => {
-    const { service, auditLogService } = makeService({
+    const { service, employerService } = makeService({
       adminRepository: {
         findEmployerById: jest.fn().mockResolvedValue({
           id: "emp-1",
           companyName: "Acme Inc",
+          user: { email: "owner@example.test" },
           isVerified: false,
         }),
       },
@@ -265,7 +279,7 @@ describe("AdminService.updateEmployer", () => {
 
     await service.updateEmployer("emp-1", { action: "verify" }, admin);
 
-    expect(auditLogService.record).toHaveBeenCalledWith({
+    expect(employerService.setVerified).toHaveBeenCalledWith("emp-1", true, {
       adminId: "admin-1",
       adminEmail: "admin@remotesea.io",
       action: "EMPLOYER_VERIFIED",
@@ -278,11 +292,12 @@ describe("AdminService.updateEmployer", () => {
   });
 
   it("records an EMPLOYER_SUSPENDED audit entry with the before/after isVerified flag", async () => {
-    const { service, auditLogService } = makeService({
+    const { service, employerService } = makeService({
       adminRepository: {
         findEmployerById: jest.fn().mockResolvedValue({
           id: "emp-1",
           companyName: "Acme Inc",
+          user: { email: "owner@example.test" },
           isVerified: true,
         }),
       },
@@ -291,7 +306,7 @@ describe("AdminService.updateEmployer", () => {
 
     await service.updateEmployer("emp-1", { action: "suspend" }, admin);
 
-    expect(auditLogService.record).toHaveBeenCalledWith({
+    expect(employerService.suspend).toHaveBeenCalledWith("emp-1", {
       adminId: "admin-1",
       adminEmail: "admin@remotesea.io",
       action: "EMPLOYER_SUSPENDED",
@@ -363,10 +378,14 @@ describe("AdminService.updateUser", () => {
 
     await service.updateUser("user-1", { action: "ban" }, admin);
 
-    expect(adminRepository.updateUserRoleOrBan).toHaveBeenCalledWith("user-1", {
-      bannedAt: expect.any(Date),
-    });
-    expect(authService.revokeAllSessionsForUser).toHaveBeenCalledWith("user-1");
+    expect(adminRepository.updateUserRoleOrBan).toHaveBeenCalledWith(
+      "user-1",
+      {
+        bannedAt: expect.any(Date),
+      },
+      expect.objectContaining({ action: "USER_BANNED" }),
+    );
+    expect(adminRepository.updateUserRoleOrBan).toHaveBeenCalledTimes(1);
   });
 
   it("unbans the user WITHOUT revoking sessions — there's no stale privilege to close", async () => {
@@ -381,9 +400,13 @@ describe("AdminService.updateUser", () => {
 
     await service.updateUser("user-1", { action: "unban" }, admin);
 
-    expect(adminRepository.updateUserRoleOrBan).toHaveBeenCalledWith("user-1", {
-      bannedAt: null,
-    });
+    expect(adminRepository.updateUserRoleOrBan).toHaveBeenCalledWith(
+      "user-1",
+      {
+        bannedAt: null,
+      },
+      expect.objectContaining({ action: "USER_UNBANNED" }),
+    );
     expect(authService.revokeAllSessionsForUser).not.toHaveBeenCalled();
   });
 
@@ -401,14 +424,18 @@ describe("AdminService.updateUser", () => {
       admin,
     );
 
-    expect(adminRepository.updateUserRoleOrBan).toHaveBeenCalledWith("user-1", {
-      role: "ADMIN",
-    });
-    expect(authService.revokeAllSessionsForUser).toHaveBeenCalledWith("user-1");
+    expect(adminRepository.updateUserRoleOrBan).toHaveBeenCalledWith(
+      "user-1",
+      {
+        role: "ADMIN",
+      },
+      expect.objectContaining({ action: "USER_ROLE_CHANGED" }),
+    );
+    expect(adminRepository.updateUserRoleOrBan).toHaveBeenCalledTimes(1);
   });
 
   it("records a USER_BANNED audit entry with the before/after bannedAt", async () => {
-    const { service, auditLogService } = makeService({
+    const { service, adminRepository } = makeService({
       adminRepository: {
         findUserById: jest.fn().mockResolvedValue(targetUser),
         updateUserRoleOrBan: jest.fn().mockResolvedValue(undefined),
@@ -417,7 +444,9 @@ describe("AdminService.updateUser", () => {
 
     await service.updateUser("user-1", { action: "ban" }, admin);
 
-    expect(auditLogService.record).toHaveBeenCalledWith(
+    expect(adminRepository.updateUserRoleOrBan).toHaveBeenCalledWith(
+      "user-1",
+      { bannedAt: expect.any(Date) },
       expect.objectContaining({
         adminId: "admin-1",
         adminEmail: "admin@remotesea.io",
@@ -426,7 +455,7 @@ describe("AdminService.updateUser", () => {
         targetId: "user-1",
         targetLabel: "talent@example.com",
         before: { role: "TALENT", bannedAt: null },
-        after: { bannedAt: expect.any(Date) },
+        after: { bannedAt: expect.any(String) },
       }),
     );
   });

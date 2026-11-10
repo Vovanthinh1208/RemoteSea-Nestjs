@@ -191,8 +191,23 @@ export class BillingService {
     if (event.type === "checkout.session.completed") {
       const checkoutSession = event.data.object as Stripe.Checkout.Session;
       const jobId = checkoutSession.metadata?.jobId;
-      if (jobId) {
-        const job = await this.billingRepository.markJobPaidAndSubmitted(jobId);
+      if (
+        checkoutSession.payment_status !== "paid" ||
+        checkoutSession.mode !== "payment"
+      ) {
+        return { received: true };
+      }
+      if (
+        jobId &&
+        typeof checkoutSession.id === "string" &&
+        checkoutSession.id.length > 0
+      ) {
+        const job = await this.billingRepository.markJobPaidAndSubmitted(
+          jobId,
+          checkoutSession.id,
+          checkoutSession.amount_total,
+          checkoutSession.currency,
+        );
         if (job) {
           const eligible = isEligibleForAutoApproval(
             {

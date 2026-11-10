@@ -6,6 +6,8 @@ import {
   type JobWithRelations,
 } from "@/common/types/job-with-relations.type";
 import { MAX_ALERTS_PER_RUN } from "./constants";
+import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 
 const alertWithCategoriesInclude = {
   categories: { include: { category: true } },
@@ -34,6 +36,12 @@ export class AlertsRepository {
     });
   }
 
+  countByUser(userId: string): Promise<number> {
+    return this.prisma.jobAlert.count({
+      where: { userId },
+    });
+  }
+
   create(
     userId: string,
     alertData: Omit<
@@ -42,15 +50,29 @@ export class AlertsRepository {
     >,
     categoryIds: string[] | undefined,
   ): Promise<AlertWithCategories> {
-    return this.prisma.jobAlert.create({
-      data: {
-        ...alertData,
-        userId,
-        ...(categoryIds?.length && {
-          categories: { create: categoryIds.map((id) => ({ categoryId: id })) },
-        }),
-      },
-      include: alertWithCategoriesInclude,
+    return this.prisma.$transaction(async (tx) => {
+      // Serialize creations for this user across processes, including when no
+      // alerts exist yet. A count followed by an unlocked insert exceeds five.
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+      if ((await tx.jobAlert.count({ where: { userId } })) >= 5) {
+        throw new BadRequestApiException(
+          "Maximum 5 job alerts allowed per user",
+          ErrorCode.ALERT_LIMIT_REACHED,
+        );
+      }
+      await this.validateCategories(tx, categoryIds);
+      return tx.jobAlert.create({
+        data: {
+          ...alertData,
+          userId,
+          ...(categoryIds?.length && {
+            categories: {
+              create: categoryIds.map((id) => ({ categoryId: id })),
+            },
+          }),
+        },
+        include: alertWithCategoriesInclude,
+      });
     });
   }
 
@@ -65,6 +87,47 @@ export class AlertsRepository {
     return this.prisma.jobAlert.update({ where: { id }, data: { isActive } });
   }
 
+  async updateAlert(
+    id: string,
+    data: Prisma.JobAlertUpdateInput,
+    categoryIds?: string[],
+  ): Promise<AlertWithCategories> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM job_alerts WHERE id = ${id} FOR UPDATE`;
+      await this.validateCategories(tx, categoryIds);
+      if (categoryIds !== undefined) {
+        await tx.alertCategory.deleteMany({ where: { alertId: id } });
+      }
+      return tx.jobAlert.update({
+        where: { id },
+        data: {
+          ...data,
+          ...(categoryIds?.length && {
+            categories: {
+              create: categoryIds.map((categoryId) => ({ categoryId })),
+            },
+          }),
+        },
+        include: alertWithCategoriesInclude,
+      });
+    });
+  }
+
+  private async validateCategories(
+    tx: Prisma.TransactionClient,
+    ids?: string[],
+  ) {
+    if (!ids?.length) return;
+    const unique = [...new Set(ids)];
+    if (
+      unique.length !== ids.length ||
+      (await tx.category.count({ where: { id: { in: unique } } })) !==
+        unique.length
+    ) {
+      throw new BadRequestApiException("Invalid or duplicate alert categories");
+    }
+  }
+
   async delete(id: string): Promise<void> {
     await this.prisma.jobAlert.delete({ where: { id } });
   }
@@ -76,7 +139,10 @@ export class AlertsRepository {
     return this.prisma.jobAlert.findMany({
       // PB16: a paused account is hidden from public search and must stop
       // receiving new-job email alerts until it is reactivated.
-      where: { isActive: true, user: { isPaused: false } },
+      where: {
+        isActive: true,
+        user: { isPaused: false, bannedAt: null, role: "TALENT" },
+      },
       take: MAX_ALERTS_PER_RUN,
       orderBy: { lastSentAt: { sort: "asc", nulls: "first" } },
       include: {
@@ -89,7 +155,6 @@ export class AlertsRepository {
   findMatchingJobs(where: Prisma.JobWhereInput): Promise<JobWithRelations[]> {
     return this.prisma.job.findMany({
       where,
-      take: 10,
       orderBy: { publishedAt: "desc" },
       include: jobWithRelationsInclude,
     }) as Promise<JobWithRelations[]>;
@@ -101,12 +166,24 @@ export class AlertsRepository {
   async claimForSend(
     id: string,
     expectedLastSentAt: Date | null,
+    claimedAt = new Date(),
   ): Promise<boolean> {
     const { count } = await this.prisma.jobAlert.updateMany({
-      where: { id, lastSentAt: expectedLastSentAt },
-      data: { lastSentAt: new Date() },
+      where: { id, isActive: true, lastSentAt: expectedLastSentAt },
+      data: { lastSentAt: claimedAt },
     });
     return count === 1;
+  }
+
+  async releaseFailedSend(
+    id: string,
+    claimedAt: Date,
+    previous: Date | null,
+  ): Promise<void> {
+    await this.prisma.jobAlert.updateMany({
+      where: { id, lastSentAt: claimedAt },
+      data: { lastSentAt: previous },
+    });
   }
 
   /** Self-contained narrow query (not a cross-import of UsersRepository) —

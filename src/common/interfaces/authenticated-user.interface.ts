@@ -5,6 +5,7 @@ export interface AuthenticatedUser {
   email: string;
   name: string | null;
   role: UserRole;
+  ipAddress?: string;
 }
 
 export interface JwtPayload {

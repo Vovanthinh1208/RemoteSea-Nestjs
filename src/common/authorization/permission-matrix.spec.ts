@@ -55,7 +55,7 @@ import { TeamController } from "@/modules/team/team.controller";
 type ExpectedRoute = {
   method: string;
   httpMethod: keyof typeof RequestMethod;
-  path: string;
+  path: string | string[];
   guards: string[];
   roles?: string[];
 };
@@ -115,7 +115,10 @@ const getRouteHttpMethod = (
   return RequestMethod[method] as keyof typeof RequestMethod;
 };
 
-const getRoutePath = (controller: Type<unknown>, methodName: string): string =>
+const getRoutePath = (
+  controller: Type<unknown>,
+  methodName: string,
+): string | string[] =>
   Reflect.getMetadata(PATH_METADATA, getHandler(controller, methodName));
 
 /** Every own-prototype method Nest registered a route on (has PATH_METADATA). */
@@ -370,6 +373,12 @@ const expectations: ControllerExpectation[] = [
     controller: SalaryController,
     basePath: "salary",
     routes: [
+      {
+        method: "listMatchingJobs",
+        httpMethod: "GET",
+        path: "jobs",
+        guards: [],
+      },
       { method: "list", httpMethod: "GET", path: "benchmarks", guards: [] },
       {
         method: "listBySeniority",
@@ -661,7 +670,7 @@ const expectations: ControllerExpectation[] = [
       {
         method: "listAuditLog",
         httpMethod: "GET",
-        path: "audit-log",
+        path: ["audit-log", "audit-logs"],
         guards: ["JwtAuthGuard", "RolesGuard"],
         roles: ["ADMIN"],
       },
@@ -703,29 +712,39 @@ const expectations: ControllerExpectation[] = [
         method: "list",
         httpMethod: "GET",
         path: "/",
-        guards: ["JwtAuthGuard"],
+        guards: ["JwtAuthGuard", "RolesGuard"],
+        roles: ["TALENT"],
       },
       {
         method: "create",
         httpMethod: "POST",
         path: "/",
-        guards: ["JwtAuthGuard"],
+        guards: ["JwtAuthGuard", "RolesGuard"],
+        roles: ["TALENT"],
       },
       {
         method: "update",
         httpMethod: "PATCH",
         path: ":id",
-        guards: ["JwtAuthGuard", "AlertOwnershipGuard"],
+        guards: ["JwtAuthGuard", "RolesGuard", "AlertOwnershipGuard"],
+        roles: ["TALENT"],
       },
       {
         method: "remove",
         httpMethod: "DELETE",
         path: ":id",
-        guards: ["JwtAuthGuard", "AlertOwnershipGuard"],
+        guards: ["JwtAuthGuard", "RolesGuard", "AlertOwnershipGuard"],
+        roles: ["TALENT"],
       },
       {
         method: "dispatchCron",
         httpMethod: "GET",
+        path: "cron/dispatch",
+        guards: ["CronSecretGuard"],
+      },
+      {
+        method: "dispatchCronPost",
+        httpMethod: "POST",
         path: "cron/dispatch",
         guards: ["CronSecretGuard"],
       },
@@ -856,6 +875,12 @@ const expectations: ControllerExpectation[] = [
         method: "checkout",
         httpMethod: "POST",
         path: "checkout",
+        guards: ["JwtAuthGuard", "JobPayerOwnershipGuard"],
+      },
+      {
+        method: "checkoutSession",
+        httpMethod: "POST",
+        path: "checkout-session",
         guards: ["JwtAuthGuard", "JobPayerOwnershipGuard"],
       },
       {
@@ -1050,7 +1075,7 @@ describe("Permission matrix", () => {
           expect(getRouteHttpMethod(controller, route.method)).toBe(
             route.httpMethod,
           );
-          expect(getRoutePath(controller, route.method)).toBe(route.path);
+          expect(getRoutePath(controller, route.method)).toEqual(route.path);
           expect(getEffectiveGuardNames(controller, route.method)).toEqual(
             route.guards,
           );

@@ -6,8 +6,10 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from "@nestjs/common";
+import type { Request } from "express";
 import { AdminService } from "./admin.service";
 import {
   listEmployersSchema,
@@ -81,8 +83,12 @@ export class AdminController {
     @Param("id") id: string,
     @Body(new ZodValidationPipe(updateEmployerSchema)) body: UpdateEmployerDto,
     @CurrentUser() admin: AuthenticatedUser,
+    @Req() req: Request,
   ) {
-    return this.adminService.updateEmployer(id, body, admin);
+    return this.adminService.updateEmployer(id, body, {
+      ...admin,
+      ipAddress: req.ip,
+    });
   }
 
   @ApiListJobs()
@@ -99,8 +105,12 @@ export class AdminController {
     @Param("id") id: string,
     @Body(new ZodValidationPipe(reviewJobSchema)) body: ReviewJobDto,
     @CurrentUser() admin: AuthenticatedUser,
+    @Req() req: Request,
   ) {
-    return this.adminService.reviewJob(id, body, admin);
+    return this.adminService.reviewJob(id, body, {
+      ...admin,
+      ipAddress: req.ip,
+    });
   }
 
   @ApiGetJobModerationFlag()
@@ -156,12 +166,16 @@ export class AdminController {
     @Body(new ZodValidationPipe(resolveJobReportSchema))
     body: ResolveJobReportDto,
     @CurrentUser() admin: AuthenticatedUser,
+    @Req() req: Request,
   ) {
-    return this.adminService.resolveReport(id, body, admin);
+    return this.adminService.resolveReport(id, body, {
+      ...admin,
+      ipAddress: req.ip,
+    });
   }
 
   @ApiListAuditLog()
-  @Get("audit-log")
+  @Get(["audit-log", "audit-logs"])
   async listAuditLog(
     @Query(new ZodValidationPipe(listAuditLogSchema)) query: ListAuditLogDto,
   ) {
@@ -182,7 +196,11 @@ export class AdminController {
     @Param("id") id: string,
     @Body(new ZodValidationPipe(updateUserSchema)) body: UpdateUserDto,
     @CurrentUser() admin: AuthenticatedUser,
+    @Req() req: Request,
   ) {
-    return this.adminService.updateUser(id, body, admin);
+    return this.adminService.updateUser(id, body, {
+      ...admin,
+      ipAddress: req.ip,
+    });
   }
 }

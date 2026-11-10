@@ -1,3 +1,5 @@
+import type { RecordAuditLogInput } from "@/common/services/audit-log.service";
+import { auditedMutation } from "@/common/utils/audited-mutation";
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import type {
@@ -256,41 +258,34 @@ export class EmployerRepository {
     });
   }
 
-  setVerified(id: string, isVerified: boolean): Promise<EmployerProfile> {
-    return this.prisma.employerProfile.update({
-      where: { id },
-      // Only stamps verifiedAt when actually becoming verified — the
-      // suspend() path below is the one dedicated route to isVerified=false
-      // today, and it stamps its own suspendedAt instead. Re-verifying also
-      // clears suspendedAt: "verify" is the only admin action that flips
-      // isVerified back to true, so it has to double as "un-suspend" too —
-      // suspendedAt now actually gates every company-role guard/check
-      // (CompanyOwnershipGuardBase, requireCompanyRole), so leaving it set
-      // here would make a suspension permanent with no way to lift it.
-      data: {
-        isVerified,
-        ...(isVerified && { verifiedAt: new Date(), suspendedAt: null }),
-      },
-    });
+  setVerified(
+    id: string,
+    isVerified: boolean,
+    audit?: RecordAuditLogInput,
+  ): Promise<EmployerProfile> {
+    return auditedMutation(this.prisma, audit, (tx) =>
+      tx.employerProfile.update({
+        where: { id },
+        data: {
+          isVerified,
+          ...(isVerified && { verifiedAt: new Date(), suspendedAt: null }),
+        },
+      }),
+    );
   }
 
-  // Single transaction, not two separate writes: an employer left verified
-  // with all jobs closed (or suspended with jobs still live) is a worse
-  // inconsistency than the suspend failing outright. Moved here (from
-  // AdminRepository) since "what does suspending an employer mean" — the
-  // isVerified flip and the job-closing cascade together — is this module's
-  // domain rule to own, not Admin's to reimplement.
-  async suspend(id: string): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.employerProfile.update({
+  async suspend(id: string, audit?: RecordAuditLogInput): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.employerProfile.update({
         where: { id },
         data: { isVerified: false, suspendedAt: new Date() },
-      }),
-      this.prisma.job.updateMany({
+      });
+      await tx.job.updateMany({
         where: { employerId: id, status: "ACTIVE" },
         data: { status: "CLOSED" },
-      }),
-    ]);
+      });
+      if (audit) await tx.adminAuditLog.create({ data: audit });
+    });
   }
 
   // Narrower than findProfileWithJobCount — EmployerService.submitVerification

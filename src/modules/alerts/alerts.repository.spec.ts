@@ -12,7 +12,10 @@ describe("AlertsRepository.findActiveAlerts", () => {
 
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { isActive: true, user: { isPaused: false } },
+        where: {
+          isActive: true,
+          user: { isPaused: false, bannedAt: null, role: "TALENT" },
+        },
       }),
     );
   });

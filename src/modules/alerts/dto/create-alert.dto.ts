@@ -6,7 +6,7 @@ import {
 } from "@/common/dto/enums.schema";
 
 export const createAlertSchema = z.object({
-  name: z.string().min(1).max(100),
+  name: z.string().trim().min(1).max(100),
   keywords: z.string().max(200).optional(),
   jobType: jobTypeSchema.optional(),
   level: experienceLevelSchema.optional(),

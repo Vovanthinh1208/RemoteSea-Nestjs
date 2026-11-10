@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Req,
+  UseGuards,
+  HttpCode,
+} from "@nestjs/common";
 import type { RawBodyRequest } from "@nestjs/common";
 import type { Request } from "express";
 import { BillingService } from "./billing.service";
@@ -39,7 +47,7 @@ export class BillingController {
     @Req() req: Request,
     @CurrentUser() user: AuthenticatedUser,
     @CurrentResource() job: JobPayer,
-    @Body(new ZodValidationPipe(checkoutSchema)) _body: CheckoutDto,
+    @Body(new ZodValidationPipe(checkoutSchema)) body: CheckoutDto,
   ) {
     this.rateLimitService.enforce(
       `checkout:${user.id}`,
@@ -47,11 +55,32 @@ export class BillingController {
       RATE_LIMITS.CHECKOUT.windowMs,
       req,
     );
-    return this.billingService.createCheckoutSession(job, user.id);
+    if (body.planType && body.planType !== job.planType) {
+      throw new BadRequestApiException(
+        "Checkout plan must match the job's selected plan",
+      );
+    }
+    const result = await this.billingService.createCheckoutSession(
+      job,
+      user.id,
+    );
+    return { ...result, checkoutUrl: result.url };
+  }
+
+  @Post("checkout-session")
+  @UseGuards(JwtAuthGuard, JobPayerOwnershipGuard)
+  async checkoutSession(
+    @Req() req: Request,
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentResource() job: JobPayer,
+    @Body(new ZodValidationPipe(checkoutSchema)) body: CheckoutDto,
+  ) {
+    return this.checkout(req, user, job, body);
   }
 
   @ApiWebhook()
   @Post("webhook")
+  @HttpCode(200)
   async webhook(@Req() req: RawBodyRequest<Request>) {
     const signature = req.headers["stripe-signature"];
     if (!signature || Array.isArray(signature) || !req.rawBody) {

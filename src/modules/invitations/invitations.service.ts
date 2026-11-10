@@ -58,6 +58,14 @@ export class InvitationsService {
       dto.talentId,
     );
     assertFound(talent, "Talent not found", ErrorCode.TALENT_PROFILE_NOT_FOUND);
+    if (
+      talent.isOpenToWork === false ||
+      talent.user.isPaused ||
+      talent.user.bannedAt ||
+      (talent.visibility === "VERIFIED_EMPLOYERS" && !employer.isVerified)
+    ) {
+      throw new BadRequestApiException("Candidate is not open to invitations");
+    }
 
     const existing = await this.invitationsRepository.findByJobAndTalent(
       dto.jobId,

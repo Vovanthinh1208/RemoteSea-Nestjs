@@ -4,7 +4,6 @@ import { AdminRepository } from "./admin.repository";
 import { EmployerService } from "@/modules/employer/employer.service";
 import { JobsService } from "@/modules/jobs/jobs.service";
 import { JobReportsService } from "@/modules/job-reports/job-reports.service";
-import { AuthService } from "@/modules/auth/auth.service";
 import { JobModerationService } from "@/modules/job-moderation/job-moderation.service";
 import type { ListEmployersDto } from "./dto/list-employers.dto";
 import type { UpdateEmployerDto } from "./dto/update-employer.dto";
@@ -48,7 +47,6 @@ export class AdminService {
     private readonly employerService: EmployerService,
     private readonly jobsService: JobsService,
     private readonly jobReportsService: JobReportsService,
-    private readonly authService: AuthService,
     private readonly emailService: EmailService,
     private readonly auditLogService: AuditLogService,
     private readonly jobModerationService: JobModerationService,
@@ -91,23 +89,39 @@ export class AdminService {
       );
     }
 
+    const audit: import("@/common/services/audit-log.service").RecordAuditLogInput =
+      {
+        adminId: admin.id,
+        adminEmail: admin.email,
+        action:
+          dto.action === "verify" ? "EMPLOYER_VERIFIED" : "EMPLOYER_SUSPENDED",
+        targetType: "EMPLOYER",
+        targetId: id,
+        targetLabel: employer.companyName,
+        before: { isVerified: employer.isVerified },
+        after: {
+          isVerified: dto.action === "verify",
+          ...(dto.reason && { reason: dto.reason }),
+        },
+        ipAddress: admin.ipAddress,
+      };
+
     if (dto.action === "verify") {
-      await this.employerService.setVerified(id, true);
+      await this.employerService.setVerified(id, true, audit);
     } else {
-      await this.employerService.suspend(id);
+      await this.employerService.suspend(id, audit);
     }
 
-    await this.auditLogService.record({
-      adminId: admin.id,
-      adminEmail: admin.email,
-      action:
-        dto.action === "verify" ? "EMPLOYER_VERIFIED" : "EMPLOYER_SUSPENDED",
-      targetType: "EMPLOYER",
-      targetId: id,
-      targetLabel: employer.companyName,
-      before: { isVerified: employer.isVerified },
-      after: { isVerified: dto.action === "verify" },
-    });
+    if (dto.action === "verify") {
+      runInBackground(
+        this.emailService.sendCompanyVerifiedEmail(
+          employer.user.email,
+          employer.companyName,
+        ),
+        this.logger,
+        `Failed verification email for employer ${id}`,
+      );
+    }
 
     return { success: true };
   }
@@ -148,14 +162,7 @@ export class AdminService {
     // double-fire the approve/reject email + write the way a plain `update`
     // could.
     if (action === "approve") {
-      const updated = await this.jobsService.approveForReview(id);
-      if (!updated) {
-        throw new BadRequestApiException(
-          `Job is no longer pending review`,
-          ErrorCode.JOB_NOT_PENDING_REVIEW,
-        );
-      }
-      await this.auditLogService.record({
+      const updated = await this.jobsService.approveForReview(id, {
         adminId: admin.id,
         adminEmail: admin.email,
         action: "JOB_APPROVED",
@@ -164,7 +171,15 @@ export class AdminService {
         targetLabel: job.title,
         before: { status: "PENDING_REVIEW" },
         after: { status: "ACTIVE" },
+        ipAddress: admin.ipAddress,
       });
+      if (!updated) {
+        throw new BadRequestApiException(
+          `Job is no longer pending review`,
+          ErrorCode.JOB_NOT_PENDING_REVIEW,
+        );
+      }
+
       // The status change is already committed by the time we email below — a
       // notification failure must not surface as a failed review, since a retry
       // would then hit the PENDING_REVIEW guard above with no way to redo it.
@@ -176,14 +191,7 @@ export class AdminService {
       return updated;
     }
 
-    const updated = await this.jobsService.rejectForReview(id, note ?? null);
-    if (!updated) {
-      throw new BadRequestApiException(
-        `Job is no longer pending review`,
-        ErrorCode.JOB_NOT_PENDING_REVIEW,
-      );
-    }
-    await this.auditLogService.record({
+    const updated = await this.jobsService.rejectForReview(id, note ?? null, {
       adminId: admin.id,
       adminEmail: admin.email,
       action: "JOB_REJECTED",
@@ -192,7 +200,15 @@ export class AdminService {
       targetLabel: job.title,
       before: { status: "PENDING_REVIEW" },
       after: { status: "REJECTED", note: note ?? null },
+      ipAddress: admin.ipAddress,
     });
+    if (!updated) {
+      throw new BadRequestApiException(
+        `Job is no longer pending review`,
+        ErrorCode.JOB_NOT_PENDING_REVIEW,
+      );
+    }
+
     runInBackground(
       this.emailService.sendJobRejectedEmail(
         employerEmail,
@@ -268,10 +284,10 @@ export class AdminService {
   }
 
   async listAuditLog(query: ListAuditLogDto) {
-    const { targetType, targetId, page, limit } = query;
+    const { targetType, targetId, action, q, page, limit } = query;
     const skip = paginationSkip(page, limit);
     const [entries, total] = await this.auditLogService.list(
-      { targetType, targetId },
+      { targetType, targetId, action, q },
       skip,
       limit,
     );
@@ -327,45 +343,35 @@ export class AdminService {
       );
     }
 
-    const before = { role: user.role, bannedAt: user.bannedAt };
-    let after: { role?: string; bannedAt: Date | null };
-    let action: "USER_BANNED" | "USER_UNBANNED" | "USER_ROLE_CHANGED";
-
-    if (dto.action === "ban") {
-      await this.adminRepository.updateUserRoleOrBan(id, {
-        bannedAt: new Date(),
-      });
-      after = { bannedAt: new Date() };
-      action = "USER_BANNED";
-    } else if (dto.action === "unban") {
-      await this.adminRepository.updateUserRoleOrBan(id, { bannedAt: null });
-      after = { bannedAt: null };
-      action = "USER_UNBANNED";
-    } else {
-      // dto.role is guaranteed by updateUserSchema's refine() for this branch.
-      await this.adminRepository.updateUserRoleOrBan(id, { role: dto.role });
-      after = { role: dto.role, bannedAt: user.bannedAt };
-      action = "USER_ROLE_CHANGED";
-    }
-
-    // Both a ban and a role change invalidate every existing session for
-    // this user — see AuthService.revokeAllSessionsForUser's own comment
-    // for why this (not a per-request DB re-check of role/bannedAt) is the
-    // fix for "JWT role never re-validated." Unbanning doesn't need this:
-    // it only restores access, so there's no stale privilege to close.
-    if (dto.action !== "unban") {
-      await this.authService.revokeAllSessionsForUser(id);
-    }
-
-    await this.auditLogService.record({
+    const bannedAt = new Date();
+    const data =
+      dto.action === "ban"
+        ? { bannedAt }
+        : dto.action === "unban"
+          ? { bannedAt: null }
+          : { role: dto.role };
+    await this.adminRepository.updateUserRoleOrBan(id, data, {
       adminId: admin.id,
       adminEmail: admin.email,
-      action,
+      action:
+        dto.action === "ban"
+          ? "USER_BANNED"
+          : dto.action === "unban"
+            ? "USER_UNBANNED"
+            : "USER_ROLE_CHANGED",
       targetType: "USER",
       targetId: id,
       targetLabel: user.email,
-      before,
-      after,
+      before: {
+        role: user.role,
+        bannedAt: user.bannedAt?.toISOString() ?? null,
+      },
+      after: {
+        ...data,
+        ...(data.bannedAt && { bannedAt: data.bannedAt.toISOString() }),
+        ...(dto.reason && { reason: dto.reason }),
+      },
+      ipAddress: admin.ipAddress,
     });
 
     return { success: true };

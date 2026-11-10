@@ -1,11 +1,69 @@
 import { AlertsService } from "./alerts.service";
 import type { AlertsRepository } from "./alerts.repository";
 import type { EmailService } from "@/common/services/email.service";
+import { BadRequestApiException } from "@/common/exceptions/api.exception";
 
 // Ownership is enforced upstream by AlertOwnershipGuard — these just confirm the
 // service delegates straight to the repository once that's already been done.
 
+describe("AlertsService.create", () => {
+  it("enforces maximum 5 alerts limit per candidate", async () => {
+    const countByUser = jest.fn().mockResolvedValue(5);
+    const service = new AlertsService(
+      { countByUser } as unknown as AlertsRepository,
+      {} as EmailService,
+    );
+
+    await expect(
+      service.create("user-1", {
+        name: "Sixth Alert",
+        frequency: "DAILY",
+      }),
+    ).rejects.toThrow(BadRequestApiException);
+    expect(countByUser).toHaveBeenCalledWith("user-1");
+  });
+
+  it("creates an alert when under the 5 alerts limit", async () => {
+    const countByUser = jest.fn().mockResolvedValue(2);
+    const create = jest
+      .fn()
+      .mockResolvedValue({ id: "alert-new", name: "React Remote" });
+    const service = new AlertsService(
+      { countByUser, create } as unknown as AlertsRepository,
+      {} as EmailService,
+    );
+
+    const result = await service.create("user-1", {
+      name: "React Remote",
+      frequency: "DAILY",
+    });
+    expect(countByUser).toHaveBeenCalledWith("user-1");
+    expect(create).toHaveBeenCalledWith(
+      "user-1",
+      { name: "React Remote", frequency: "DAILY" },
+      undefined,
+    );
+    expect(result).toEqual({ id: "alert-new", name: "React Remote" });
+  });
+});
+
 describe("AlertsService.update", () => {
+  it("delegates to updateAlert when criteria fields are passed", async () => {
+    const updateAlert = jest
+      .fn()
+      .mockResolvedValue({ id: "alert-1", name: "Updated Name" });
+    const service = new AlertsService(
+      { updateAlert } as unknown as AlertsRepository,
+      {} as EmailService,
+    );
+
+    await service.update("alert-1", { name: "Updated Name" });
+    expect(updateAlert).toHaveBeenCalledWith(
+      "alert-1",
+      { name: "Updated Name" },
+      undefined,
+    );
+  });
   it("delegates to the repository with the alert id and isActive flag", async () => {
     const updateActive = jest
       .fn()

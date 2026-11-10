@@ -176,6 +176,17 @@ export class EmailService {
     );
   }
 
+  async sendCompanyVerifiedEmail(
+    to: string,
+    companyName: string,
+  ): Promise<void> {
+    await this.send(
+      to,
+      "Your company is verified on RemoteSEA",
+      `<p>Congratulations! ${escapeHtml(companyName)} has been verified by the RemoteSEA team.</p>`,
+    );
+  }
+
   async sendPasswordResetEmail(to: string, token: string): Promise<void> {
     const resetUrl = this.buildFrontendUrl("/reset-password", { token });
     await this.send(

@@ -15,6 +15,7 @@ export type RecordAuditLogInput = {
   targetLabel: string;
   before?: Prisma.InputJsonValue;
   after?: Prisma.InputJsonValue;
+  ipAddress?: string;
 };
 
 const auditLogSelect = {
@@ -28,6 +29,7 @@ const auditLogSelect = {
   before: true,
   after: true,
   createdAt: true,
+  ipAddress: true,
 } satisfies Prisma.AdminAuditLogSelect;
 
 export type AuditLogEntry = Prisma.AdminAuditLogGetPayload<{
@@ -37,6 +39,8 @@ export type AuditLogEntry = Prisma.AdminAuditLogGetPayload<{
 export type ListAuditLogFilter = {
   targetType?: AdminAuditTargetType;
   targetId?: string;
+  action?: AdminAuditAction;
+  q?: string;
 };
 
 /** Global (see SharedServicesModule) — every module that performs an admin
@@ -63,6 +67,7 @@ export class AuditLogService {
         `Failed to record audit log entry: ${input.action} on ${input.targetType} ${input.targetId} by ${input.adminId}`,
         error instanceof Error ? error.stack : error,
       );
+      throw error;
     }
   }
 
@@ -74,13 +79,20 @@ export class AuditLogService {
     const where: Prisma.AdminAuditLogWhereInput = {
       ...(filter.targetType && { targetType: filter.targetType }),
       ...(filter.targetId && { targetId: filter.targetId }),
+      ...(filter.action && { action: filter.action }),
+      ...(filter.q && {
+        OR: [
+          { adminEmail: { contains: filter.q, mode: "insensitive" } },
+          { adminId: { contains: filter.q, mode: "insensitive" } },
+        ],
+      }),
     };
     return Promise.all([
       this.prisma.adminAuditLog.findMany({
         where,
         skip,
         take,
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: auditLogSelect,
       }),
       this.prisma.adminAuditLog.count({ where }),

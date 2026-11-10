@@ -1,3 +1,4 @@
+import type { RecordAuditLogInput } from "@/common/services/audit-log.service";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { CACHE_MANAGER, type Cache } from "@nestjs/cache-manager";
 import type { Job } from "@prisma/client";
@@ -316,12 +317,16 @@ export class JobsService {
   // status transition. Null means the atomic re-check found the job already
   // moved on (e.g. a second concurrent review) — the caller maps that to
   // JOB_NOT_PENDING_REVIEW.
-  approveForReview(id: string) {
-    return this.jobsRepository.approveJob(id);
+  approveForReview(id: string, audit?: RecordAuditLogInput) {
+    return this.jobsRepository.approveJob(id, audit);
   }
 
-  rejectForReview(id: string, note: string | null) {
-    return this.jobsRepository.rejectJob(id, note);
+  rejectForReview(
+    id: string,
+    note: string | null,
+    audit?: RecordAuditLogInput,
+  ) {
+    return this.jobsRepository.rejectJob(id, note, audit);
   }
 
   // Cron-triggered (GET /jobs/cron/expire, CronSecretGuard — see

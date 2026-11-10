@@ -49,7 +49,7 @@ export function activeJobBaseWhere(): Prisma.JobWhereInput {
     publishedAt: { not: null, lte: new Date() },
     // PB16: public job discovery must stop surfacing a paused employer's
     // listings as soon as their account is paused.
-    employer: { user: { isPaused: false } },
+    employer: { suspendedAt: null, user: { isPaused: false, bannedAt: null } },
     ...notExpiredCondition(),
   };
 }

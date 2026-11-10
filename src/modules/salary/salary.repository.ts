@@ -11,6 +11,33 @@ import type {
 export class SalaryRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  findMatchingJobs(
+    role: string,
+    level?: import("@prisma/client").ExperienceLevel,
+  ) {
+    return this.prisma.job.findMany({
+      where: {
+        status: "ACTIVE",
+        currency: "USD",
+        salaryMin: { not: null },
+        employer: { suspendedAt: null },
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        categories: { some: { category: { name: role } } },
+        ...(level && { level }),
+      },
+      take: 20,
+      orderBy: { publishedAt: "desc" },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        salaryMin: true,
+        salaryMax: true,
+        employer: { select: { companyName: true } },
+      },
+    });
+  }
+
   // One aggregate query instead of pulling every active, salaried job (fanned
   // out per category via the job_categories join) into app memory to average
   // in JS. `mid` rounds each row's midpoint first, then averages those —
@@ -21,14 +48,17 @@ export class SalaryRepository {
     return this.prisma.$queryRaw<SalaryBenchmark[]>(Prisma.sql`
       SELECT
         c.name AS role,
-        ROUND(AVG(j."salaryMin"))::int AS min,
-        ROUND(AVG(COALESCE(j."salaryMax", j."salaryMin")))::int AS max,
-        ROUND(AVG(ROUND((j."salaryMin" + COALESCE(j."salaryMax", j."salaryMin")) / 2.0)))::int AS mid,
+        MIN(j."salaryMin")::int AS min,
+        MAX(COALESCE(j."salaryMax", j."salaryMin"))::int AS max,
+        ROUND((PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY (j."salaryMin" + COALESCE(j."salaryMax", j."salaryMin")) / 2.0))::numeric)::int AS mid,
         COUNT(*)::int AS count
       FROM categories c
       JOIN job_categories jc ON jc."categoryId" = c.id
       JOIN jobs j ON j.id = jc."jobId"
-      WHERE j.status = 'ACTIVE' AND j."salaryMin" IS NOT NULL
+      JOIN employer_profiles e ON e.id = j."employerId"
+      WHERE j.status = 'ACTIVE' AND j."salaryMin" IS NOT NULL AND j.currency = 'USD'
+        AND e."suspendedAt" IS NULL AND (j."expiresAt" IS NULL OR j."expiresAt" > NOW())
+        AND j."publishedAt" <= NOW() AND EXISTS (SELECT 1 FROM users u WHERE u.id = e."userId" AND NOT u."isPaused" AND u."bannedAt" IS NULL)
       GROUP BY c.name
       ORDER BY count DESC
     `);
@@ -41,14 +71,17 @@ export class SalaryRepository {
       SELECT
         c.name AS role,
         j.level::text AS level,
-        ROUND(AVG(j."salaryMin"))::int AS min,
-        ROUND(AVG(COALESCE(j."salaryMax", j."salaryMin")))::int AS max,
-        ROUND(AVG(ROUND((j."salaryMin" + COALESCE(j."salaryMax", j."salaryMin")) / 2.0)))::int AS mid,
+        MIN(j."salaryMin")::int AS min,
+        MAX(COALESCE(j."salaryMax", j."salaryMin"))::int AS max,
+        ROUND((PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY (j."salaryMin" + COALESCE(j."salaryMax", j."salaryMin")) / 2.0))::numeric)::int AS mid,
         COUNT(*)::int AS count
       FROM categories c
       JOIN job_categories jc ON jc."categoryId" = c.id
       JOIN jobs j ON j.id = jc."jobId"
-      WHERE j.status = 'ACTIVE' AND j."salaryMin" IS NOT NULL
+      JOIN employer_profiles e ON e.id = j."employerId"
+      WHERE j.status = 'ACTIVE' AND j."salaryMin" IS NOT NULL AND j.currency = 'USD'
+        AND e."suspendedAt" IS NULL AND (j."expiresAt" IS NULL OR j."expiresAt" > NOW())
+        AND j."publishedAt" <= NOW() AND EXISTS (SELECT 1 FROM users u WHERE u.id = e."userId" AND NOT u."isPaused" AND u."bannedAt" IS NULL)
       GROUP BY c.name, j.level
       ORDER BY count DESC
     `);
@@ -61,13 +94,15 @@ export class SalaryRepository {
     return this.prisma.$queryRaw<SalaryBenchmarkByCountry[]>(Prisma.sql`
       SELECT
         e."hqCountry" AS country,
-        ROUND(AVG(j."salaryMin"))::int AS min,
-        ROUND(AVG(COALESCE(j."salaryMax", j."salaryMin")))::int AS max,
-        ROUND(AVG(ROUND((j."salaryMin" + COALESCE(j."salaryMax", j."salaryMin")) / 2.0)))::int AS mid,
+        MIN(j."salaryMin")::int AS min,
+        MAX(COALESCE(j."salaryMax", j."salaryMin"))::int AS max,
+        ROUND((PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY (j."salaryMin" + COALESCE(j."salaryMax", j."salaryMin")) / 2.0))::numeric)::int AS mid,
         COUNT(*)::int AS count
       FROM jobs j
       JOIN employer_profiles e ON e.id = j."employerId"
-      WHERE j.status = 'ACTIVE' AND j."salaryMin" IS NOT NULL AND e."hqCountry" IS NOT NULL
+      WHERE j.status = 'ACTIVE' AND j."salaryMin" IS NOT NULL AND j.currency = 'USD'
+        AND e."suspendedAt" IS NULL AND (j."expiresAt" IS NULL OR j."expiresAt" > NOW())
+        AND j."publishedAt" <= NOW() AND EXISTS (SELECT 1 FROM users u WHERE u.id = e."userId" AND NOT u."isPaused" AND u."bannedAt" IS NULL) AND e."hqCountry" IS NOT NULL
       GROUP BY e."hqCountry"
       ORDER BY count DESC
     `);

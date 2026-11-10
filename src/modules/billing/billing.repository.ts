@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, type Job } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
+import { PLAN_PRICES } from "@/common/constants/plan.constants";
 
 // Wider than jobWithEmployerEmailInclude (which only carries employer.user.
 // email) — BillingService's auto-approval check also needs employer.
@@ -48,6 +49,9 @@ export class BillingRepository {
   // no-op instead of re-sending the "payment received" email.
   async markJobPaidAndSubmitted(
     jobId: string,
+    stripeSessionId?: string,
+    amountTotal?: number | null,
+    currency?: string | null,
   ): Promise<JobPaidAndSubmitted | null> {
     // planType is immutable after creation (nothing in this codebase ever
     // updates it), so reading it ahead of the CAS write below can't race —
@@ -58,8 +62,18 @@ export class BillingRepository {
     });
     if (!job) return null;
 
+    if (
+      stripeSessionId &&
+      (amountTotal !== PLAN_PRICES[job.planType] || currency !== "usd")
+    )
+      return null;
     const { count } = await this.prisma.job.updateMany({
-      where: { id: jobId, planPaid: false },
+      where: {
+        id: jobId,
+        planPaid: false,
+        status: "DRAFT",
+        ...(stripeSessionId && { stripeSessionId }),
+      },
       data: {
         planPaid: true,
         paidAt: new Date(),

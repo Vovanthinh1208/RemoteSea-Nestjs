@@ -63,7 +63,10 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
         "We couldn't verify your session right now. Please try again shortly.",
       );
     }
-    if (!session || session.revokedAt) {
+    if (!session || session.revokedAt || session.userId !== payload.sub) {
+      throw new Error("Session expired — please sign in again");
+    }
+    if (session.user.bannedAt || session.user.role !== payload.role) {
       throw new Error("Session expired — please sign in again");
     }
     if (
@@ -79,6 +82,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
         "Failed to update session activity",
       );
     }
-    return { ...AuthMapper.fromPayload(payload), sid: payload.sid };
+    return {
+      ...AuthMapper.fromPayload({ ...payload, ...session.user }),
+      sid: payload.sid,
+    };
   }
 }

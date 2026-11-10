@@ -50,6 +50,12 @@ describe("JwtStrategy session revocation", () => {
     const findSessionState = jest.fn().mockResolvedValue({
       id: "active-session",
       userId: "active-user",
+      user: {
+        role: "TALENT",
+        bannedAt: null,
+        email: "person@example.com",
+        name: "Person",
+      },
       revokedAt: null,
       lastSeenAt: new Date(),
     });

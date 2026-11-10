@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Patch,
   Post,
   Req,
@@ -20,6 +22,8 @@ import {
 import { RATE_LIMITS } from "./constants";
 import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { JwtAuthGuard } from "@/core/guards/jwt-auth.guard";
+import { RolesGuard } from "@/core/guards/roles.guard";
+import { Roles } from "@/core/decorators/roles.decorator";
 import { CurrentUser } from "@/core/decorators/current-user.decorator";
 import { CurrentResource } from "@/common/authorization/current-resource.decorator";
 import { RateLimitService } from "@/common/services/rate-limit.service";
@@ -43,14 +47,16 @@ export class AlertsController {
 
   @ApiListAlerts()
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("TALENT")
   async list(@CurrentUser() user: AuthenticatedUser) {
     return this.alertsService.listForUser(user.id);
   }
 
   @ApiCreateAlert()
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("TALENT")
   async create(
     @Req() req: Request,
     @CurrentUser() user: AuthenticatedUser,
@@ -67,7 +73,8 @@ export class AlertsController {
 
   @ApiUpdateAlert()
   @Patch(":id")
-  @UseGuards(JwtAuthGuard, AlertOwnershipGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AlertOwnershipGuard)
+  @Roles("TALENT")
   async update(
     @Req() req: Request,
     @CurrentUser() user: AuthenticatedUser,
@@ -85,7 +92,8 @@ export class AlertsController {
 
   @ApiDeleteAlert()
   @Delete(":id")
-  @UseGuards(JwtAuthGuard, AlertOwnershipGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AlertOwnershipGuard)
+  @Roles("TALENT")
   async remove(
     @Req() req: Request,
     @CurrentUser() user: AuthenticatedUser,
@@ -104,6 +112,13 @@ export class AlertsController {
   @Get("cron/dispatch")
   @UseGuards(CronSecretGuard)
   async dispatchCron() {
+    return this.alertsService.dispatchCron();
+  }
+
+  @Post("cron/dispatch")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(CronSecretGuard)
+  async dispatchCronPost() {
     return this.alertsService.dispatchCron();
   }
 }

@@ -215,7 +215,16 @@ describe("BillingService.handleWebhookEvent auto-approval", () => {
       webhooks: {
         constructEvent: jest.fn().mockReturnValue({
           type: "checkout.session.completed",
-          data: { object: { metadata: { jobId: "job-1" } } },
+          data: {
+            object: {
+              id: "cs_1",
+              mode: "payment",
+              payment_status: "paid",
+              amount_total: 15000,
+              currency: "usd",
+              metadata: { jobId: "job-1" },
+            },
+          },
         }),
       },
     };

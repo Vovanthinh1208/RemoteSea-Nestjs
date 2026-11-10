@@ -21,6 +21,13 @@ export class SalaryService {
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
+  listMatchingJobs(
+    role: string,
+    level?: import("@prisma/client").ExperienceLevel,
+  ) {
+    return this.salaryRepository.findMatchingJobs(role, level);
+  }
+
   listBenchmarks(): Promise<SalaryBenchmark[]> {
     return getOrSetCache(
       this.cache,

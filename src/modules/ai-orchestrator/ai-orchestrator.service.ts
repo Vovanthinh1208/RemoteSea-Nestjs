@@ -194,11 +194,20 @@ export class AiOrchestratorService {
       `orchestrator_proxy user=${user.id} method=${method} path=${path} status=${response.status} latencyMs=${Date.now() - startedAt}`,
     );
     if (!response.ok) {
+      if (response.status >= 500) {
+        throw new ServiceUnavailableException(
+          "AI Orchestrator is temporarily unavailable",
+        );
+      }
       throw new HttpException(
         data ?? "AI Orchestrator request failed",
         response.status,
       );
     }
+    if (data === undefined)
+      throw new ServiceUnavailableException(
+        "AI Orchestrator returned an invalid response",
+      );
     return data as T;
   }
 }

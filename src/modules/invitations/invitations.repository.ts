@@ -1,4 +1,9 @@
 import { Injectable } from "@nestjs/common";
+import {
+  BadRequestApiException,
+  ConflictApiException,
+} from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { EmployerProfile, JobInvitation } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
 import {
@@ -23,10 +28,16 @@ export class InvitationsRepository {
 
   findEmployerProfileByUserId(
     userId: string,
-  ): Promise<Pick<EmployerProfile, "id" | "companyName"> | null> {
-    return this.prisma.employerProfile.findUnique({
-      where: { userId },
-      select: { id: true, companyName: true },
+  ): Promise<Pick<
+    EmployerProfile,
+    "id" | "companyName" | "isVerified"
+  > | null> {
+    return this.prisma.employerProfile.findFirst({
+      where: {
+        members: { some: { userId, role: { in: ["OWNER", "RECRUITER"] } } },
+        suspendedAt: null,
+      },
+      select: { id: true, companyName: true, isVerified: true },
     });
   }
 
@@ -59,7 +70,11 @@ export class InvitationsRepository {
       select: {
         id: true,
         userId: true,
-        user: { select: { email: true, name: true } },
+        isOpenToWork: true,
+        visibility: true,
+        user: {
+          select: { email: true, name: true, isPaused: true, bannedAt: true },
+        },
       },
     });
   }
@@ -68,8 +83,8 @@ export class InvitationsRepository {
     jobId: string,
     talentId: string,
   ): Promise<Pick<JobInvitation, "id"> | null> {
-    return this.prisma.jobInvitation.findUnique({
-      where: { jobId_talentId: { jobId, talentId } },
+    return this.prisma.jobInvitation.findFirst({
+      where: { jobId, talentId, status: "PENDING" },
       select: { id: true },
     });
   }
@@ -112,11 +127,17 @@ export class InvitationsRepository {
     });
   }
 
-  decline(id: string): Promise<JobInvitation> {
-    return this.prisma.jobInvitation.update({
-      where: { id },
+  async decline(id: string): Promise<JobInvitation> {
+    const result = await this.prisma.jobInvitation.updateMany({
+      where: { id, status: "PENDING" },
       data: { status: "DECLINED", respondedAt: new Date() },
     });
+    if (!result.count)
+      throw new ConflictApiException(
+        "Already responded",
+        ErrorCode.INVITATION_ALREADY_RESPONDED,
+      );
+    return this.prisma.jobInvitation.findUniqueOrThrow({ where: { id } });
   }
 
   /** Accepting turns the invitation into a real Application — same create +
@@ -129,17 +150,47 @@ export class InvitationsRepository {
     invitation: InvitationOwner,
   ): Promise<{ application: OwnApplication; job: JobWithEmployerEmail }> {
     return this.prisma.$transaction(async (tx) => {
-      await tx.jobInvitation.update({
-        where: { id: invitation.id },
+      const claimed = await tx.jobInvitation.updateMany({
+        where: { id: invitation.id, status: "PENDING" },
         data: { status: "ACCEPTED", respondedAt: new Date() },
       });
-      const created = await tx.application.create({
-        data: { jobId: invitation.jobId, talentId: invitation.talentId },
+      if (!claimed.count)
+        throw new ConflictApiException(
+          "Already responded",
+          ErrorCode.INVITATION_ALREADY_RESPONDED,
+        );
+      const live = await tx.job.findFirst({
+        where: {
+          id: invitation.jobId,
+          status: "ACTIVE",
+          employer: { suspendedAt: null },
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        },
+      });
+      if (!live)
+        throw new BadRequestApiException(
+          "Job is no longer active",
+          ErrorCode.JOB_NOT_ACTIVE,
+        );
+      const existing = await tx.application.findUnique({
+        where: {
+          jobId_talentId: {
+            jobId: invitation.jobId,
+            talentId: invitation.talentId,
+          },
+        },
         select: { id: true },
       });
-      await tx.applicationStatusEvent.create({
-        data: { applicationId: created.id, status: "APPLIED" },
-      });
+      const created =
+        existing ??
+        (await tx.application.create({
+          data: { jobId: invitation.jobId, talentId: invitation.talentId },
+          select: { id: true },
+        }));
+      if (!existing)
+        await tx.applicationStatusEvent.create({
+          data: { applicationId: created.id, status: "APPLIED" },
+        });
       const [application, job] = await Promise.all([
         tx.application.findUniqueOrThrow({
           where: { id: created.id },
@@ -147,7 +198,7 @@ export class InvitationsRepository {
         }),
         tx.job.update({
           where: { id: invitation.jobId },
-          data: { applyCount: { increment: 1 } },
+          data: { applyCount: { increment: existing ? 0 : 1 } },
           include: jobWithEmployerEmailInclude,
         }),
       ]);

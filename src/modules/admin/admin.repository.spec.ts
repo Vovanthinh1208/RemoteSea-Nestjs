@@ -26,7 +26,7 @@ describe("AdminRepository.findJobs", () => {
     await repository.findJobs({ status: "PENDING_REVIEW" }, 0, 20);
 
     expect(prisma.job.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ orderBy: { paidAt: "asc" } }),
+      expect.objectContaining({ orderBy: [{ paidAt: "asc" }, { id: "asc" }] }),
     );
   });
 
@@ -36,7 +36,9 @@ describe("AdminRepository.findJobs", () => {
     await repository.findJobs({ status: "ACTIVE" }, 0, 20);
 
     expect(prisma.job.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ orderBy: { createdAt: "asc" } }),
+      expect.objectContaining({
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      }),
     );
   });
 });

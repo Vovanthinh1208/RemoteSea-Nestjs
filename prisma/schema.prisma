@@ -876,19 +876,14 @@ model JobInvitation {
   talent   TalentProfile   @relation(fields: [talentId], references: [id], onDelete: Cascade)
   employer EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
 
-  @@unique([jobId, talentId])
+  // Partial unique index for PENDING pairs is maintained in the migration.
+  @@index([jobId, talentId])
   @@index([talentId, status, createdAt])
   @@map("job_invitations")
 }
 
-// A talent or employer flagging a listing as suspicious/scam. Deliberately
-// its own table, not a flag/count on Job — a report is a signal *about* a
-// job, not a moderation action taken *on* it, so Job.status is never touched
-// by this flow (same reasoning JobInvitation got its own model instead of
-// overloading Application). No DB-level uniqueness on (jobId, reporterId): a
-// true "one OPEN report per pair" constraint needs a partial unique index,
-// which isn't worth the hand-edited-migration complexity for this low-stakes
-// write — JobReportsService enforces it with a plain read-check instead.
+// PB88 permits one report per user/job, including after resolution. A partial
+// unique index excludes legacy duplicate rows (retained for audit history).
 model JobReport {
   id         String          @id @default(cuid())
   jobId      String
@@ -897,6 +892,7 @@ model JobReport {
   details    String?         @db.Text
   status     JobReportStatus @default(OPEN)
   resolvedAt DateTime?
+  legacyDuplicate Boolean @default(false)
   createdAt  DateTime        @default(now())
 
   job      Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
@@ -999,6 +995,7 @@ model AdminAuditLog {
   targetLabel String
   before      Json?
   after       Json?
+  ipAddress   String?
   createdAt   DateTime             @default(now())
 
   // Backs "history for this job/employer/report" (targetType+targetId) and
@@ -1007,6 +1004,7 @@ model AdminAuditLog {
   @@index([targetType, targetId, createdAt])
   @@index([adminId, createdAt])
   @@index([createdAt])
+  @@index([action, createdAt])
   @@map("admin_audit_log")
 }
 

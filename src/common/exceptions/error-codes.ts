@@ -98,6 +98,7 @@ export const ErrorCode = {
 
   // Alerts
   ALERT_NOT_FOUND: "ALERT_NOT_FOUND",
+  ALERT_LIMIT_REACHED: "ALERT_LIMIT_REACHED",
 
   // Invitations
   INVITATION_NOT_FOUND: "INVITATION_NOT_FOUND",

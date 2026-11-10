@@ -15,11 +15,7 @@ const makeService = (repoOverrides: Partial<JobReportsRepository> = {}) => {
   };
   const auditLogService = { record: jest.fn().mockResolvedValue(undefined) };
   return {
-    service: new JobReportsService(
-      repo,
-      notificationsService as never,
-      auditLogService as never,
-    ),
+    service: new JobReportsService(repo, notificationsService as never),
     repo,
     notificationsService,
     auditLogService,
@@ -92,18 +88,20 @@ describe("JobReportsService.create", () => {
     expect(result).toEqual({ id: "rep-1", status: "OPEN" });
   });
 
-  it("allows reporting again once the caller's prior report on the job is no longer OPEN", async () => {
+  it("rejects reporting again after the prior report has been resolved (PB88)", async () => {
     const create = jest.fn().mockResolvedValue({ id: "rep-2", status: "OPEN" });
     const { service } = makeService({
       findJobForReport: jest.fn().mockResolvedValue({ id: "job-1" }),
       // findOpenByJobAndReporter only ever returns OPEN reports — a prior
       // RESOLVED/DISMISSED one is invisible to this check by construction.
-      findOpenByJobAndReporter: jest.fn().mockResolvedValue(null),
+      findOpenByJobAndReporter: jest.fn().mockResolvedValue({ id: "rep-1" }),
       create,
     });
 
-    await service.create(talentUser, "job-1", { reason: "SCAM" });
-    expect(create).toHaveBeenCalled();
+    await expect(
+      service.create(talentUser, "job-1", { reason: "SCAM" }),
+    ).rejects.toBeInstanceOf(ConflictApiException);
+    expect(create).not.toHaveBeenCalled();
   });
 });
 
@@ -147,7 +145,11 @@ describe("JobReportsService.resolve", () => {
     const { service } = makeService({
       findByIdForAdmin: jest
         .fn()
-        .mockResolvedValue({ id: "rep-1", status: "OPEN" }),
+        .mockResolvedValue({
+          id: "rep-1",
+          status: "OPEN",
+          job: { title: "Engineer" },
+        }),
       updateStatus: jest.fn().mockResolvedValue(null),
     });
 
@@ -167,7 +169,7 @@ describe("JobReportsService.resolve", () => {
       status: "RESOLVED",
       resolvedAt: new Date(),
     });
-    const { service, notificationsService, auditLogService } = makeService({
+    const { service, notificationsService } = makeService({
       findByIdForAdmin: jest.fn().mockResolvedValue({
         id: "rep-1",
         status: "OPEN",
@@ -179,7 +181,11 @@ describe("JobReportsService.resolve", () => {
 
     const result = await service.resolve("rep-1", { action: "resolve" }, admin);
 
-    expect(updateStatus).toHaveBeenCalledWith("rep-1", "RESOLVED");
+    expect(updateStatus).toHaveBeenCalledWith(
+      "rep-1",
+      "RESOLVED",
+      expect.objectContaining({ action: "JOB_REPORT_RESOLVED" }),
+    );
     expect(result.status).toBe("RESOLVED");
     expect(notificationsService.create).toHaveBeenCalledWith({
       userId: "reporter-1",
@@ -188,7 +194,7 @@ describe("JobReportsService.resolve", () => {
       body: 'Your report on "Backend Engineer" has been resolved.',
       link: "/jobs/backend-engineer-a1b2c3",
     });
-    expect(auditLogService.record).toHaveBeenCalledWith({
+    expect(updateStatus).toHaveBeenCalledWith("rep-1", result.status, {
       adminId: "admin-1",
       adminEmail: "admin@remotesea.io",
       action: "JOB_REPORT_RESOLVED",
@@ -206,7 +212,7 @@ describe("JobReportsService.resolve", () => {
       status: "DISMISSED",
       resolvedAt: new Date(),
     });
-    const { service, notificationsService, auditLogService } = makeService({
+    const { service, notificationsService } = makeService({
       findByIdForAdmin: jest.fn().mockResolvedValue({
         id: "rep-1",
         status: "OPEN",
@@ -218,7 +224,11 @@ describe("JobReportsService.resolve", () => {
 
     const result = await service.resolve("rep-1", { action: "dismiss" }, admin);
 
-    expect(updateStatus).toHaveBeenCalledWith("rep-1", "DISMISSED");
+    expect(updateStatus).toHaveBeenCalledWith(
+      "rep-1",
+      "DISMISSED",
+      expect.objectContaining({ action: "JOB_REPORT_DISMISSED" }),
+    );
     expect(result.status).toBe("DISMISSED");
     expect(notificationsService.create).toHaveBeenCalledWith({
       userId: "reporter-1",
@@ -227,7 +237,7 @@ describe("JobReportsService.resolve", () => {
       body: 'Your report on "Backend Engineer" has been dismissed.',
       link: "/jobs/backend-engineer-a1b2c3",
     });
-    expect(auditLogService.record).toHaveBeenCalledWith({
+    expect(updateStatus).toHaveBeenCalledWith("rep-1", result.status, {
       adminId: "admin-1",
       adminEmail: "admin@remotesea.io",
       action: "JOB_REPORT_DISMISSED",

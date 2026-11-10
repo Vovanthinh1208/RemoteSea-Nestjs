@@ -304,15 +304,18 @@ export class AuthRepository {
 
   // Read by JwtStrategy.validate on every authenticated request — narrow
   // select since that's a hot path.
-  findSessionState(
-    id: string,
-  ): Promise<Pick<
-    Session,
-    "id" | "userId" | "revokedAt" | "lastSeenAt"
-  > | null> {
+  findSessionState(id: string) {
     return this.prisma.session.findUnique({
       where: { id },
-      select: { id: true, userId: true, revokedAt: true, lastSeenAt: true },
+      select: {
+        id: true,
+        userId: true,
+        revokedAt: true,
+        lastSeenAt: true,
+        user: {
+          select: { bannedAt: true, role: true, email: true, name: true },
+        },
+      },
     });
   }
 

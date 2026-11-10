@@ -1,4 +1,7 @@
-import { Controller, Get, Header } from "@nestjs/common";
+import { Controller, Get, Header, Query } from "@nestjs/common";
+import { z } from "zod";
+import { experienceLevelSchema } from "@/common/dto/enums.schema";
+import { ZodValidationPipe } from "@/core/pipes/zod-validation.pipe";
 import { SalaryService } from "./salary.service";
 import {
   ApiListBenchmarks,
@@ -19,6 +22,24 @@ const CACHE_CONTROL_HEADER =
 @Controller("salary")
 export class SalaryController {
   constructor(private readonly salaryService: SalaryService) {}
+
+  @Get("jobs")
+  listMatchingJobs(
+    @Query(
+      new ZodValidationPipe(
+        z.object({
+          role: z.string().trim().min(1).max(100),
+          level: experienceLevelSchema.optional(),
+        }),
+      ),
+    )
+    query: {
+      role: string;
+      level?: import("@prisma/client").ExperienceLevel;
+    },
+  ) {
+    return this.salaryService.listMatchingJobs(query.role, query.level);
+  }
 
   // Global aggregate with a 5-min server cache — same TTL for CDN edges.
   @ApiListBenchmarks()

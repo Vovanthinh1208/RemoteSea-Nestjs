@@ -1,3 +1,4 @@
+import type { RecordAuditLogInput } from "@/common/services/audit-log.service";
 import { Injectable } from "@nestjs/common";
 import type { Job, JobReport, JobReportStatus } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
@@ -26,7 +27,7 @@ export class JobReportsRepository {
     reporterId: string,
   ): Promise<Pick<JobReport, "id"> | null> {
     return this.prisma.jobReport.findFirst({
-      where: { jobId, reporterId, status: "OPEN" },
+      where: { jobId, reporterId },
       select: { id: true },
     });
   }
@@ -52,7 +53,14 @@ export class JobReportsRepository {
         id: true,
         status: true,
         reporterId: true,
-        job: { select: { title: true, slug: true } },
+        jobId: true,
+        job: {
+          select: {
+            title: true,
+            slug: true,
+            employer: { select: { userId: true } },
+          },
+        },
       },
     });
   }
@@ -68,7 +76,7 @@ export class JobReportsRepository {
         where,
         skip,
         take,
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: adminJobReportSelect,
       }),
       this.prisma.jobReport.count({ where }),
@@ -82,16 +90,27 @@ export class JobReportsRepository {
   async updateStatus(
     id: string,
     status: Extract<JobReportStatus, "RESOLVED" | "DISMISSED">,
+    audit?: RecordAuditLogInput,
   ): Promise<Pick<JobReport, "id" | "status" | "resolvedAt"> | null> {
-    const { count } = await this.prisma.jobReport.updateMany({
-      where: { id, status: "OPEN" },
-      data: { status, resolvedAt: new Date() },
-    });
-    if (count === 0) return null;
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.jobReport.updateMany({
+        where: { id, status: "OPEN" },
+        data: { status, resolvedAt: new Date() },
+      });
+      if (count === 0) return null;
 
-    return this.prisma.jobReport.findUnique({
-      where: { id },
-      select: { id: true, status: true, resolvedAt: true },
+      const report = await tx.jobReport.findUniqueOrThrow({ where: { id } });
+      if (status === "RESOLVED") {
+        await tx.job.update({
+          where: { id: report.jobId },
+          data: { status: "CLOSED" },
+        });
+      }
+      if (audit) await tx.adminAuditLog.create({ data: audit });
+      return tx.jobReport.findUnique({
+        where: { id },
+        select: { id: true, status: true, resolvedAt: true },
+      });
     });
   }
 }

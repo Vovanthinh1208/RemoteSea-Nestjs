@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { JobReportsRepository } from "./job-reports.repository";
 import type { CreateJobReportDto } from "./dto/create-job-report.dto";
 import type { ListJobReportsDto } from "./dto/list-job-reports.dto";
@@ -12,7 +13,6 @@ import { assertFound } from "@/common/utils/assert-found";
 import { buildPagination, paginationSkip } from "@/common/utils/paginate";
 import { runInBackground } from "@/common/utils/background-task.util";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
-import { AuditLogService } from "@/common/services/audit-log.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 
 @Injectable()
@@ -22,7 +22,6 @@ export class JobReportsService {
   constructor(
     private readonly jobReportsRepository: JobReportsRepository,
     private readonly notificationsService: NotificationsService,
-    private readonly auditLogService: AuditLogService,
   ) {}
 
   async create(
@@ -44,12 +43,25 @@ export class JobReportsService {
       );
     }
 
-    return this.jobReportsRepository.create({
-      jobId,
-      reporterId: user.id,
-      reason: dto.reason,
-      details: dto.details ?? null,
-    });
+    try {
+      return await this.jobReportsRepository.create({
+        jobId,
+        reporterId: user.id,
+        reason: dto.reason,
+        details: dto.details ?? null,
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        throw new ConflictApiException(
+          "You've already reported this job",
+          ErrorCode.JOB_ALREADY_REPORTED,
+        );
+      }
+      throw error;
+    }
   }
 
   async listForAdmin(query: ListJobReportsDto) {
@@ -79,7 +91,24 @@ export class JobReportsService {
     }
 
     const newStatus = dto.action === "resolve" ? "RESOLVED" : "DISMISSED";
-    const updated = await this.jobReportsRepository.updateStatus(id, newStatus);
+    const updated = await this.jobReportsRepository.updateStatus(
+      id,
+      newStatus,
+      {
+        adminId: admin.id,
+        adminEmail: admin.email,
+        action:
+          dto.action === "resolve"
+            ? "JOB_REPORT_RESOLVED"
+            : "JOB_REPORT_DISMISSED",
+        targetType: "JOB_REPORT",
+        targetId: id,
+        targetLabel: report.job.title,
+        before: { status: "OPEN" },
+        after: { status: newStatus, ...(dto.reason && { reason: dto.reason }) },
+        ipAddress: admin.ipAddress,
+      },
+    );
     if (!updated) {
       throw new BadRequestApiException(
         "Report is no longer open",
@@ -88,19 +117,6 @@ export class JobReportsService {
     }
 
     const verb = dto.action === "resolve" ? "resolved" : "dismissed";
-    await this.auditLogService.record({
-      adminId: admin.id,
-      adminEmail: admin.email,
-      action:
-        dto.action === "resolve"
-          ? "JOB_REPORT_RESOLVED"
-          : "JOB_REPORT_DISMISSED",
-      targetType: "JOB_REPORT",
-      targetId: id,
-      targetLabel: report.job.title,
-      before: { status: "OPEN" },
-      after: { status: newStatus },
-    });
 
     runInBackground(
       this.notificationsService.create({
@@ -116,6 +132,16 @@ export class JobReportsService {
       this.logger,
       `Failed to create job-report notification for report ${id}`,
     );
+
+    if (dto.action === "resolve" && report.job.employer) {
+      await this.notificationsService.create({
+        userId: report.job.employer.userId,
+        type: "JOB_REPORT_RESOLVED",
+        title: "Job removed following a violation report",
+        body: `Your listing "${report.job.title}" was closed. ${dto.reason ?? ""}`.trim(),
+        link: "/employer-dashboard",
+      });
+    }
 
     return updated;
   }

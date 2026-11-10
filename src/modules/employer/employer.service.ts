@@ -1,3 +1,5 @@
+import type { RecordAuditLogInput } from "@/common/services/audit-log.service";
+import { auditedMutation } from "@/common/utils/audited-mutation";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CACHE_MANAGER, type Cache } from "@nestjs/cache-manager";
@@ -297,12 +299,12 @@ export class EmployerService {
   // Admin-triggered (AdminService.verifyEmployer/suspendEmployer), not
   // self-service — but the write itself belongs here, not reimplemented in
   // AdminRepository, since this module owns the EmployerProfile domain.
-  setVerified(id: string, isVerified: boolean) {
-    return this.employerRepository.setVerified(id, isVerified);
+  setVerified(id: string, isVerified: boolean, audit?: RecordAuditLogInput) {
+    return this.employerRepository.setVerified(id, isVerified, audit);
   }
 
-  suspend(id: string): Promise<void> {
-    return this.employerRepository.suspend(id);
+  suspend(id: string, audit?: RecordAuditLogInput): Promise<void> {
+    return this.employerRepository.suspend(id, audit);
   }
 
   // Called by JobsService when rendering a public job detail page (see

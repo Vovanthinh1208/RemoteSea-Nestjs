@@ -6,6 +6,9 @@ import type { UpdateAlertDto } from "./dto/update-alert.dto";
 import { FREQUENCY_GAP_MS, SEND_CONCURRENCY } from "./constants";
 import type { CronDispatchResult } from "./interfaces";
 import { EmailService } from "@/common/services/email.service";
+import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
+import { activeJobBaseWhere } from "@/modules/jobs/job-search.util";
 
 @Injectable()
 export class AlertsService {
@@ -29,14 +32,28 @@ export class AlertsService {
     return this.alertsRepository.findByUser(userId);
   }
 
-  create(userId: string, dto: CreateAlertDto) {
+  async create(userId: string, dto: CreateAlertDto) {
+    const count = await this.alertsRepository.countByUser(userId);
+    if (count >= 5) {
+      throw new BadRequestApiException(
+        "Maximum 5 job alerts allowed per user",
+        ErrorCode.ALERT_LIMIT_REACHED,
+      );
+    }
     const { categoryIds, ...alertData } = dto;
     return this.alertsRepository.create(userId, alertData, categoryIds);
   }
 
   // Ownership is already enforced by AlertOwnershipGuard before these run.
   async update(id: string, dto: UpdateAlertDto) {
-    return this.alertsRepository.updateActive(id, dto.isActive);
+    const { categoryIds, ...fields } = dto;
+    if (
+      categoryIds !== undefined ||
+      Object.keys(fields).some((k) => k !== "isActive")
+    ) {
+      return this.alertsRepository.updateAlert(id, fields, categoryIds);
+    }
+    return this.alertsRepository.updateActive(id, dto.isActive ?? true);
   }
 
   async remove(id: string): Promise<{ success: true }> {
@@ -107,8 +124,9 @@ export class AlertsService {
       alert.lastSentAt ?? new Date(now - gap || now - FREQUENCY_GAP_MS.DAILY);
 
     const where: Prisma.JobWhereInput = {
+      AND: [activeJobBaseWhere()],
       status: "ACTIVE",
-      publishedAt: { gt: since, lte: new Date() },
+      publishedAt: { gt: since, lte: new Date(now) },
       ...(alert.jobType && { jobType: alert.jobType }),
       ...(alert.level && { level: alert.level }),
       ...(alert.country && { country: alert.country }),
@@ -136,9 +154,11 @@ export class AlertsService {
     // read the same stale lastSentAt and double-send. A crash/failure after the
     // claim just means that alert waits for the next window instead of retrying,
     // which is the safer failure mode for a non-critical notification email.
+    const claimedAt = new Date(now);
     const claimed = await this.alertsRepository.claimForSend(
       alert.id,
       alert.lastSentAt,
+      claimedAt,
     );
     if (!claimed) return false;
 
@@ -146,6 +166,11 @@ export class AlertsService {
       await this.emailService.sendJobAlertEmail(alert.user.email, jobs);
       return true;
     } catch (error) {
+      await this.alertsRepository.releaseFailedSend(
+        alert.id,
+        claimedAt,
+        alert.lastSentAt,
+      );
       this.logger.error(
         `Failed to send alert email for alert ${alert.id}`,
         error instanceof Error ? error.stack : error,

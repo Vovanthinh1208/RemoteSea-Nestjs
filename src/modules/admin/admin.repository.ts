@@ -1,3 +1,5 @@
+import type { RecordAuditLogInput } from "@/common/services/audit-log.service";
+import { auditedMutation } from "@/common/utils/audited-mutation";
 import { Injectable } from "@nestjs/common";
 import type {
   EmployerProfile,
@@ -70,7 +72,7 @@ export class AdminRepository {
         where,
         skip,
         take,
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         // Narrow select, not include — the admin employer list only ever
         // renders id/companyName/isVerified/jobCount/totalSpend (see
         // EmployerListItemDto in docs/admin.dto.ts); include was pulling
@@ -80,6 +82,18 @@ export class AdminRepository {
           id: true,
           companyName: true,
           isVerified: true,
+          slug: true,
+          logoUrl: true,
+          websiteUrl: true,
+          description: true,
+          industry: true,
+          size: true,
+          founded: true,
+          hqCountry: true,
+          hqCity: true,
+          createdAt: true,
+          updatedAt: true,
+          suspendedAt: true,
           user: { select: { email: true } },
           _count: { select: { jobs: true } },
           jobs: { where: { planPaid: true }, select: { planType: true } },
@@ -91,13 +105,20 @@ export class AdminRepository {
 
   findEmployerById(
     id: string,
-  ): Promise<Pick<
-    EmployerProfile,
-    "id" | "companyName" | "isVerified"
-  > | null> {
+  ): Promise<
+    | (Pick<EmployerProfile, "id" | "companyName" | "isVerified"> & {
+        user: { email: string };
+      })
+    | null
+  > {
     return this.prisma.employerProfile.findUnique({
       where: { id },
-      select: { id: true, companyName: true, isVerified: true },
+      select: {
+        id: true,
+        companyName: true,
+        isVerified: true,
+        user: { select: { email: true } },
+      },
     });
   }
 
@@ -120,10 +141,10 @@ export class AdminRepository {
     // queue, while one paid weeks ago would sort as if brand new. Every
     // other status view keeps createdAt, where paidAt may be null (DRAFT)
     // or just isn't the meaningful ordering (ACTIVE/REJECTED/EXPIRED).
-    const orderBy: Prisma.JobOrderByWithRelationInput =
+    const orderBy: Prisma.JobOrderByWithRelationInput[] =
       where.status === "PENDING_REVIEW"
-        ? { paidAt: "asc" }
-        : { createdAt: "asc" };
+        ? [{ paidAt: "asc" }, { id: "asc" }]
+        : [{ createdAt: "asc" }, { id: "asc" }];
 
     const [jobs, total] = await Promise.all([
       this.prisma.job.findMany({
@@ -253,7 +274,7 @@ export class AdminRepository {
         where,
         skip,
         take,
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: {
           id: true,
           email: true,
@@ -279,7 +300,17 @@ export class AdminRepository {
   updateUserRoleOrBan(
     id: string,
     data: { role?: UserRole; bannedAt?: Date | null },
+    audit?: RecordAuditLogInput,
   ): Promise<User> {
-    return this.prisma.user.update({ where: { id }, data });
+    return auditedMutation(this.prisma, audit, async (tx) => {
+      const updated = await tx.user.update({ where: { id }, data });
+      if (data.role !== undefined || data.bannedAt) {
+        await tx.session.updateMany({
+          where: { userId: id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
+      return updated;
+    });
   }
 }
