@@ -9,6 +9,8 @@ import type { UploadsService } from "@/modules/uploads/uploads.service";
 import type { MetricsService } from "@/modules/metrics/metrics.service";
 import type { ConfigService } from "@nestjs/config";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
+import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { Response } from "express";
 
 describe("PB17 controller/service/collector fixture integration (not browser E2E)", () => {
@@ -292,7 +294,7 @@ describe("PB17 controller/service/collector fixture integration (not browser E2E
   it("TC03: Strict user isolation — User A only queries User A's ID", async () => {
     await controller.exportData(
       userA,
-      "json",
+      "pdf",
       mockResponse as unknown as Response,
     );
 
@@ -307,18 +309,15 @@ describe("PB17 controller/service/collector fixture integration (not browser E2E
   });
 
   it("TC04, TC05, TC06 & TC19: Absolute elimination of passwordHash, 2FA secrets, and recovery codes", async () => {
-    const result = (await controller.exportData(
-      userA,
-      "json",
-      mockResponse as unknown as Response,
-    )) as any;
+    const result = await service.exportData(userA.id);
+    const rawAccount = result.account as any;
 
-    expect(result.account).toBeDefined();
-    expect(result.account.id).toBe("usr_alex_001");
-    expect(result.account.passwordHash).toBeUndefined();
-    expect(result.account.twoFactorSecret).toBeUndefined();
-    expect(result.account.twoFactorBackupCodes).toBeUndefined();
-    expect(result.account.accessToken).toBeUndefined();
+    expect(rawAccount).toBeDefined();
+    expect(rawAccount.id).toBe("usr_alex_001");
+    expect(rawAccount.passwordHash).toBeUndefined();
+    expect(rawAccount.twoFactorSecret).toBeUndefined();
+    expect(rawAccount.twoFactorBackupCodes).toBeUndefined();
+    expect(rawAccount.accessToken).toBeUndefined();
   });
 
   it("TC07 & TC08: Accounts without applications or messages export cleanly", async () => {
@@ -336,30 +335,67 @@ describe("PB17 controller/service/collector fixture integration (not browser E2E
   });
 
   it("TC16: Employer role correctly exports employer profile & jobs list", async () => {
-    const result = (await controller.exportData(
-      userB,
-      "json",
-      mockResponse as unknown as Response,
-    )) as any;
+    const result = await service.exportData(userB.id);
 
     expect(result.account.role).toBe("EMPLOYER");
     expect(result.account.employer).toBeDefined();
-    expect(result.account.employer.companyName).toBe("Acme SEA Labs");
+    expect(result.account.employer?.companyName).toBe("Acme SEA Labs");
+
+    const streamable = (await controller.exportData(
+      userB,
+      "pdf",
+      mockResponse as unknown as Response,
+    )) as StreamableFile;
+    expect(streamable).toBeInstanceOf(StreamableFile);
   });
 
-  it("TC17: Backward-compatible JSON format support", async () => {
-    const result = (await controller.exportData(
-      userA,
-      "json",
-      mockResponse as unknown as Response,
-    )) as any;
+  it("TC17: JSON format export is rejected with HTTP 400 Bad Request", async () => {
+    await expect(
+      controller.exportData(userA, "json", mockResponse as unknown as Response),
+    ).rejects.toThrow(BadRequestApiException);
 
-    expect(result).toHaveProperty("exportedAt");
-    expect(result).toHaveProperty("account");
-    expect(result.account.name).toBe("Nguyễn Văn Alex");
+    try {
+      await controller.exportData(
+        userA,
+        "json",
+        mockResponse as unknown as Response,
+      );
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(BadRequestApiException);
+      expect(err.getStatus()).toBe(400);
+      expect(err.getResponse()).toMatchObject({
+        error:
+          "JSON export is no longer supported. Please export your personal data as PDF.",
+        code: ErrorCode.VALIDATION_ERROR,
+      });
+    }
+  });
+
+  it("TC18: Default export without format parameter produces PDF", async () => {
+    const streamable = (await controller.exportData(
+      userA,
+      undefined as any,
+      mockResponse as unknown as Response,
+    )) as StreamableFile;
+
+    expect(streamable).toBeInstanceOf(StreamableFile);
     expect(mockResponse.setHeader).toHaveBeenCalledWith(
       "Content-Type",
-      "application/json; charset=utf-8",
+      "application/pdf",
+    );
+  });
+
+  it("TC20: downloadData route alias defaults to PDF", async () => {
+    const streamable = (await controller.downloadData(
+      userA,
+      { format: "pdf", locale: "vi" },
+      mockResponse as unknown as Response,
+    )) as StreamableFile;
+
+    expect(streamable).toBeInstanceOf(StreamableFile);
+    expect(mockResponse.setHeader).toHaveBeenCalledWith(
+      "Content-Type",
+      "application/pdf",
     );
   });
 });

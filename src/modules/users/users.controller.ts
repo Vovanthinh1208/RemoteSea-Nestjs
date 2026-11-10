@@ -40,6 +40,8 @@ import { CurrentSessionId } from "@/core/decorators/current-session-id.decorator
 import { Roles } from "@/core/decorators/roles.decorator";
 import { RolesGuard } from "@/core/guards/roles.guard";
 import { RateLimitService } from "@/common/services/rate-limit.service";
+import { BadRequestApiException } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import { AuthService } from "@/modules/auth/auth.service";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import {
@@ -166,18 +168,18 @@ export class UsersController {
     return this.usersService.reactivateAccount(user.id);
   }
 
-  // Settings > Privacy & data "Download your data" (PB17 - JSON & PDF).
+  // Settings > Privacy & data "Download your data" (PB17 - PDF Only).
   @ApiExportData()
   @Get("export")
   async exportData(
     @CurrentUser() user: AuthenticatedUser,
-    @Query(
-      "format",
-      new ZodValidationPipe(z.enum(["pdf", "json"]).default("json")),
-    )
-    format: "pdf" | "json" = "json",
+    @Query("format")
+    format: string = "pdf",
     @Res({ passthrough: true }) res: Response,
-    @Query("locale", new ZodValidationPipe(z.enum(["en", "vi"]).default("vi")))
+    @Query(
+      "locale",
+      new ZodValidationPipe(z.enum(["en", "vi"]).optional().default("vi")),
+    )
     locale: ExportLocale = "vi",
   ) {
     this.rateLimitService.enforce(
@@ -185,29 +187,33 @@ export class UsersController {
       RATE_LIMITS.EXPORT.limit,
       RATE_LIMITS.EXPORT.windowMs,
     );
-    const isPdf = format?.toLowerCase() === "pdf";
+
+    const fmt = (format || "pdf").toLowerCase();
+    if (fmt === "json") {
+      throw new BadRequestApiException(
+        "JSON export is no longer supported. Please export your personal data as PDF.",
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+    if (fmt !== "pdf") {
+      throw new BadRequestApiException(
+        "Invalid export format. Only PDF is supported.",
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
     const dateStr = new Date().toISOString().split("T")[0];
 
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
-
-    if (isPdf) {
-      const buffer = await this.usersService.exportDataAsPdf(user.id, locale);
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="remotesea-personal-data-${dateStr}.pdf"`,
-      );
-      return new StreamableFile(buffer);
-    }
-
-    const data = await this.usersService.exportData(user.id);
-    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="remotesea-personal-data-${dateStr}.json"`,
+      `attachment; filename="remotesea-personal-data-${dateStr}.pdf"`,
     );
-    return data;
+
+    const buffer = await this.usersService.exportDataAsPdf(user.id, locale);
+    return new StreamableFile(buffer);
   }
 
   @ApiExportData()
@@ -218,16 +224,21 @@ export class UsersController {
       new ZodValidationPipe(
         z
           .object({
-            format: z.enum(["pdf", "json"]).default("pdf"),
-            locale: z.enum(["en", "vi"]).default("vi"),
+            format: z.string().optional().default("pdf"),
+            locale: z.enum(["en", "vi"]).optional().default("vi"),
           })
           .strict(),
       ),
     )
-    query: { format: "pdf" | "json"; locale: ExportLocale },
+    query: { format?: string; locale?: ExportLocale },
     @Res({ passthrough: true }) res: Response,
   ) {
-    return this.exportData(user, query.format, res, query.locale);
+    return this.exportData(
+      user,
+      query?.format ?? "pdf",
+      res,
+      query?.locale ?? "vi",
+    );
   }
 
   // Settings > Connected accounts.
