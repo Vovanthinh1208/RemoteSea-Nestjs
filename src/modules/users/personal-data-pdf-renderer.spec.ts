@@ -2,6 +2,52 @@ import {
   PersonalDataPdfRenderer,
   type PersonalDataExportPayload,
 } from "./personal-data-pdf-renderer";
+import { spawnSync } from "node:child_process";
+
+it("round-trips Vietnamese glyphs and literal HTML through an independent PDF parser", async () => {
+  const name = "Nguyễn Thị Minh Anh — tiếng Việt đầy đủ dấu";
+  const body =
+    'Dữ liệu <script>alert("literal")</script> & accessToken là tên biến.';
+  const buffer = await PersonalDataPdfRenderer.render({
+    exportedAt: "2026-11-10T10:00:00.000Z",
+    account: {
+      id: "unicode-test",
+      email: "unicode@example.test",
+      name,
+      messages: [
+        {
+          applicationId: "conversation-test",
+          body,
+          createdAt: "2026-11-10T10:00:00.000Z",
+        },
+      ],
+    },
+  });
+  // pdfjs uses dynamic ESM imports; run its real reader outside Jest's VM.
+  const parsed = spawnSync(
+    process.execPath,
+    [
+      "-e",
+      `
+    const {PDFParse}=require(${JSON.stringify(require.resolve("pdf-parse"))});
+    (async()=>{const p=new PDFParse({data:require('node:fs').readFileSync(0)});
+      try{process.stdout.write(JSON.stringify(await p.getText()));}finally{await p.destroy();}
+    })().catch(()=>process.exit(1));
+  `,
+    ],
+    { input: buffer, timeout: 20_000, maxBuffer: 1024 * 1024 },
+  );
+  expect(parsed.status).toBe(0);
+  const result = JSON.parse(parsed.stdout.toString()) as {
+    text: string;
+    pages: { text: string }[];
+  };
+  expect(result.text).toContain(name);
+  expect(result.text).toContain("BÁO CÁO DỮ LIỆU");
+  expect(result.text).toContain(body);
+  expect(result.text).not.toContain("\u0000");
+  expect(result.pages.every((page) => page.text.trim().length > 30)).toBe(true);
+});
 
 describe("PersonalDataPdfRenderer (PB17 - PDF Rendering & Security)", () => {
   const basePayload: PersonalDataExportPayload = {
@@ -44,9 +90,9 @@ describe("PersonalDataPdfRenderer (PB17 - PDF Rendering & Security)", () => {
         workExperiences: [
           {
             company: "Tech Corp",
-            position: "Senior Lead",
+            title: "Senior Lead",
             startDate: "2022-01-01T00:00:00.000Z",
-            isCurrent: true,
+            endDate: null,
             description: "Chịu trách nhiệm kiến trúc hệ thống.",
           },
         ],
@@ -60,7 +106,6 @@ describe("PersonalDataPdfRenderer (PB17 - PDF Rendering & Security)", () => {
       ],
       jobAlerts: [
         {
-          id: "alert_tc_1",
           keywords: "React Lead",
           frequency: "DAILY",
           isActive: true,
@@ -130,8 +175,9 @@ describe("PersonalDataPdfRenderer (PB17 - PDF Rendering & Security)", () => {
     const rawString = buffer.toString("binary");
     expect(rawString).toContain("/Title");
     expect(rawString).toContain("/Author");
-    expect(rawString).toContain("(RemoteSEA Platform)");
-    expect(rawString).toContain("(GDPR/PDPA Personal Data Export Dossier)");
+    expect(rawString).toContain("(RemoteSEA)");
+    expect(rawString).toContain("(Personal account archive)");
+    expect(rawString).not.toContain("GDPR/PDPA Personal Data Export Dossier");
   });
 
   it("TC16: renders employer profile and jobs when user is an EMPLOYER", async () => {

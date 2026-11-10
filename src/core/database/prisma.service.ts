@@ -70,8 +70,11 @@ export class PrismaService
         this.logger.debug(`${event.query} (${event.duration}ms)`);
       }
     });
-    this.$on("error", (event) => this.logger.error(event.message));
-    this.$on("warn", (event) => this.logger.warn(event.message));
+    // Prisma error messages may embed invocation arguments, connection URLs
+    // or returned values. Export failures must not leak that data through
+    // the client's event logger before the service returns its safe error.
+    this.$on("error", () => this.logger.error("Database operation failed"));
+    this.$on("warn", () => this.logger.warn("Database client warning"));
 
     const maxAttempts = 5;
     const delayMs = 2_000;

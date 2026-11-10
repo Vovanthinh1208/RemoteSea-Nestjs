@@ -5,6 +5,9 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiQuery,
+  ApiProduces,
+  ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
 import {
@@ -17,7 +20,6 @@ import {
   ChangePasswordRequestDto,
   ConnectionResponseDto,
   DeleteAccountResponseDto,
-  ExportDataResponseDto,
   MessageResponseDto,
   NotificationPreferencesResponseDto,
   PauseStateResponseDto,
@@ -35,7 +37,6 @@ import {
   ChangePasswordResponseExample,
   ConnectionsListExample,
   DeleteAccountResponseExample,
-  ExportDataExample,
   NotificationPreferencesExample,
   PauseStateExample,
   PausedStateExample,
@@ -250,14 +251,51 @@ export const ApiReactivateAccount = () =>
 
 export const ApiExportData = () =>
   applyDecorators(
+    ApiBearerAuth(),
+    ApiProduces("application/pdf", "application/json"),
+    ApiQuery({ name: "format", required: false, enum: ["pdf", "json"] }),
+    ApiQuery({ name: "locale", required: false, enum: ["vi", "en"] }),
     ApiOperation({
-      summary: "Export account data",
+      summary: "Download a private personal-data PDF or JSON archive",
       description:
-        'Settings > Privacy & data "Download your data". Assembles the account\'s own profile, applications/jobs, and job alerts as a single JSON payload. Excludes internal-only fields (passwordHash, stripeSessionId, reviewNote, etc.).',
+        "Authenticated principal only. GET /users/me/data-export defaults to PDF; format=json retains JSON. The legacy /users/me/export defaults to JSON. locale=en|vi controls PDF labels; all timestamps use UTC. Read-only REPEATABLE READ snapshot with paginated allowlisted fields: own profiles, applications, authored messages in authorized conversations, stored notification settings, alerts and own company's public jobs. Excludes credentials, employer-private evaluations, incoming messages and external attachment bytes. Three requests/minute/user; duplicate or saturated exports return 429; limits return 413; collection/render failures return 503. PDF is rendered in a bounded worker with a 20-second deadline. Success responses include attachment disposition, no-store and nosniff headers. This feature is not a certification of GDPR/PDPA or PDF/A compliance.",
     }),
-    ApiOkResponse({
-      type: ExportDataResponseDto,
-      schema: { example: ExportDataExample },
+    ApiResponse({
+      status: 200,
+      description:
+        "Private attachment. PDF is the default on data-export; JSON on the legacy export route.",
+      content: {
+        "application/pdf": { schema: { type: "string", format: "binary" } },
+        "application/json": {
+          schema: {
+            type: "object",
+            required: ["exportedAt", "account", "metadata"],
+            properties: {
+              exportedAt: { type: "string", format: "date-time" },
+              account: { type: "object" },
+              metadata: { type: "object" },
+            },
+          },
+        },
+      },
+    }),
+    ApiResponse({
+      status: 400,
+      description: "Invalid format, locale or unsupported query parameter",
+    }),
+    ApiResponse({
+      status: 413,
+      description:
+        "Archive exceeds synchronous size or page limit; no partial file is returned",
+    }),
+    ApiResponse({
+      status: 429,
+      description: "Rate limit, duplicate request or export capacity reached",
+    }),
+    ApiResponse({
+      status: 503,
+      description:
+        "Collection or PDF rendering unavailable; safe error, no attachment",
     }),
     UnauthorizedApiResponse,
     InternalServerErrorApiResponse,

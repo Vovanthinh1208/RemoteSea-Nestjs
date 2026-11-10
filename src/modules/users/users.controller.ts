@@ -12,6 +12,8 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import type { Response } from "express";
+import { z } from "zod";
+import type { ExportLocale } from "./personal-data-contract";
 import { UsersService } from "./users.service";
 import { updateUserSchema, type UpdateUserDto } from "./dto/update-user.dto";
 import {
@@ -166,12 +168,23 @@ export class UsersController {
 
   // Settings > Privacy & data "Download your data" (PB17 - JSON & PDF).
   @ApiExportData()
-  @Get(["export", "data-export"])
+  @Get("export")
   async exportData(
     @CurrentUser() user: AuthenticatedUser,
-    @Query("format") format: string = "json",
+    @Query(
+      "format",
+      new ZodValidationPipe(z.enum(["pdf", "json"]).default("json")),
+    )
+    format: "pdf" | "json" = "json",
     @Res({ passthrough: true }) res: Response,
+    @Query("locale", new ZodValidationPipe(z.enum(["en", "vi"]).default("vi")))
+    locale: ExportLocale = "vi",
   ) {
+    this.rateLimitService.enforce(
+      `personal-export:${user.id}`,
+      RATE_LIMITS.EXPORT.limit,
+      RATE_LIMITS.EXPORT.windowMs,
+    );
     const isPdf = format?.toLowerCase() === "pdf";
     const dateStr = new Date().toISOString().split("T")[0];
 
@@ -179,7 +192,7 @@ export class UsersController {
     res.setHeader("X-Content-Type-Options", "nosniff");
 
     if (isPdf) {
-      const buffer = await this.usersService.exportDataAsPdf(user.id);
+      const buffer = await this.usersService.exportDataAsPdf(user.id, locale);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
@@ -188,8 +201,33 @@ export class UsersController {
       return new StreamableFile(buffer);
     }
 
+    const data = await this.usersService.exportData(user.id);
     res.setHeader("Content-Type", "application/json; charset=utf-8");
-    return this.usersService.exportData(user.id);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="remotesea-personal-data-${dateStr}.json"`,
+    );
+    return data;
+  }
+
+  @ApiExportData()
+  @Get("data-export")
+  downloadData(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query(
+      new ZodValidationPipe(
+        z
+          .object({
+            format: z.enum(["pdf", "json"]).default("pdf"),
+            locale: z.enum(["en", "vi"]).default("vi"),
+          })
+          .strict(),
+      ),
+    )
+    query: { format: "pdf" | "json"; locale: ExportLocale },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.exportData(user, query.format, res, query.locale);
   }
 
   // Settings > Connected accounts.

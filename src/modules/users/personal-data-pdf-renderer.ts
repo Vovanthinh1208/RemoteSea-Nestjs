@@ -1,1169 +1,898 @@
-import path from "path";
-import fs from "fs";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+import { performance } from "node:perf_hooks";
 import PDFDocument from "pdfkit";
 import { sanitizePersonalData } from "./personal-data-sanitizer";
+import {
+  personalDataAccountSchema,
+  ExportRenderError,
+  ExportTooLargeError,
+  type PersonalDataExportPayload,
+  type ExportLocale,
+} from "./personal-data-contract";
+export type {
+  PersonalDataExportPayload,
+  ExportAccountData,
+} from "./personal-data-contract";
 
-export interface ExportAccountData {
-  id: string;
-  email: string;
-  name?: string | null;
-  phone?: string | null;
-  role?: string;
-  language?: string;
-  region?: string;
-  currencyDisplay?: string;
-  isPaused?: boolean;
-  pausedAt?: string | Date | null;
-  emailVerified?: boolean;
-  createdAt: string | Date;
-  updatedAt?: string | Date;
-  talent?: {
-    headline?: string | null;
-    bio?: string | null;
-    location?: string | null;
-    country?: string | null;
-    timezone?: string | null;
-    yearsExperience?: number | null;
-    level?: string | null;
-    desiredSalaryMin?: number | null;
-    desiredSalaryMax?: number | null;
-    currency?: string | null;
-    primaryRole?: string | null;
-    rightToWork?: string | null;
-    skills?: Array<{ skill?: { name?: string } }>;
-    applications?: Array<{
-      id: string;
-      status: string;
-      appliedAt: string | Date;
-      coverLetter?: string | null;
-      job?: {
-        title?: string;
-        slug?: string;
-        employer?: { companyName?: string };
-      };
-    }>;
-    workExperiences?: Array<{
-      company: string;
-      position: string;
-      startDate: string | Date;
-      endDate?: string | Date | null;
-      isCurrent?: boolean;
-      description?: string | null;
-      location?: string | null;
-    }>;
-    profileHighlights?: Array<{
-      type: string;
-      title: string;
-      description?: string | null;
-      url?: string | null;
-      issuer?: string | null;
-      issueDate?: string | Date | null;
-    }>;
-  } | null;
-  employer?: {
-    companyName?: string;
-    slug?: string;
-    industry?: string | null;
-    size?: string | null;
-    description?: string | null;
-    websiteUrl?: string | null;
-    hqCity?: string | null;
-    hqCountry?: string | null;
-    isVerified?: boolean;
-    jobs?: Array<{
-      title: string;
-      slug: string;
-      status: string;
-      createdAt: string | Date;
-      publishedAt?: string | Date | null;
-    }>;
-  } | null;
-  jobAlerts?: Array<{
-    id: string;
-    keywords?: string | null;
-    frequency?: string;
-    isActive?: boolean;
-    createdAt?: string | Date;
-  }>;
-  notificationPreference?: {
-    applicationUpdates?: boolean;
-    employerMessages?: boolean;
-    weeklyDigest?: boolean;
-    instantMatchAlerts?: boolean;
-    productNews?: boolean;
-    tipsAndResources?: boolean;
-    browserPush?: boolean;
-    updatedAt?: string | Date;
-  } | null;
-  messages?: Array<{
-    applicationId: string;
-    body: string;
-    createdAt: string | Date;
-  }>;
-}
+const C = {
+  ink: "#0F172A",
+  secondary: "#475569",
+  muted: "#64748B",
+  accent: "#2E9B52",
+  pale: "#EFF8F1",
+  line: "#E2E8F0",
+  table: "#F8FAFC",
+};
+const L = 48,
+  W = 499.28,
+  TOP = 76,
+  BOTTOM = 776;
+const COPY = {
+  en: {
+    cover: "PERSONAL DATA EXPORT REPORT",
+    overview: "Account overview",
+    account: "Account information",
+    profile: "Personal profiles",
+    applications: "Application history",
+    messages: "Message history",
+    notifications: "Notification settings",
+    about: "About this export",
+    empty: "No records were found for this section at the time of export.",
+    property: "Property",
+    value: "Value",
+    profiles: "Related profiles",
+    apps: "Applications",
+    msgs: "Messages exported",
+    prefs: "Notification options",
+    generated: "Generated",
+    timezone: "Display time zone",
+    scope: "Export scope",
+    reference: "Report reference",
+    version: "Report format",
+    missing: "Not provided",
+    yes: "Enabled",
+    no: "Disabled",
+    active: "Active",
+    paused: "Paused",
+    banned: "Restricted",
+    position: "Position / company",
+    status: "Status",
+    applied: "Applied",
+    updated: "Updated",
+    you: "You",
+    conversation: "Conversation",
+    sent: "Sent",
+    confidentiality: "Private personal data",
+    page: "Page",
+    details: "Additional application details",
+    experience: "Work experience",
+    highlights: "Education, portfolio & languages",
+    skills: "Skills",
+    company: "Company profile",
+    jobs: "Company job listings",
+    alerts: "Job alerts",
+    personal: "Personal report",
+    notice:
+      "This is a copy of personal data assembled at the time of export. It may contain private information and should be stored securely.",
+    policy:
+      "This report contains personal data supplied within the supported export scope at creation time. Store it securely and do not share it with anyone who is not authorized to access it.",
+    bounds:
+      "The PDF is a readable record of the supported fields, not a certified or legally exhaustive archive. JSON remains available for machine-readable storage. External images, CVs and attachments are not downloaded or embedded.",
+    messageScope:
+      "Only messages authored by you in currently authorized application conversations are exported. Incoming messages and other participants' contact details are excluded under the existing export policy.",
+    consistency:
+      "The data was read in a read-only, repeatable-read database snapshot. Changes made after the snapshot began are not included.",
+    exclusions:
+      "Excluded: account credentials and sessions; employer-private notes, scorecards and AI evaluations; other users' data. Saved jobs, reviews, interview files and AI conversation history are outside this export's current scope.",
+    accountStatus: "Account status",
+    noPrefs:
+      "No stored notification-preference record exists. No default preference values have been invented.",
+    noCert:
+      "There is no separate certification model in the current schema. Education, portfolio and language entries are shown exactly as recorded.",
+    scopeSummary:
+      "Account, own profiles, own applications, authored messages and stored notification settings. Available job alerts and your company's public job listings are also included.",
+  },
+  vi: {
+    cover: "BÁO CÁO DỮ LIỆU CÁ NHÂN",
+    overview: "Tổng quan tài khoản",
+    account: "Thông tin tài khoản",
+    profile: "Hồ sơ cá nhân",
+    applications: "Lịch sử ứng tuyển",
+    messages: "Lịch sử tin nhắn",
+    notifications: "Cài đặt thông báo",
+    about: "Thông tin về bản xuất",
+    empty: "Không có bản ghi cho mục này tại thời điểm xuất báo cáo.",
+    property: "Thuộc tính",
+    value: "Giá trị",
+    profiles: "Hồ sơ liên quan",
+    apps: "Đơn ứng tuyển",
+    msgs: "Tin nhắn trong bản xuất",
+    prefs: "Tùy chọn thông báo",
+    generated: "Thời điểm xuất",
+    timezone: "Múi giờ hiển thị",
+    scope: "Phạm vi dữ liệu",
+    reference: "Mã tham chiếu",
+    version: "Phiên bản báo cáo",
+    missing: "Chưa cung cấp",
+    yes: "Bật",
+    no: "Tắt",
+    active: "Đang hoạt động",
+    paused: "Tạm dừng",
+    banned: "Bị hạn chế",
+    position: "Vị trí / công ty",
+    status: "Trạng thái",
+    applied: "Ngày ứng tuyển",
+    updated: "Ngày cập nhật",
+    you: "Bạn",
+    conversation: "Hội thoại",
+    sent: "Thời điểm gửi",
+    confidentiality: "Dữ liệu cá nhân riêng tư",
+    page: "Trang",
+    details: "Chi tiết bổ sung của đơn ứng tuyển",
+    experience: "Kinh nghiệm làm việc",
+    highlights: "Học vấn, portfolio và ngôn ngữ",
+    skills: "Kỹ năng",
+    company: "Hồ sơ công ty",
+    jobs: "Tin tuyển dụng của công ty",
+    alerts: "Cảnh báo việc làm",
+    personal: "Bản lưu cá nhân",
+    notice:
+      "Đây là bản sao dữ liệu cá nhân được hệ thống tổng hợp tại thời điểm xuất báo cáo. Nội dung có thể chứa thông tin riêng tư và cần được lưu trữ an toàn.",
+    policy:
+      "Báo cáo này chứa dữ liệu cá nhân được hệ thống cung cấp theo phạm vi xuất tại thời điểm tạo. Vui lòng lưu trữ an toàn và không chia sẻ với người không có quyền truy cập.",
+    bounds:
+      "PDF trình bày các trường dữ liệu được hỗ trợ; không phải chứng nhận hay bản lưu trữ đầy đủ tuyệt đối về mặt pháp lý. JSON vẫn được cung cấp để lưu trữ dữ liệu máy đọc được. Không tải hoặc nhúng ảnh, CV hay tệp đính kèm bên ngoài.",
+    messageScope:
+      "Chỉ xuất tin nhắn do chính bạn gửi trong các hội thoại ứng tuyển hiện được phép truy cập. Không xuất tin nhắn nhận được hoặc thông tin liên hệ của người tham gia khác theo chính sách xuất hiện có.",
+    consistency:
+      "Dữ liệu được đọc trong một snapshot cơ sở dữ liệu chỉ đọc với mức cô lập repeatable-read. Không bao gồm thay đổi phát sinh sau khi bắt đầu snapshot.",
+    exclusions:
+      "Loại trừ: thông tin xác thực và phiên đăng nhập; ghi chú, phiếu đánh giá và phân tích AI nội bộ của nhà tuyển dụng; dữ liệu người khác. Việc đã lưu, đánh giá, tệp phỏng vấn và lịch sử hội thoại AI chưa thuộc phạm vi xuất hiện tại.",
+    accountStatus: "Trạng thái tài khoản",
+    noPrefs:
+      "Chưa có bản ghi cài đặt thông báo được lưu. Báo cáo không tự tạo giá trị mặc định.",
+    noCert:
+      "Schema hiện tại không có model chứng chỉ riêng. Học vấn, portfolio và ngôn ngữ được hiển thị đúng theo dữ liệu đã lưu.",
+    scopeSummary:
+      "Tài khoản, hồ sơ của bạn, đơn ứng tuyển, tin nhắn đã gửi và cài đặt thông báo đã lưu. Bao gồm cảnh báo việc làm hiện có và tin tuyển dụng công khai của công ty do bạn sở hữu.",
+  },
+} as const;
+const LABELS: Record<string, [string, string]> = {
+  name: ["Full name", "Họ và tên"],
+  email: ["Email", "Email"],
+  phone: ["Phone", "Số điện thoại"],
+  role: ["Account role", "Vai trò tài khoản"],
+  language: ["Preferred language", "Ngôn ngữ ưu tiên"],
+  region: ["Region", "Khu vực"],
+  currencyDisplay: ["Display currency", "Tiền tệ hiển thị"],
+  emailVerified: ["Email verified", "Email đã xác minh"],
+  createdAt: ["Created", "Ngày tạo"],
+  updatedAt: ["Updated", "Ngày cập nhật"],
+  headline: ["Headline", "Chức danh"],
+  bio: ["About", "Giới thiệu"],
+  location: ["Location", "Địa điểm"],
+  country: ["Country", "Quốc gia"],
+  timezone: ["Profile time zone", "Múi giờ hồ sơ"],
+  yearsExperience: ["Years of experience", "Số năm kinh nghiệm"],
+  level: ["Seniority", "Cấp bậc"],
+  resumeUrl: ["CV link (file not embedded)", "Liên kết CV (không nhúng tệp)"],
+  portfolioUrl: ["Portfolio link", "Liên kết portfolio"],
+  githubUrl: ["GitHub", "GitHub"],
+  linkedinUrl: ["LinkedIn", "LinkedIn"],
+  isOpenToWork: ["Open to work", "Đang tìm việc"],
+  visibility: ["Profile visibility", "Hiển thị hồ sơ"],
+  desiredSalaryMin: ["Desired minimum salary", "Lương mong muốn tối thiểu"],
+  desiredSalaryMax: ["Desired maximum salary", "Lương mong muốn tối đa"],
+  currency: ["Currency", "Tiền tệ"],
+  primaryRole: ["Preferred role", "Vị trí mong muốn"],
+  rightToWork: ["Right to work", "Quyền làm việc"],
+  noticePeriod: ["Notice period", "Thời gian báo trước"],
+  employmentTypes: ["Employment types", "Loại công việc"],
+  timezoneOverlap: ["Time-zone overlap", "Khung giờ làm việc"],
+  company: ["Company", "Công ty"],
+  title: ["Title", "Chức danh"],
+  startDate: ["Start date", "Ngày bắt đầu"],
+  endDate: ["End date", "Ngày kết thúc"],
+  description: ["Description", "Mô tả"],
+  subtitle: ["Details", "Thông tin bổ sung"],
+  tag: ["Category", "Phân loại"],
+  url: ["Link", "Liên kết"],
+  startYear: ["Start year", "Năm bắt đầu"],
+  endYear: ["End year", "Năm kết thúc"],
+  type: ["Type", "Loại"],
+  companyName: ["Company name", "Tên công ty"],
+  websiteUrl: ["Website", "Website"],
+  industry: ["Industry", "Ngành nghề"],
+  size: ["Company size", "Quy mô công ty"],
+  founded: ["Founded", "Năm thành lập"],
+  hqCountry: ["HQ country", "Quốc gia trụ sở"],
+  hqCity: ["HQ city", "Thành phố trụ sở"],
+  hqAddress: ["HQ address", "Địa chỉ trụ sở"],
+  benefits: ["Benefits", "Phúc lợi"],
+  facebookUrl: ["Facebook", "Facebook"],
+  videoUrl: ["Video link", "Liên kết video"],
+  isVerified: ["Verified", "Đã xác minh"],
+  coverLetter: ["Submitted cover letter", "Thư ứng tuyển đã gửi"],
+  contactPhone: ["Submitted phone", "Số điện thoại đã gửi"],
+  viewedAt: ["Viewed", "Thời điểm được xem"],
+  rejectionReason: ["Applicant-visible feedback", "Phản hồi cho ứng viên"],
+  offerSalary: ["Offer salary", "Lương đề nghị"],
+  offerBenefits: ["Offer benefits", "Phúc lợi đề nghị"],
+  offerStartDate: ["Offer start date", "Ngày bắt đầu đề nghị"],
+  offerDeclineReason: [
+    "Your offer-decline reason",
+    "Lý do từ chối offer của bạn",
+  ],
+  applicationUpdates: ["Application updates", "Cập nhật đơn ứng tuyển"],
+  employerMessages: ["Employer messages", "Tin nhắn nhà tuyển dụng"],
+  weeklyDigest: ["Weekly digest", "Tổng hợp hàng tuần"],
+  instantMatchAlerts: [
+    "Instant matching-job alerts",
+    "Cảnh báo việc làm phù hợp",
+  ],
+  productNews: ["Product news", "Tin sản phẩm"],
+  tipsAndResources: ["Tips and resources", "Mẹo và tài nguyên"],
+  browserPush: ["Browser push notifications", "Thông báo trên trình duyệt"],
+  keywords: ["Keywords", "Từ khóa"],
+  jobType: ["Job type", "Loại việc làm"],
+  salaryMin: ["Minimum salary", "Lương tối thiểu"],
+  frequency: ["Frequency", "Tần suất"],
+  isActive: ["Active", "Đang bật"],
+  lastSentAt: ["Last sent", "Lần gửi gần nhất"],
+  categories: ["Categories", "Ngành nghề"],
+  slug: ["Public profile slug", "Định danh hồ sơ công khai"],
+  verifiedAt: ["Verified at", "Thời điểm xác minh"],
+  suspendedAt: ["Suspended at", "Thời điểm đình chỉ"],
+  pausedAt: ["Paused at", "Thời điểm tạm dừng"],
+  bannedAt: ["Restricted at", "Thời điểm hạn chế"],
+  image: ["Avatar link (not embedded)", "Liên kết ảnh (không nhúng)"],
+  logoUrl: ["Logo link (not embedded)", "Liên kết logo (không nhúng)"],
+  coverImageUrl: ["Cover image link", "Liên kết ảnh bìa"],
+};
+const STATUSES: Record<string, [string, string]> = {
+  APPLIED: ["Applied", "Đã ứng tuyển"],
+  REVIEWING: ["Under review", "Đang xem xét"],
+  SHORTLISTED: ["Shortlisted", "Vào danh sách chọn"],
+  INTERVIEW: ["Interview", "Phỏng vấn"],
+  INTERVIEWED: ["Interviewed", "Đã phỏng vấn"],
+  OFFERED: ["Offer received", "Đã nhận đề nghị"],
+  ACCEPTED: ["Accepted", "Đã chấp nhận"],
+  REJECTED: ["Rejected", "Đã từ chối"],
+  WITHDRAWN: ["Withdrawn", "Đã rút"],
+  DECLINED: ["Declined", "Đã từ chối đề nghị"],
+  ACTIVE: ["Active", "Đang tuyển"],
+  DRAFT: ["Draft", "Bản nháp"],
+  PENDING_REVIEW: ["Pending review", "Chờ duyệt"],
+  CLOSED: ["Closed", "Đã đóng"],
+  EXPIRED: ["Expired", "Hết hạn"],
+};
 
-export interface PersonalDataExportPayload {
-  exportedAt: string;
-  account: ExportAccountData;
-}
-
-function resolveFontPaths(): { regular: string | null; bold: string | null } {
-  const candidateDirs = [
-    path.join(__dirname, "assets/fonts"),
-    path.join(__dirname, "../assets/fonts"),
-    path.join(process.cwd(), "src/assets/fonts"),
-    path.join(process.cwd(), "remotesea-api/src/assets/fonts"),
-  ];
-
-  for (const dir of candidateDirs) {
-    const regular = path.join(dir, "Arial-Regular.ttf");
-    const bold = path.join(dir, "Arial-Bold.ttf");
-    if (fs.existsSync(regular) && fs.existsSync(bold)) {
-      return { regular, bold };
+/** Layout primitives deliberately render plain text, never HTML or fetched URLs. */
+class Report {
+  y = TOP;
+  section = "";
+  pages = 0;
+  readonly started = performance.now();
+  readonly t;
+  readonly column: 0 | 1;
+  constructor(
+    readonly doc: InstanceType<typeof PDFDocument>,
+    readonly locale: ExportLocale,
+    readonly ref: string,
+  ) {
+    this.t = COPY[locale];
+    this.column = locale === "vi" ? 1 : 0;
+  }
+  guard() {
+    if (this.pages > 200)
+      throw new ExportTooLargeError(
+        "PDF exceeds 200 pages; request JSON instead",
+      );
+    if (performance.now() - this.started > 15_000)
+      throw new ExportRenderError("PDF render deadline exceeded");
+  }
+  page(section: string, cover = false) {
+    this.guard();
+    this.doc.addPage();
+    this.pages++;
+    this.section = section;
+    this.y = TOP;
+    if (!cover) {
+      this.doc
+        .font("Bold")
+        .fontSize(10)
+        .fillColor(C.accent)
+        .text("REMOTESEA", L, 32, { lineBreak: false });
+      this.doc
+        .font("Regular")
+        .fontSize(8)
+        .fillColor(C.muted)
+        .text(section, L + 130, 34, {
+          width: W - 130,
+          align: "right",
+          lineBreak: false,
+        });
+      this.doc
+        .moveTo(L, 53)
+        .lineTo(L + W, 53)
+        .strokeColor(C.line)
+        .lineWidth(0.7)
+        .stroke();
     }
   }
-
-  // System font fallback on macOS
-  const sysReg = "/System/Library/Fonts/Supplemental/Arial.ttf";
-  const sysBold = "/System/Library/Fonts/Supplemental/Arial Bold.ttf";
-  if (fs.existsSync(sysReg) && fs.existsSync(sysBold)) {
-    return { regular: sysReg, bold: sysBold };
+  heading(title: string) {
+    this.space(44);
+    this.doc
+      .font("Bold")
+      .fontSize(18)
+      .fillColor(C.ink)
+      .text(title, L, this.y, { width: W });
+    this.y += 35;
   }
-
-  return { regular: null, bold: null };
-}
-
-function generateReferenceId(seed: string): string {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = (hash << 5) - hash + seed.charCodeAt(i);
-    hash |= 0;
+  sub(title: string) {
+    const height = this.height(title, W, 12, "Bold");
+    if (height > 200) {
+      this.block(title, C.ink, 12);
+      return;
+    }
+    this.space(height + 14);
+    this.doc
+      .font("Bold")
+      .fontSize(12)
+      .fillColor(C.ink)
+      .text(title, L, this.y, { width: W });
+    this.y += height + 9;
   }
-  const part1 = Math.abs(hash)
-    .toString(36)
-    .toUpperCase()
-    .padStart(4, "X")
-    .slice(0, 4);
-  const part2 = Math.floor(1000 + Math.random() * 9000).toString();
-  return `REF-${part1}-${part2}`;
+  space(height: number) {
+    this.guard();
+    if (this.y + height > BOTTOM) this.page(this.section);
+  }
+  height(value: string, width: number, size = 10, font = "Regular") {
+    return this.doc
+      .font(font)
+      .fontSize(size)
+      .heightOfString(value || " ", { width, lineGap: 3 });
+  }
+  fit(
+    value: string,
+    width: number,
+    height: number,
+    size = 10,
+    font = "Regular",
+  ) {
+    if (!value) return ["", ""] as const;
+    if (this.height(value, width, size, font) <= height)
+      return [value, ""] as const;
+    const chars = Array.from(value);
+    let low = 0,
+      high = chars.length;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      if (
+        this.height(chars.slice(0, mid).join(""), width, size, font) <= height
+      )
+        low = mid;
+      else high = mid - 1;
+    }
+    if (!low)
+      throw new ExportRenderError("Unable to fit text on a report page");
+    // Keep ordinary words together without dropping any original characters.
+    const candidate = chars.slice(0, low).join("");
+    const boundary = Math.max(
+      candidate.lastIndexOf(" "),
+      candidate.lastIndexOf("\n"),
+    );
+    if (boundary > candidate.length * 0.7)
+      low = Array.from(candidate.slice(0, boundary + 1)).length;
+    return [chars.slice(0, low).join(""), chars.slice(low).join("")] as const;
+  }
+  block(value: string, color: string = C.secondary, size = 10) {
+    let remaining = value;
+    while (remaining) {
+      this.space(25);
+      const [chunk, rest] = this.fit(remaining, W, BOTTOM - this.y - 4, size);
+      const height = this.height(chunk, W, size);
+      this.doc
+        .font("Regular")
+        .fontSize(size)
+        .fillColor(color)
+        .text(chunk, L, this.y, { width: W, lineGap: 3 });
+      this.y += height + 8;
+      remaining = rest;
+      if (remaining) this.page(this.section);
+    }
+  }
+  empty(message: string = this.t.empty) {
+    const height = this.height(message, W - 28, 10) + 28;
+    this.space(height + 10);
+    this.doc.roundedRect(L, this.y, W, height, 6).fill(C.table);
+    this.doc
+      .font("Regular")
+      .fontSize(10)
+      .fillColor(C.muted)
+      .text(message, L + 14, this.y + 13, { width: W - 28, lineGap: 3 });
+    this.y += height + 14;
+  }
+  date(value: unknown) {
+    if (!value) return this.t.missing;
+    const date = new Date(String(value));
+    return Number.isNaN(date.getTime())
+      ? this.t.missing
+      : new Intl.DateTimeFormat(this.locale === "vi" ? "vi-VN" : "en-GB", {
+          timeZone: "UTC",
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(date);
+  }
+  label(key: string) {
+    return LABELS[key]?.[this.column] ?? key;
+  }
+  value(key: string, value: unknown): string {
+    if (value === null || value === undefined || value === "")
+      return this.t.missing;
+    if (typeof value === "boolean") return value ? this.t.yes : this.t.no;
+    if (/(At|Date)$/.test(key)) return this.date(value);
+    if (Array.isArray(value))
+      return value.map((item) => String(item)).join(", ");
+    return String(value);
+  }
+  status(value: string) {
+    return STATUSES[value]?.[this.column] ?? value;
+  }
+  info(fields: Record<string, unknown>, omit: string[] = []) {
+    const rows = Object.entries(fields)
+      .filter(([key]) => !omit.includes(key))
+      .map(([key, value]) => [this.label(key), this.value(key, value)]);
+    if (rows.length)
+      this.table([this.t.property, this.t.value], rows, [0.32, 0.68]);
+    else this.empty();
+  }
+  table(headers: string[], rows: string[][], ratios: number[]) {
+    const widths = ratios.map((ratio) => ratio * W);
+    const header = () => {
+      this.space(62);
+      this.doc.rect(L, this.y, W, 29).fill(C.ink);
+      let x = L;
+      headers.forEach((text, i) => {
+        this.doc
+          .font("Bold")
+          .fontSize(9)
+          .fillColor("#FFFFFF")
+          .text(text, x + 9, this.y + 8, {
+            width: widths[i]! - 18,
+            lineGap: 1,
+          });
+        x += widths[i]!;
+      });
+      this.y += 29;
+    };
+    header();
+    rows.forEach((row, rowIndex) => {
+      let remaining = row.map((cell) => cell || " ");
+      do {
+        this.guard();
+        if (BOTTOM - this.y < 42) {
+          this.page(this.section);
+          header();
+        }
+        const available = BOTTOM - this.y - 18;
+        const pieces = remaining.map((cell, i) =>
+          this.fit(cell, widths[i]! - 18, available, 9.5),
+        );
+        const rowHeight =
+          Math.max(
+            16,
+            ...pieces.map(([chunk], i) =>
+              this.height(chunk, widths[i]! - 18, 9.5),
+            ),
+          ) + 18;
+        this.doc
+          .rect(L, this.y, W, rowHeight)
+          .fillAndStroke(rowIndex % 2 ? "#FFFFFF" : C.table, C.line);
+        let x = L;
+        pieces.forEach(([chunk], i) => {
+          this.doc
+            .font("Regular")
+            .fontSize(9.5)
+            .fillColor(C.ink)
+            .text(chunk, x + 9, this.y + 8, {
+              width: widths[i]! - 18,
+              lineGap: 3,
+            });
+          x += widths[i]!;
+        });
+        this.y += rowHeight;
+        remaining = pieces.map(([, rest]) => rest);
+        if (remaining.some(Boolean)) {
+          this.page(this.section);
+          header();
+        }
+      } while (remaining.some(Boolean));
+    });
+    this.y += 16;
+  }
+  finish() {
+    const range = this.doc.bufferedPageRange();
+    for (let i = 0; i < range.count; i++) {
+      this.doc.switchToPage(i);
+      const bottom = this.doc.page.margins.bottom;
+      this.doc.page.margins.bottom = 0;
+      this.doc
+        .moveTo(L, 799)
+        .lineTo(L + W, 799)
+        .strokeColor(C.line)
+        .lineWidth(0.5)
+        .stroke();
+      this.doc
+        .font("Regular")
+        .fontSize(8)
+        .fillColor(C.muted)
+        .text(
+          `${this.t.confidentiality}  |  ${this.ref.slice(0, 13)}`,
+          L,
+          809,
+          { width: W - 95, lineBreak: false },
+        );
+      this.doc.text(
+        `${this.t.page} ${i + 1} / ${range.count}`,
+        L + W - 95,
+        809,
+        { width: 95, align: "right", lineBreak: false },
+      );
+      this.doc.page.margins.bottom = bottom;
+    }
+    this.doc.end();
+  }
 }
 
 export class PersonalDataPdfRenderer {
-  static async render(payload: PersonalDataExportPayload): Promise<Buffer> {
-    const sanitizedPayload = sanitizePersonalData(payload);
-    const { exportedAt, account } = sanitizedPayload;
-
+  static async render(
+    payload: PersonalDataExportPayload,
+    locale: ExportLocale = "vi",
+  ): Promise<Buffer> {
+    const account = personalDataAccountSchema.parse(
+      sanitizePersonalData(JSON.parse(JSON.stringify(payload.account))),
+    );
+    const reference = payload.metadata?.referenceId ?? randomUUID();
     return new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({
+        autoFirstPage: false,
+        size: "A4",
+        margins: { top: TOP, bottom: 65, left: L, right: L },
+        bufferPages: true,
+        info: {
+          Title: "RemoteSEA Personal Data Report",
+          Author: "RemoteSEA",
+          Subject: "Personal account archive",
+          CreationDate: new Date(payload.exportedAt),
+        },
+      });
+      const chunks: Buffer[] = [];
+      let bytes = 0;
+      doc.on("data", (chunk: Buffer) => {
+        bytes += chunk.length;
+        if (bytes > 16 * 1024 * 1024)
+          doc.destroy(
+            new ExportTooLargeError("PDF exceeds download size limit"),
+          );
+        else chunks.push(chunk);
+      });
+      doc.on("error", reject);
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
       try {
-        const doc = new PDFDocument({
-          size: "A4",
-          margins: { top: 45, bottom: 50, left: 45, right: 45 },
-          bufferPages: true,
-          info: {
-            Title: `RemoteSEA Personal Data - ${account.name || "User"}`,
-            Author: "RemoteSEA Platform",
-            Subject: "GDPR/PDPA Personal Data Export Dossier",
-            Keywords: "remotesea, personal-data, gdpr, pdpa, export",
-            CreationDate: new Date(exportedAt),
-          },
-        });
-
-        const fontPaths = resolveFontPaths();
-        if (fontPaths.regular && fontPaths.bold) {
-          doc.registerFont("Regular", fontPaths.regular);
-          doc.registerFont("Bold", fontPaths.bold);
-        } else {
-          doc.registerFont("Regular", "Helvetica");
-          doc.registerFont("Bold", "Helvetica-Bold");
-        }
-
-        const chunks: Buffer[] = [];
-        doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-        doc.on("end", () => resolve(Buffer.concat(chunks)));
-        doc.on("error", (err: Error) => reject(err));
-
-        const pageWidth = doc.page.width;
-        const pageHeight = doc.page.height;
-        const contentWidth = pageWidth - 90; // margins 45 each side
-
-        // ─────────────────────────────────────────────────────────────────────
-        // TRANG 1: COVER PAGE
-        // ─────────────────────────────────────────────────────────────────────
-        // Top Brand Header
-        doc.rect(45, 45, contentWidth, 5).fill("#0F172A");
-
+        doc.registerFont(
+          "Regular",
+          path.resolve(
+            __dirname,
+            "../../assets/fonts/LiberationSans-Regular.ttf",
+          ),
+        );
+        doc.registerFont(
+          "Bold",
+          path.resolve(__dirname, "../../assets/fonts/LiberationSans-Bold.ttf"),
+        );
+        const r = new Report(doc, locale, reference),
+          t = r.t;
+        const applications = account.talent?.applications ?? [],
+          messages = account.messages ?? [];
+        r.page(t.cover, true);
+        doc.rect(0, 0, 595.28, 12).fill(C.accent);
         doc
           .font("Bold")
           .fontSize(20)
-          .fillColor("#1E40AF")
-          .text("RemoteSEA", 45, 65);
+          .fillColor(C.accent)
+          .text("REMOTESEA", L, 55);
         doc
           .font("Regular")
           .fontSize(9)
-          .fillColor("#64748B")
-          .text("Nền tảng Tuyển dụng & Làm việc từ xa tích hợp AI", 45, 90);
-
-        doc
-          .moveTo(45, 115)
-          .lineTo(pageWidth - 45, 115)
-          .strokeColor("#E2E8F0")
-          .lineWidth(1)
-          .stroke();
-
-        // Main Title Block
-        const titleY = 220;
-        doc
-          .roundedRect(45, titleY - 20, 240, 22, 4)
-          .fillAndStroke("#F1F5F9", "#CBD5E1");
+          .fillColor(C.muted)
+          .text(t.personal, L, 85);
+        doc.roundedRect(L, 175, 110, 24, 5).fill(C.pale);
         doc
           .font("Bold")
-          .fontSize(8.5)
-          .fillColor("#2563EB")
-          .text("HỒ SƠ XUẤT DỮ LIỆU CÁ NHÂN ĐỊNH DANH", 55, titleY - 14);
-
+          .fontSize(9)
+          .fillColor(C.accent)
+          .text("DATA EXPORT", L + 12, 183, { lineBreak: false });
         doc
           .font("Bold")
-          .fontSize(24)
-          .fillColor("#0F172A")
-          .text("BÁO CÁO DỮ LIỆU CÁ NHÂN", 45, titleY + 15, {
-            width: contentWidth,
-          });
-
-        doc
-          .font("Bold")
-          .fontSize(14)
-          .fillColor("#64748B")
-          .text("PERSONAL DATA EXPORT REPORT", 45, titleY + 48, {
-            width: contentWidth,
-          });
-
+          .fontSize(26)
+          .fillColor(C.ink)
+          .text("BÁO CÁO DỮ LIỆU\nCÁ NHÂN", L, 222, { width: W, lineGap: 5 });
         doc
           .font("Regular")
-          .fontSize(10)
-          .fillColor("#334155")
-          .text(
-            "Tài liệu trích xuất toàn bộ dữ liệu cá nhân theo tiêu chuẩn quyền riêng tư GDPR (Điều 15 & Điều 20) và Đạo luật Bảo vệ Dữ liệu Cá nhân (PDPA). Được tạo tự động bởi Hệ thống RemoteSEA.",
-            45,
-            titleY + 75,
-            { width: contentWidth, lineGap: 3 },
-          );
+          .fontSize(13)
+          .fillColor(C.secondary)
+          .text("PERSONAL DATA EXPORT REPORT", L, 300, { width: W });
+        r.y = 360;
+        r.table(
+          [t.property, t.value],
+          [
+            [r.label("name"), account.name || t.missing],
+            [r.label("email"), account.email],
+            [t.generated, r.date(payload.exportedAt)],
+            [t.reference, reference],
+            [t.version, payload.metadata?.schemaVersion ?? "2.0"],
+          ],
+          [0.34, 0.66],
+        );
+        r.y = Math.max(r.y + 10, 652);
+        r.block(t.notice, C.muted, 9);
 
-        // Metadata Card
-        const metaCardY = 370;
-        doc
-          .roundedRect(45, metaCardY, contentWidth, 180, 8)
-          .fillAndStroke("#F8FAFC", "#E2E8F0");
-
-        doc
-          .font("Bold")
-          .fontSize(11)
-          .fillColor("#1E40AF")
-          .text("THÔNG TIN ĐỐI CHIẾU HỒ SƠ", 60, metaCardY + 15);
-
-        doc
-          .moveTo(60, metaCardY + 32)
-          .lineTo(pageWidth - 60, metaCardY + 32)
-          .strokeColor("#E2E8F0")
-          .stroke();
-
-        const refCode = generateReferenceId(account.id || "RS");
-        const exportDateFormatted = new Date(exportedAt).toLocaleString(
-          "vi-VN",
-          {
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-          },
+        r.page(t.overview);
+        r.heading(t.overview);
+        const stats = [
+          [t.profiles, Number(!!account.talent) + Number(!!account.employer)],
+          [t.apps, applications.length],
+          [t.msgs, messages.length],
+          [
+            t.prefs,
+            Object.values(account.notificationPreference ?? {}).filter(
+              (value) => typeof value === "boolean",
+            ).length,
+          ],
+        ];
+        const cardTop = r.y;
+        stats.forEach(([label, count], i) => {
+          const x = L + ((i % 2) * (W + 16)) / 2,
+            y = cardTop + Math.floor(i / 2) * 99,
+            width = (W - 16) / 2;
+          doc.roundedRect(x, y, width, 83, 7).fillAndStroke(C.table, C.line);
+          doc
+            .font("Regular")
+            .fontSize(10)
+            .fillColor(C.secondary)
+            .text(String(label), x + 15, y + 13, { width: width - 30 });
+          doc
+            .font("Bold")
+            .fontSize(26)
+            .fillColor(C.accent)
+            .text(String(count), x + 15, y + 36);
+        });
+        r.y = cardTop + 214;
+        r.info({
+          [t.generated]: r.date(payload.exportedAt),
+          [t.timezone]: "UTC",
+          [t.scope]: t.scopeSummary,
+        });
+        r.block(t.consistency);
+        r.block(t.messageScope);
+        r.block(
+          locale === "vi"
+            ? "Các mục chưa có dữ liệu được đánh dấu rõ trong từng phần của báo cáo."
+            : "Sections without stored data are identified within the report.",
+          C.muted,
+          9,
         );
 
-        const metaRows: [string, string][] = [
-          ["Họ tên chủ tài khoản:", account.name || "Chưa cập nhật"],
-          ["Địa chỉ Email định danh:", account.email],
-          ["Mã tham chiếu báo cáo:", refCode],
-          ["Thời điểm khởi tạo:", exportDateFormatted],
-          ["Phiên bản chuẩn xuất:", "v1.2 (Production Grade · PDF/A-ready)"],
-          [
-            "Phạm vi dữ liệu:",
-            "Toàn bộ tài khoản, hồ sơ, đơn ứng tuyển, tin nhắn & cài đặt",
-          ],
-        ];
+        r.page(t.account);
+        r.heading(t.account);
+        r.info({
+          name: account.name,
+          email: account.email,
+          phone: account.phone,
+          role: account.role,
+          createdAt: account.createdAt,
+          updatedAt: account.updatedAt,
+          [t.accountStatus]: account.bannedAt
+            ? t.banned
+            : account.isPaused
+              ? t.paused
+              : t.active,
+          language: account.language,
+          region: account.region,
+          currencyDisplay: account.currencyDisplay,
+          emailVerified: account.emailVerified,
+          image: account.image,
+          ...(account.pausedAt && { pausedAt: account.pausedAt }),
+          ...(account.bannedAt && { bannedAt: account.bannedAt }),
+        });
 
-        let curMetaY = metaCardY + 42;
-        for (const [k, v] of metaRows) {
-          doc
-            .font("Bold")
-            .fontSize(9)
-            .fillColor("#64748B")
-            .text(k, 60, curMetaY, { width: 180 });
-          doc
-            .font("Regular")
-            .fontSize(9)
-            .fillColor("#0F172A")
-            .text(v, 245, curMetaY, { width: contentWidth - 210 });
-          curMetaY += 21;
-        }
-
-        // Cover Bottom Notice
-        const bottomNoticeY = pageHeight - 110;
-        doc
-          .roundedRect(45, bottomNoticeY, contentWidth, 50, 6)
-          .fillAndStroke("#FEF2F2", "#FECACA");
-        doc
-          .font("Bold")
-          .fontSize(8.5)
-          .fillColor("#991B1B")
-          .text("LƯU Ý BẢO MẬT & QUYỀN RIÊNG TƯ:", 58, bottomNoticeY + 10);
-        doc
-          .font("Regular")
-          .fontSize(8)
-          .fillColor("#7F1D1D")
-          .text(
-            "Đây là bản sao dữ liệu cá nhân được hệ thống tổng hợp tại thời điểm xuất báo cáo. Nội dung chứa thông tin định danh và lịch sử hoạt động cá nhân. Vui lòng lưu trữ an toàn và tuyệt đối không chia sẻ với người không có thẩm quyền.",
-            58,
-            bottomNoticeY + 23,
-            { width: contentWidth - 26, lineGap: 1.5 },
-          );
-
-        // ─────────────────────────────────────────────────────────────────────
-        // TRANG 2: TỔNG QUAN DỮ LIỆU & THỐNG KÊ
-        // ─────────────────────────────────────────────────────────────────────
-        doc.addPage();
-
-        let y = 60;
-        doc
-          .font("Bold")
-          .fontSize(16)
-          .fillColor("#0F172A")
-          .text("TỔNG QUAN TÀI KHOẢN & DỮ LIỆU", 45, y);
-        y += 24;
-        doc
-          .font("Regular")
-          .fontSize(9.5)
-          .fillColor("#64748B")
-          .text(
-            "Bảng tổng hợp chỉ số dữ liệu cá nhân thực tế được trích xuất từ cơ sở dữ liệu hệ thống RemoteSEA tại thời điểm yêu cầu.",
-            45,
-            y,
-            { width: contentWidth },
-          );
-        y += 30;
-
-        // 4 Summary Metrics Cards
-        const totalApps = account.talent?.applications?.length || 0;
-        const totalJobs = account.employer?.jobs?.length || 0;
-        const totalMessages = account.messages?.length || 0;
-        const totalAlerts = account.jobAlerts?.length || 0;
-
-        const cardW = (contentWidth - 20) / 2;
-        const cardH = 65;
-
-        // Card 1: Account Status
-        doc
-          .roundedRect(45, y, cardW, cardH, 6)
-          .fillAndStroke("#F8FAFC", "#E2E8F0");
-        doc
-          .font("Bold")
-          .fontSize(8.5)
-          .fillColor("#64748B")
-          .text("TRẠNG THÁI TÀI KHOẢN", 57, y + 10);
-        doc
-          .font("Bold")
-          .fontSize(14)
-          .fillColor(account.isPaused ? "#D97706" : "#16A34A")
-          .text(
-            account.isPaused ? "Đang tạm dừng" : "Đang hoạt động",
-            57,
-            y + 26,
-          );
-        doc
-          .font("Regular")
-          .fontSize(8)
-          .fillColor("#94A3B8")
-          .text(`Vai trò: ${account.role || "TALENT"}`, 57, y + 46);
-
-        // Card 2: Applications or Postings
-        const c2X = 45 + cardW + 20;
-        doc
-          .roundedRect(c2X, y, cardW, cardH, 6)
-          .fillAndStroke("#F8FAFC", "#E2E8F0");
-        const c2Title =
-          account.role === "EMPLOYER"
-            ? "TIN TUYỂN DỤNG ĐÃ ĐĂNG"
-            : "LỊCH SỬ ỨNG TUYỂN";
-        const c2Count =
-          account.role === "EMPLOYER"
-            ? `${totalJobs} tin tuyển dụng`
-            : `${totalApps} đơn ứng tuyển`;
-        doc
-          .font("Bold")
-          .fontSize(8.5)
-          .fillColor("#64748B")
-          .text(c2Title, c2X + 12, y + 10);
-        doc
-          .font("Bold")
-          .fontSize(14)
-          .fillColor("#2563EB")
-          .text(c2Count, c2X + 12, y + 26);
-        doc
-          .font("Regular")
-          .fontSize(8)
-          .fillColor("#94A3B8")
-          .text("Dữ liệu ghi nhận trong hệ thống", c2X + 12, y + 46);
-
-        y += cardH + 15;
-
-        // Card 3: Messages
-        doc
-          .roundedRect(45, y, cardW, cardH, 6)
-          .fillAndStroke("#F8FAFC", "#E2E8F0");
-        doc
-          .font("Bold")
-          .fontSize(8.5)
-          .fillColor("#64748B")
-          .text("TIN NHẮN ĐÃ GỬI", 57, y + 10);
-        doc
-          .font("Bold")
-          .fontSize(14)
-          .fillColor("#0284C7")
-          .text(`${totalMessages} tin nhắn`, 57, y + 26);
-        doc
-          .font("Regular")
-          .fontSize(8)
-          .fillColor("#94A3B8")
-          .text("Thuộc các luồng trao đổi của bạn", 57, y + 46);
-
-        // Card 4: Alerts & Settings
-        doc
-          .roundedRect(c2X, y, cardW, cardH, 6)
-          .fillAndStroke("#F8FAFC", "#E2E8F0");
-        doc
-          .font("Bold")
-          .fontSize(8.5)
-          .fillColor("#64748B")
-          .text("THÔNG BÁO & CÀI ĐẶT", c2X + 12, y + 10);
-        doc
-          .font("Bold")
-          .fontSize(14)
-          .fillColor("#0F172A")
-          .text(`${totalAlerts} bộ cảnh báo`, c2X + 12, y + 26);
-        doc
-          .font("Regular")
-          .fontSize(8)
-          .fillColor("#94A3B8")
-          .text("Tùy chọn nhận việc & email", c2X + 12, y + 46);
-
-        y += cardH + 25;
-
-        // Scope description box
-        doc
-          .roundedRect(45, y, contentWidth, 90, 6)
-          .fillAndStroke("#F8FAFC", "#E2E8F0");
-        doc
-          .font("Bold")
-          .fontSize(9.5)
-          .fillColor("#1E40AF")
-          .text("PHẠM VI & MÚI GIỜ DỮ LIỆU", 57, y + 12);
-        doc
-          .font("Regular")
-          .fontSize(8.5)
-          .fillColor("#334155")
-          .text(
-            `• Thời điểm xuất dữ liệu: ${exportedAt}\n` +
-              `• Múi giờ chuẩn: Giờ địa phương người dùng (mặc định GMT+7/Asia/Ho_Chi_Minh)\n` +
-              `• Phương pháp trích xuất: Truy vấn trực tiếp từ cơ sở dữ liệu qua giao dịch đọc nhất quán\n` +
-              `• Phạm vi loại trừ: Mật khẩu (Password hash), mã bí mật xác thực hai bước (2FA TOTP secret, backup codes), mã khôi phục và session tokens tuyệt đối không bao giờ được trích xuất.`,
-            57,
-            y + 28,
-            { width: contentWidth - 24, lineGap: 3 },
-          );
-
-        y += 115;
-
-        // ─────────────────────────────────────────────────────────────────────
-        // PHẦN 3: THÔNG TIN TÀI KHOẢN (ACCOUNT INFORMATION TABLE)
-        // ─────────────────────────────────────────────────────────────────────
-        doc
-          .font("Bold")
-          .fontSize(13)
-          .fillColor("#0F172A")
-          .text("1. THÔNG TIN TÀI KHOẢN ĐỊNH DANH", 45, y);
-        y += 18;
-
-        const accTableRows: [string, string][] = [
-          ["Họ và tên", account.name || "Chưa cập nhật"],
-          ["Địa chỉ Email", account.email],
-          ["Số điện thoại", account.phone || "Chưa cung cấp"],
-          ["Vai trò tài khoản", account.role || "TALENT"],
-          [
-            "Trạng thái hoạt động",
-            account.isPaused
-              ? "Đang tạm dừng (Paused)"
-              : "Đang hoạt động (Active)",
-          ],
-          ["Ngôn ngữ ưu tiên", account.language || "Tiếng Việt (vi)"],
-          ["Khu vực địa lý", account.region || "Vietnam"],
-          ["Đơn vị tiền tệ hiển thị", account.currencyDisplay || "USD ($)"],
-          [
-            "Ngày đăng ký tài khoản",
-            new Date(account.createdAt).toLocaleDateString("vi-VN"),
-          ],
-          [
-            "Ngày cập nhật gần nhất",
-            account.updatedAt
-              ? new Date(account.updatedAt).toLocaleDateString("vi-VN")
-              : "N/A",
-          ],
-        ];
-
-        // Draw Table
-        const col1W = 160;
-        const col2W = contentWidth - col1W;
-        for (let i = 0; i < accTableRows.length; i++) {
-          const [lbl, val] = accTableRows[i]!;
-          const bg = i % 2 === 0 ? "#F8FAFC" : "#FFFFFF";
-          doc.rect(45, y, contentWidth, 19).fillAndStroke(bg, "#E2E8F0");
-          doc
-            .font("Bold")
-            .fontSize(8.5)
-            .fillColor("#475569")
-            .text(lbl, 55, y + 5, { width: col1W - 20 });
-          doc
-            .font("Regular")
-            .fontSize(8.5)
-            .fillColor("#0F172A")
-            .text(val, 45 + col1W + 10, y + 5, { width: col2W - 20 });
-          y += 19;
-        }
-
-        // ─────────────────────────────────────────────────────────────────────
-        // TRANG 3: HỒ SƠ CHUYÊN MÔN (TALENT OR EMPLOYER)
-        // ─────────────────────────────────────────────────────────────────────
-        doc.addPage();
-        y = 60;
-
+        r.page(t.profile);
+        r.heading(t.profile);
         if (account.talent) {
-          const t = account.talent;
-          doc
-            .font("Bold")
-            .fontSize(13)
-            .fillColor("#0F172A")
-            .text("2. HỒ SƠ ỨNG VIÊN & KỸ NĂNG CHUYÊN MÔN", 45, y);
-          y += 20;
-
-          const talentRows: [string, string][] = [
-            ["Tiêu đề nghề nghiệp", t.headline || "Chưa cập nhật"],
-            [
-              "Địa điểm / Quốc gia",
-              `${t.location || ""} ${t.country ? `(${t.country})` : ""}`.trim() ||
-                "Chưa cung cấp",
-            ],
-            ["Cấp bậc kinh nghiệm", t.level || "MID"],
-            [
-              "Số năm kinh nghiệm",
-              t.yearsExperience !== null && t.yearsExperience !== undefined
-                ? `${t.yearsExperience} năm`
-                : "Chưa cập nhật",
-            ],
-            [
-              "Mức lương mong muốn",
-              t.desiredSalaryMin && t.desiredSalaryMax
-                ? `$${t.desiredSalaryMin.toLocaleString()} - $${t.desiredSalaryMax.toLocaleString()} ${t.currency || "USD"}`
-                : "Thỏa thuận",
-            ],
-            ["Quyền làm việc (Right to work)", t.rightToWork || "Toàn quyền"],
-            ["Giới thiệu bản thân (Bio)", t.bio || "Chưa cập nhật"],
-          ];
-
-          for (let i = 0; i < talentRows.length; i++) {
-            const [lbl, val] = talentRows[i]!;
-            const bg = i % 2 === 0 ? "#F8FAFC" : "#FFFFFF";
-            const rowH = lbl.includes("Bio") ? 36 : 19;
-            doc.rect(45, y, contentWidth, rowH).fillAndStroke(bg, "#E2E8F0");
-            doc
-              .font("Bold")
-              .fontSize(8.5)
-              .fillColor("#475569")
-              .text(lbl, 55, y + 5, { width: col1W - 20 });
-            doc
-              .font("Regular")
-              .fontSize(8.5)
-              .fillColor("#0F172A")
-              .text(val, 45 + col1W + 10, y + 5, { width: col2W - 20 });
-            y += rowH;
-          }
-
-          y += 15;
-
-          // Skills Tag Cloud
-          doc
-            .font("Bold")
-            .fontSize(9.5)
-            .fillColor("#1E40AF")
-            .text("DANH MỤC KỸ NĂNG ĐÃ KHAI BÁO:", 45, y);
-          y += 16;
-          const skillsList =
-            (t.skills?.map((s) => s.skill?.name).filter(Boolean) as string[]) ||
-            [];
-          if (skillsList.length > 0) {
-            let skillX = 45;
-            for (const skill of skillsList) {
-              const strWidth = doc.widthOfString(skill) + 14;
-              if (skillX + strWidth > pageWidth - 45) {
-                skillX = 45;
-                y += 20;
-              }
-              doc
-                .roundedRect(skillX, y, strWidth, 16, 4)
-                .fillAndStroke("#EFF6FF", "#BFDBFE");
-              doc
-                .font("Bold")
-                .fontSize(8)
-                .fillColor("#1D4ED8")
-                .text(skill, skillX + 7, y + 3.5);
-              skillX += strWidth + 6;
-            }
-            y += 28;
-          } else {
-            doc
-              .font("Regular")
-              .fontSize(8.5)
-              .fillColor("#94A3B8")
-              .text("Chưa khai báo kỹ năng trong hồ sơ.", 45, y);
-            y += 20;
-          }
-
-          // Work Experiences
-          if (t.workExperiences && t.workExperiences.length > 0) {
-            y += 10;
-            doc
-              .font("Bold")
-              .fontSize(9.5)
-              .fillColor("#1E40AF")
-              .text("KINH NGHIỆM LÀM VIỆC ĐÃ GHI NHẬN:", 45, y);
-            y += 14;
-
-            for (const exp of t.workExperiences) {
-              const startStr = new Date(exp.startDate).toLocaleDateString(
-                "vi-VN",
-                { month: "2-digit", year: "numeric" },
-              );
-              const endStr = exp.isCurrent
-                ? "Hiện tại"
-                : exp.endDate
-                  ? new Date(exp.endDate).toLocaleDateString("vi-VN", {
-                      month: "2-digit",
-                      year: "numeric",
-                    })
-                  : "N/A";
-              doc
-                .font("Bold")
-                .fontSize(9)
-                .fillColor("#0F172A")
-                .text(`${exp.position} — ${exp.company}`, 45, y);
-              y += 12;
-              doc
-                .font("Regular")
-                .fontSize(8)
-                .fillColor("#64748B")
-                .text(
-                  `Thời gian: ${startStr} đến ${endStr} ${exp.location ? `| Địa điểm: ${exp.location}` : ""}`,
-                  45,
-                  y,
-                );
-              y += 14;
-              if (exp.description) {
-                doc
-                  .font("Regular")
-                  .fontSize(8)
-                  .fillColor("#334155")
-                  .text(exp.description, 45, y, { width: contentWidth });
-                y += 18;
-              }
-            }
-          }
-        } else if (account.employer) {
-          const emp = account.employer;
-          doc
-            .font("Bold")
-            .fontSize(13)
-            .fillColor("#0F172A")
-            .text("2. HỒ SƠ DOANH NGHIỆP TUYỂN DỤNG", 45, y);
-          y += 20;
-
-          const empRows: [string, string][] = [
-            ["Tên công ty / Tổ chức", emp.companyName || "Chưa cập nhật"],
-            ["Quy mô doanh nghiệp", emp.size || "Chưa cập nhật"],
-            ["Lĩnh vực hoạt động", emp.industry || "Chưa cập nhật"],
-            ["Website doanh nghiệp", emp.websiteUrl || "Chưa cung cấp"],
-            [
-              "Trụ sở chính",
-              `${emp.hqCity || ""} ${emp.hqCountry || ""}`.trim() ||
-                "Chưa cung cấp",
-            ],
-            [
-              "Trạng thái xác minh",
-              emp.isVerified
-                ? "Đã xác minh (Verified Employer)"
-                : "Chưa xác minh",
-            ],
-            ["Mô tả doanh nghiệp", emp.description || "Chưa cập nhật"],
-          ];
-
-          for (let i = 0; i < empRows.length; i++) {
-            const [lbl, val] = empRows[i]!;
-            const bg = i % 2 === 0 ? "#F8FAFC" : "#FFFFFF";
-            const rowH = lbl.includes("Mô tả") ? 36 : 19;
-            doc.rect(45, y, contentWidth, rowH).fillAndStroke(bg, "#E2E8F0");
-            doc
-              .font("Bold")
-              .fontSize(8.5)
-              .fillColor("#475569")
-              .text(lbl, 55, y + 5, { width: col1W - 20 });
-            doc
-              .font("Regular")
-              .fontSize(8.5)
-              .fillColor("#0F172A")
-              .text(val, 45 + col1W + 10, y + 5, { width: col2W - 20 });
-            y += rowH;
-          }
-        }
-
-        // ─────────────────────────────────────────────────────────────────────
-        // PHẦN 4: LỊCH SỬ ỨNG TUYỂN (HOẶC TIN ĐÃ ĐĂNG)
-        // ─────────────────────────────────────────────────────────────────────
-        doc.addPage();
-        y = 60;
-
-        const apps = account.talent?.applications || [];
-        const jobs = account.employer?.jobs || [];
-
-        if (account.role === "EMPLOYER") {
-          doc
-            .font("Bold")
-            .fontSize(13)
-            .fillColor("#0F172A")
-            .text("3. DANH MỤC TIN TUYỂN DỤNG ĐÃ ĐĂNG", 45, y);
-          y += 18;
-
-          if (jobs.length === 0) {
-            doc
-              .roundedRect(45, y, contentWidth, 40, 4)
-              .fillAndStroke("#F8FAFC", "#E2E8F0");
-            doc
-              .font("Regular")
-              .fontSize(8.5)
-              .fillColor("#64748B")
-              .text(
-                "Tài khoản chưa đăng tin tuyển dụng nào trên nền tảng.",
-                57,
-                y + 14,
-              );
-            y += 55;
-          } else {
-            // Table Header
-            doc.rect(45, y, contentWidth, 20).fill("#1E293B");
-            doc
-              .font("Bold")
-              .fontSize(8)
-              .fillColor("#FFFFFF")
-              .text("TIÊU ĐỀ TIN TUYỂN DỤNG", 55, y + 6);
-            doc
-              .font("Bold")
-              .fontSize(8)
-              .fillColor("#FFFFFF")
-              .text("ĐƯỜNG DẪN (SLUG)", 260, y + 6);
-            doc
-              .font("Bold")
-              .fontSize(8)
-              .fillColor("#FFFFFF")
-              .text("TRẠNG THÁI", 380, y + 6);
-            doc
-              .font("Bold")
-              .fontSize(8)
-              .fillColor("#FFFFFF")
-              .text("NGÀY TẠO", 460, y + 6);
-            y += 20;
-
-            for (const j of jobs) {
-              if (y > pageHeight - 80) {
-                doc.addPage();
-                y = 60;
-              }
-              doc
-                .rect(45, y, contentWidth, 20)
-                .fillAndStroke("#FFFFFF", "#E2E8F0");
-              doc
-                .font("Bold")
-                .fontSize(8)
-                .fillColor("#0F172A")
-                .text(j.title, 55, y + 6, { width: 195 });
-              doc
-                .font("Regular")
-                .fontSize(7.5)
-                .fillColor("#64748B")
-                .text(j.slug, 260, y + 6, { width: 110 });
-              doc
-                .font("Bold")
-                .fontSize(7.5)
-                .fillColor("#16A34A")
-                .text(j.status, 380, y + 6);
-              doc
-                .font("Regular")
-                .fontSize(8)
-                .fillColor("#475569")
-                .text(
-                  new Date(j.createdAt).toLocaleDateString("vi-VN"),
-                  460,
-                  y + 6,
-                );
-              y += 20;
-            }
-            y += 15;
-          }
-        } else {
-          doc
-            .font("Bold")
-            .fontSize(13)
-            .fillColor("#0F172A")
-            .text("3. LỊCH SỬ ỨNG TUYỂN VIỆC LÀM", 45, y);
-          y += 18;
-
-          if (apps.length === 0) {
-            doc
-              .roundedRect(45, y, contentWidth, 40, 4)
-              .fillAndStroke("#F8FAFC", "#E2E8F0");
-            doc
-              .font("Regular")
-              .fontSize(8.5)
-              .fillColor("#64748B")
-              .text(
-                "Tài khoản chưa gửi đơn ứng tuyển nào trên hệ thống.",
-                57,
-                y + 14,
-              );
-            y += 55;
-          } else {
-            // Table Header
-            doc.rect(45, y, contentWidth, 20).fill("#1E293B");
-            doc
-              .font("Bold")
-              .fontSize(8)
-              .fillColor("#FFFFFF")
-              .text("VỊ TRÍ ỨNG TUYỂN", 55, y + 6);
-            doc
-              .font("Bold")
-              .fontSize(8)
-              .fillColor("#FFFFFF")
-              .text("CÔNG TY", 240, y + 6);
-            doc
-              .font("Bold")
-              .fontSize(8)
-              .fillColor("#FFFFFF")
-              .text("TRẠNG THÁI", 370, y + 6);
-            doc
-              .font("Bold")
-              .fontSize(8)
-              .fillColor("#FFFFFF")
-              .text("NGÀY NỘP ĐƠN", 450, y + 6);
-            y += 20;
-
-            for (const app of apps) {
-              if (y > pageHeight - 80) {
-                doc.addPage();
-                y = 60;
-              }
-              doc
-                .rect(45, y, contentWidth, 20)
-                .fillAndStroke("#FFFFFF", "#E2E8F0");
-              doc
-                .font("Bold")
-                .fontSize(8)
-                .fillColor("#0F172A")
-                .text(app.job?.title || "Vị trí đã lưu trữ", 55, y + 6, {
-                  width: 175,
-                });
-              doc
-                .font("Regular")
-                .fontSize(8)
-                .fillColor("#475569")
-                .text(app.job?.employer?.companyName || "N/A", 240, y + 6, {
-                  width: 120,
-                });
-              doc
-                .font("Bold")
-                .fontSize(7.5)
-                .fillColor("#2563EB")
-                .text(app.status, 370, y + 6);
-              doc
-                .font("Regular")
-                .fontSize(8)
-                .fillColor("#475569")
-                .text(
-                  new Date(app.appliedAt).toLocaleDateString("vi-VN"),
-                  450,
-                  y + 6,
-                );
-              y += 20;
-            }
-            y += 15;
-          }
-        }
-
-        // ─────────────────────────────────────────────────────────────────────
-        // PHẦN 5: LỊCH SỬ TIN NHẮN (MESSAGES)
-        // ─────────────────────────────────────────────────────────────────────
-        if (y > pageHeight - 160) {
-          doc.addPage();
-          y = 60;
-        }
-
-        doc
-          .font("Bold")
-          .fontSize(13)
-          .fillColor("#0F172A")
-          .text("4. LỊCH SỬ TIN NHẮN ĐÃ GỬI (MESSAGES)", 45, y);
-        y += 18;
-
-        const messages = account.messages || [];
-        if (messages.length === 0) {
-          doc
-            .roundedRect(45, y, contentWidth, 40, 4)
-            .fillAndStroke("#F8FAFC", "#E2E8F0");
-          doc
-            .font("Regular")
-            .fontSize(8.5)
-            .fillColor("#64748B")
-            .text(
-              "Tài khoản chưa gửi tin nhắn nào trong các cuộc hội thoại tuyển dụng.",
-              57,
-              y + 14,
+          const {
+            skills,
+            workExperiences,
+            profileHighlights,
+            applications: _applications,
+            id: _id,
+            ...profile
+          } = account.talent;
+          void _applications;
+          void _id;
+          r.info(profile);
+          r.sub(t.skills);
+          if (skills?.length)
+            r.block(
+              skills
+                .map(
+                  (skill) =>
+                    skill.skill.name +
+                    (skill.yearsExp === null || skill.yearsExp === undefined
+                      ? ""
+                      : ` (${skill.yearsExp})`),
+                )
+                .join("  /  "),
             );
-          y += 55;
-        } else {
-          for (let mIdx = 0; mIdx < messages.length; mIdx++) {
-            const msg = messages[mIdx]!;
-            if (y > pageHeight - 80) {
-              doc.addPage();
-              y = 60;
-            }
-            const dateStr = new Date(msg.createdAt).toLocaleString("vi-VN");
-            doc
-              .roundedRect(45, y, contentWidth, 38, 4)
-              .fillAndStroke("#F8FAFC", "#E2E8F0");
-            doc
-              .font("Bold")
-              .fontSize(7.5)
-              .fillColor("#2563EB")
-              .text(
-                `Người gửi: Bạn | Mã hội thoại: ${msg.applicationId.slice(0, 16)}... | Thời gian: ${dateStr}`,
-                55,
-                y + 6,
-              );
-            doc
-              .font("Regular")
-              .fontSize(8)
-              .fillColor("#0F172A")
-              .text(msg.body, 55, y + 20, {
-                width: contentWidth - 20,
-                height: 16,
-              });
-            y += 44;
-          }
+          else r.empty();
+          r.sub(t.experience);
+          if (workExperiences?.length)
+            workExperiences.forEach((experience) => r.info(experience));
+          else r.empty();
+          r.sub(t.highlights);
+          if (profileHighlights?.length)
+            profileHighlights.forEach((highlight) => r.info(highlight));
+          else r.empty();
+          r.block(t.noCert, C.muted, 9);
+        } else r.empty();
+        if (account.employer) {
+          r.sub(t.company);
+          const { jobs, ...company } = account.employer;
+          r.info(company);
+          r.sub(t.jobs);
+          if (jobs?.length)
+            r.table(
+              [t.position, t.status, t.generated],
+              jobs.map((job) => [
+                job.title,
+                r.status(job.status),
+                r.date(job.createdAt),
+              ]),
+              [0.5, 0.22, 0.28],
+            );
+          else r.empty();
         }
 
-        // ─────────────────────────────────────────────────────────────────────
-        // PHẦN 6: CÀI ĐẶT THÔNG BÁO & JOB ALERTS
-        // ─────────────────────────────────────────────────────────────────────
-        if (y > pageHeight - 180) {
-          doc.addPage();
-          y = 60;
-        }
-
-        doc
-          .font("Bold")
-          .fontSize(13)
-          .fillColor("#0F172A")
-          .text("5. TÙY CHỌN THÔNG BÁO & CẢNH BÁO VIỆC LÀM", 45, y);
-        y += 18;
-
-        const notifs = account.notificationPreference || {};
-        const notifTable: [string, string][] = [
-          [
-            "Thông báo cập nhật đơn ứng tuyển (Application Updates)",
-            notifs.applicationUpdates !== false
-              ? "Bật (Enabled)"
-              : "Tắt (Disabled)",
-          ],
-          [
-            "Tin nhắn trực tiếp từ nhà tuyển dụng (Employer Messages)",
-            notifs.employerMessages !== false
-              ? "Bật (Enabled)"
-              : "Tắt (Disabled)",
-          ],
-          [
-            "Email tổng hợp hàng tuần (Weekly Digest)",
-            notifs.weeklyDigest !== false ? "Bật (Enabled)" : "Tắt (Disabled)",
-          ],
-          [
-            "Cảnh báo việc làm phù hợp tức thì (Instant Match Alerts)",
-            notifs.instantMatchAlerts !== false
-              ? "Bật (Enabled)"
-              : "Tắt (Disabled)",
-          ],
-          [
-            "Tin tức cập nhật sản phẩm & cẩm nang nghề nghiệp",
-            notifs.productNews ? "Bật (Enabled)" : "Tắt (Disabled)",
-          ],
-        ];
-
-        for (let i = 0; i < notifTable.length; i++) {
-          const [lbl, val] = notifTable[i]!;
-          const bg = i % 2 === 0 ? "#F8FAFC" : "#FFFFFF";
-          doc.rect(45, y, contentWidth, 19).fillAndStroke(bg, "#E2E8F0");
-          doc
-            .font("Bold")
-            .fontSize(8)
-            .fillColor("#475569")
-            .text(lbl, 55, y + 5, { width: col1W + 100 });
-          doc
-            .font("Regular")
-            .fontSize(8)
-            .fillColor("#0F172A")
-            .text(val, 45 + col1W + 110, y + 5, { width: col2W - 120 });
-          y += 19;
-        }
-        y += 15;
-
-        // Job alerts list
-        const alerts = account.jobAlerts || [];
-        if (alerts.length > 0) {
-          doc
-            .font("Bold")
-            .fontSize(9.5)
-            .fillColor("#1E40AF")
-            .text("BỘ ĐĂNG KÝ THEO DÕI VIỆC LÀM (JOB ALERTS):", 45, y);
-          y += 14;
-          for (const al of alerts) {
-            if (y > pageHeight - 60) {
-              doc.addPage();
-              y = 60;
-            }
-            doc
-              .font("Regular")
-              .fontSize(8)
-              .fillColor("#0F172A")
-              .text(
-                `• Từ khóa: "${al.keywords || "Tất cả"}" | Tần suất: ${al.frequency || "DAILY"} | Trạng thái: ${al.isActive !== false ? "Đang bật" : "Tạm ngưng"}`,
-                45,
-                y,
-              );
-            y += 14;
-          }
-          y += 10;
-        }
-
-        // ─────────────────────────────────────────────────────────────────────
-        // PHẦN 7: BẢO MẬT & XÁC NHẬN TUÂN THỦ (COMPLIANCE ATTESTATION)
-        // ─────────────────────────────────────────────────────────────────────
-        if (y > pageHeight - 150) {
-          doc.addPage();
-          y = 60;
-        }
-
-        doc
-          .roundedRect(45, y, contentWidth, 90, 6)
-          .fillAndStroke("#F0FDF4", "#BBF7D0");
-        doc
-          .font("Bold")
-          .fontSize(9.5)
-          .fillColor("#166534")
-          .text(
-            "6. XÁC NHẬN BẢO MẬT & TUÂN THỦ QUYỀN RIÊNG TƯ (PB17)",
-            58,
-            y + 10,
+        r.page(t.applications);
+        r.heading(t.applications);
+        if (!applications.length) r.empty();
+        else {
+          r.table(
+            [t.position, t.status, t.applied, t.updated],
+            applications.map((application) => [
+              `${application.job.title}\n${application.job.employer.companyName}`,
+              r.status(application.status),
+              r.date(application.appliedAt),
+              r.date(application.updatedAt),
+            ]),
+            [0.4, 0.2, 0.2, 0.2],
           );
-        doc
-          .font("Regular")
-          .fontSize(8)
-          .fillColor("#14532D")
-          .text(
-            "Báo cáo dữ liệu cá nhân này được hệ thống RemoteSEA kết xuất tự động theo đúng quyền của chủ thể dữ liệu (Right of access & data portability) quy định tại Điều 15 và Điều 20 Quy định Bảo vệ Dữ liệu Chung của Liên minh Châu Âu (GDPR), Đạo luật Bảo vệ Dữ liệu Cá nhân Singapore (PDPA) và Nghị định 13/2023/NĐ-CP về Bảo vệ dữ liệu cá nhân tại Việt Nam.\n\n" +
-              "Hệ thống xác nhận tuyệt đối: Toàn bộ mật khẩu đã băm (passwordHash), khóa bí mật xác thực 2 bước (2FA TOTP secrets / backup codes), token phiên làm việc (sessions) và khóa API bảo mật không được lưu trữ trong bản xuất này nhằm đảm bảo an toàn tuyệt đối cho tài khoản của bạn.",
-            58,
-            y + 25,
-            { width: contentWidth - 26, lineGap: 2.5 },
-          );
-
-        // ─────────────────────────────────────────────────────────────────────
-        // TWO-PASS HEADER & FOOTER ON ALL PAGES
-        // ─────────────────────────────────────────────────────────────────────
-        const range = doc.bufferedPageRange();
-        const totalPages = range.count;
-
-        for (let i = range.start; i < range.start + totalPages; i++) {
-          doc.switchToPage(i);
-
-          // Page 1 is Cover - do not add running header/footer
-          if (i === range.start) {
-            continue;
-          }
-
-          // Running Top Header
-          doc
-            .font("Regular")
-            .fontSize(7.5)
-            .fillColor("#94A3B8")
-            .text(
-              "RemoteSEA · Báo cáo Dữ liệu Cá nhân (GDPR/PDPA Export Dossier)",
-              45,
-              25,
+          applications.forEach((application, i) => {
+            const {
+              id: _id,
+              job,
+              status,
+              appliedAt: _appliedAt,
+              updatedAt: _updatedAt,
+              statusEvents,
+              ...details
+            } = application;
+            void _id;
+            void status;
+            void _appliedAt;
+            void _updatedAt;
+            const present = Object.fromEntries(
+              Object.entries(details).filter(
+                ([, value]) =>
+                  value !== null && value !== undefined && value !== "",
+              ),
             );
-          doc
-            .font("Regular")
-            .fontSize(7.5)
-            .fillColor("#94A3B8")
-            .text(refCode, pageWidth - 120, 25, { width: 75, align: "right" });
-          doc
-            .moveTo(45, 36)
-            .lineTo(pageWidth - 45, 36)
-            .strokeColor("#E2E8F0")
-            .lineWidth(0.5)
-            .stroke();
-
-          // Running Bottom Footer
-          doc
-            .moveTo(45, pageHeight - 35)
-            .lineTo(pageWidth - 45, pageHeight - 35)
-            .strokeColor("#E2E8F0")
-            .lineWidth(0.5)
-            .stroke();
-          doc
-            .font("Regular")
-            .fontSize(7.5)
-            .fillColor("#94A3B8")
-            .text(
-              "Bảo mật & Riêng tư · Strictly Confidential",
-              45,
-              pageHeight - 27,
-            );
-          doc
-            .font("Regular")
-            .fontSize(7.5)
-            .fillColor("#94A3B8")
-            .text(
-              `Trang ${i + 1} / ${totalPages}`,
-              pageWidth - 100,
-              pageHeight - 27,
-              { width: 55, align: "right" },
-            );
+            if (Object.keys(present).length || statusEvents?.length) {
+              r.sub(`${i + 1}. ${job.title}`);
+              if (Object.keys(present).length) r.info(present);
+              if (statusEvents?.length)
+                r.table(
+                  [t.status, t.generated],
+                  statusEvents.map((event) => [
+                    r.status(event.status),
+                    r.date(event.createdAt),
+                  ]),
+                  [0.5, 0.5],
+                );
+            }
+          });
         }
 
-        doc.end();
-      } catch (err) {
-        reject(err);
+        r.page(t.messages);
+        r.heading(t.messages);
+        r.block(t.messageScope, C.muted, 9);
+        const groups = new Map<string, typeof messages>();
+        for (const message of messages) {
+          const group = groups.get(message.applicationId) ?? [];
+          group.push(message);
+          groups.set(message.applicationId, group);
+        }
+        if (!groups.size) r.empty();
+        let groupIndex = 0;
+        for (const group of groups.values()) {
+          r.sub(`${t.conversation} ${String(++groupIndex).padStart(2, "0")}`);
+          const job = group[0]!.application?.job;
+          if (job)
+            r.block(
+              `${job.title} / ${job.employer.companyName}`,
+              C.secondary,
+              10,
+            );
+          for (const message of [...group].sort((a, b) =>
+            a.createdAt.localeCompare(b.createdAt),
+          )) {
+            r.space(64);
+            r.block(
+              `${t.you}: ${account.name || account.email}  |  ${t.sent}: ${r.date(message.createdAt)}`,
+              C.accent,
+              9,
+            );
+            r.block(message.body);
+            r.space(12);
+            doc
+              .moveTo(L, r.y)
+              .lineTo(L + W, r.y)
+              .strokeColor(C.line)
+              .lineWidth(0.5)
+              .stroke();
+            r.y += 14;
+          }
+        }
+
+        r.page(t.notifications);
+        r.heading(t.notifications);
+        if (account.notificationPreference) {
+          const { updatedAt, ...preferences } = account.notificationPreference;
+          r.info(preferences);
+          if (updatedAt)
+            r.block(`${t.updated}: ${r.date(updatedAt)}`, C.muted, 9);
+        } else r.empty(t.noPrefs);
+        r.sub(t.alerts);
+        if (account.jobAlerts?.length)
+          account.jobAlerts.forEach((alert) => {
+            const { categories, ...fields } = alert;
+            r.info({
+              ...fields,
+              categories: categories?.map((item) => item.category.name) ?? [],
+            });
+          });
+        else r.empty();
+
+        r.page(t.about);
+        r.heading(t.about);
+        r.info({
+          [t.generated]: r.date(payload.exportedAt),
+          [t.timezone]: "UTC",
+          [t.reference]: reference,
+          [t.version]: payload.metadata?.schemaVersion ?? "2.0",
+        });
+        r.block(t.scopeSummary);
+        r.block(t.messageScope);
+        r.block(t.consistency);
+        r.block(t.exclusions);
+        r.block(t.bounds);
+        r.sub(t.confidentiality);
+        r.block(t.policy);
+        r.finish();
+      } catch (error) {
+        doc.destroy();
+        reject(error);
       }
     });
   }

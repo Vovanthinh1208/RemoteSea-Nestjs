@@ -1,3 +1,4 @@
+import { collectPersonalData } from "./personal-data-collector";
 import { Injectable } from "@nestjs/common";
 import type { Account, NotificationPreference, User } from "@prisma/client";
 import { PrismaService } from "@/core/database/prisma.service";
@@ -122,67 +123,7 @@ export class UsersRepository {
   // internal-only fields (passwordHash, stripeSessionId, reviewNote) that
   // aren't "the user's data" in the export sense.
   findExportData(userId: string) {
-    return this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        image: true,
-        emailVerified: true,
-        phone: true,
-        language: true,
-        region: true,
-        currencyDisplay: true,
-        role: true,
-        isPaused: true,
-        pausedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        talent: {
-          include: {
-            skills: { include: { skill: { select: { name: true } } } },
-            applications: {
-              include: {
-                job: {
-                  select: {
-                    title: true,
-                    slug: true,
-                    employer: { select: { companyName: true } },
-                  },
-                },
-              },
-              orderBy: { appliedAt: "desc" },
-            },
-            workExperiences: {
-              orderBy: { startDate: "desc" },
-            },
-            profileHighlights: true,
-          },
-        },
-        employer: {
-          include: {
-            jobs: {
-              select: {
-                title: true,
-                slug: true,
-                status: true,
-                createdAt: true,
-                publishedAt: true,
-              },
-            },
-          },
-        },
-        jobAlerts: true,
-        notificationPreference: true,
-        // PB17 step 2: messages the user sent (their own words only — the other
-        // party's messages belong to that person's export).
-        messages: {
-          select: { applicationId: true, body: true, createdAt: true },
-          orderBy: { createdAt: "asc" },
-        },
-      },
-    });
+    return collectPersonalData(this.prisma, userId);
   }
 
   listConnections(

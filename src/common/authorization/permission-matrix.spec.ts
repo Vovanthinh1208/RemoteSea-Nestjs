@@ -835,6 +835,12 @@ const expectations: ControllerExpectation[] = [
         guards: ["JwtAuthGuard"],
       },
       {
+        method: "downloadData",
+        httpMethod: "GET",
+        path: "data-export",
+        guards: ["JwtAuthGuard"],
+      },
+      {
         method: "listConnections",
         httpMethod: "GET",
         path: "connections",

@@ -1,4 +1,5 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger, HttpStatus } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { ConfigService } from "@nestjs/config";
 // Native bcrypt (threadpool) — see auth.service.ts for the bcryptjs rationale.
 import * as bcrypt from "bcrypt";
@@ -12,6 +13,9 @@ import type { UpdateNotificationPreferencesDto } from "./dto/update-notification
 import {
   BadRequestApiException,
   ConflictApiException,
+  ApiException,
+  TooManyRequestsApiException,
+  ServiceUnavailableApiException,
 } from "@/common/exceptions/api.exception";
 import { ErrorCode } from "@/common/exceptions/error-codes";
 import { BCRYPT_SALT_ROUNDS } from "@/common/constants/bcrypt.constants";
@@ -21,13 +25,21 @@ import type { EnvConfig } from "@/core/config/env.validation";
 import { AuthService } from "@/modules/auth/auth.service";
 import { MetricsService } from "@/modules/metrics/metrics.service";
 import { sanitizePersonalData } from "./personal-data-sanitizer";
+import { renderPersonalDataPdf } from "./personal-data-pdf-job";
 import {
-  PersonalDataPdfRenderer,
+  personalDataAccountSchema,
+  EXPORT_SCHEMA_VERSION,
+  EXPORT_BYTE_LIMIT,
+  ExportTooLargeError,
   type PersonalDataExportPayload,
-} from "./personal-data-pdf-renderer";
+  type ExportLocale,
+} from "./personal-data-contract";
 
 @Injectable()
 export class UsersService {
+  private readonly exportLogger = new Logger("PersonalDataExport");
+  private readonly exportsInProgress = new Set<string>();
+  private static activeExports = 0;
   constructor(
     private readonly usersRepository: UsersRepository,
     private readonly uploadsService: UploadsService,
@@ -236,7 +248,9 @@ export class UsersService {
     return this.usersRepository.setPaused(userId, false);
   }
 
-  async exportData(userId: string) {
+  private async collectExport(
+    userId: string,
+  ): Promise<PersonalDataExportPayload> {
     const data = await this.usersRepository.findExportData(userId);
     // The route is behind JwtAuthGuard against the token's own sub claim, so
     // a missing row here would mean the user row vanished mid-request (e.g. a
@@ -247,17 +261,107 @@ export class UsersService {
         ErrorCode.USER_NOT_FOUND,
       );
     }
+    const { exportSnapshotAt, ...fields } = data;
+    const serialized = JSON.stringify(sanitizePersonalData(fields));
+    if (Buffer.byteLength(serialized) > EXPORT_BYTE_LIMIT)
+      throw new ExportTooLargeError();
+    const account = personalDataAccountSchema.parse(JSON.parse(serialized));
+    if (account.id !== userId) throw new Error("Invalid export ownership");
     return {
-      exportedAt: new Date().toISOString(),
-      account: sanitizePersonalData(data),
+      exportedAt: (exportSnapshotAt ?? new Date()).toISOString(),
+      account,
+      metadata: {
+        referenceId: randomUUID(),
+        schemaVersion: EXPORT_SCHEMA_VERSION,
+        timeZone: "UTC",
+        consistency: "read-only REPEATABLE READ snapshot",
+        messageScope:
+          "authored messages in currently authorized application conversations",
+        exclusions: [
+          "Credentials and sessions",
+          "Other users' data and incoming messages",
+          "Employer-private notes, scorecards and AI evaluations",
+          "External attachment bytes",
+          "Saved jobs, reviews, interview files and AI conversation history",
+        ],
+      },
     };
   }
 
-  async exportDataAsPdf(userId: string): Promise<Buffer> {
-    const rawData = await this.exportData(userId);
-    return PersonalDataPdfRenderer.render(
-      rawData as unknown as PersonalDataExportPayload,
-    );
+  private async withExportGuard<T>(
+    userId: string,
+    format: "pdf" | "json",
+    action: () => Promise<{ value: T; referenceId: string; bytes: number }>,
+  ): Promise<T> {
+    if (this.exportsInProgress.has(userId) || UsersService.activeExports >= 2)
+      throw new TooManyRequestsApiException(5);
+    this.exportsInProgress.add(userId);
+    UsersService.activeExports++;
+    const started = Date.now();
+    try {
+      const result = await action();
+      this.exportLogger.log(
+        JSON.stringify({
+          event: "personal_data_export",
+          format,
+          outcome: "completed",
+          referenceId: result.referenceId,
+          bytes: result.bytes,
+          durationMs: Date.now() - started,
+        }),
+      );
+      return result.value;
+    } catch (error) {
+      // Audit metadata only. Never log query errors, account IDs, names,
+      // email addresses, message bodies, tokens or document contents.
+      this.exportLogger.warn(
+        JSON.stringify({
+          event: "personal_data_export",
+          format,
+          outcome: "failed",
+          durationMs: Date.now() - started,
+        }),
+      );
+      if (error instanceof ApiException) throw error;
+      if (error instanceof ExportTooLargeError)
+        throw new ApiException(
+          HttpStatus.PAYLOAD_TOO_LARGE,
+          "This export exceeds the current archive limits. Try JSON for a large PDF, or contact support for a larger archive.",
+          ErrorCode.BAD_REQUEST,
+        );
+      throw new ServiceUnavailableApiException(
+        "Your data export could not be prepared. Please try again shortly.",
+      );
+    } finally {
+      this.exportsInProgress.delete(userId);
+      UsersService.activeExports--;
+    }
+  }
+
+  exportData(userId: string): Promise<PersonalDataExportPayload> {
+    return this.withExportGuard(userId, "json", async () => {
+      const payload = await this.collectExport(userId);
+      return {
+        value: payload,
+        referenceId: payload.metadata!.referenceId,
+        bytes: Buffer.byteLength(JSON.stringify(payload)),
+      };
+    });
+  }
+
+  exportDataAsPdf(
+    userId: string,
+    locale: ExportLocale = "vi",
+  ): Promise<Buffer> {
+    return this.withExportGuard(userId, "pdf", async () => {
+      const payload = await this.collectExport(userId);
+      const value = await renderPersonalDataPdf(payload, locale);
+      return {
+        value,
+        referenceId: payload.metadata!.referenceId,
+        bytes: value.length,
+      };
+    });
   }
 
   listConnections(userId: string) {

@@ -11,7 +11,7 @@ import type { ConfigService } from "@nestjs/config";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import type { Response } from "express";
 
-describe("PB17 E2E & Compliance Suite (TC01 - TC20)", () => {
+describe("PB17 controller/service/collector fixture integration (not browser E2E)", () => {
   let controller: UsersController;
   let service: UsersService;
   let repository: UsersRepository;
@@ -87,7 +87,7 @@ describe("PB17 E2E & Compliance Suite (TC01 - TC20)", () => {
       workExperiences: [
         {
           company: "VNG Cloud",
-          position: "Senior Frontend Engineer",
+          title: "Senior Frontend Engineer",
           startDate: new Date("2021-01-01"),
           endDate: new Date("2024-01-01"),
           isCurrent: false,
@@ -165,6 +165,63 @@ describe("PB17 E2E & Compliance Suite (TC01 - TC20)", () => {
       },
     };
 
+    mockPrisma.$transaction = (fn: (tx: unknown) => unknown) => fn(mockPrisma);
+    mockPrisma.$executeRaw = jest.fn().mockResolvedValue(0);
+    mockPrisma.$queryRaw = jest.fn().mockResolvedValue([{ at: new Date() }]);
+    mockPrisma.talentProfile = {
+      findUnique: jest.fn(({ where }) =>
+        Promise.resolve(where.userId === userA.id ? dbUserDataA.talent : null),
+      ),
+    };
+    mockPrisma.employerProfile = {
+      findUnique: jest.fn(({ where }) =>
+        Promise.resolve(
+          where.userId === userB.id
+            ? { companyName: "Acme SEA Labs", industry: "Fintech" }
+            : null,
+        ),
+      ),
+    };
+    for (const [model, field] of [
+      ["workExperience", "workExperiences"],
+      ["profileHighlight", "profileHighlights"],
+      ["application", "applications"],
+    ] as const) {
+      mockPrisma[model] = {
+        findMany: jest.fn(({ where }) =>
+          Promise.resolve(
+            where.talent.userId === userA.id
+              ? (dbUserDataA.talent[field] ?? [])
+              : [],
+          ),
+        ),
+      };
+    }
+    mockPrisma.talentSkill = { findMany: jest.fn().mockResolvedValue([]) };
+    mockPrisma.applicationStatusEvent = {
+      findMany: jest.fn().mockResolvedValue([]),
+    };
+    mockPrisma.message = {
+      findMany: jest.fn(({ where }) =>
+        Promise.resolve(
+          where.senderId === userA.id ? dbUserDataA.messages : [],
+        ),
+      ),
+    };
+    mockPrisma.jobAlert = {
+      findMany: jest.fn(({ where }) =>
+        Promise.resolve(where.userId === userA.id ? dbUserDataA.jobAlerts : []),
+      ),
+    };
+    mockPrisma.job = { findMany: jest.fn().mockResolvedValue([]) };
+    mockPrisma.notificationPreference = {
+      findUnique: jest.fn(({ where }) =>
+        Promise.resolve(
+          where.userId === userA.id ? dbUserDataA.notificationPreference : null,
+        ),
+      ),
+    };
+
     repository = new UsersRepository(mockPrisma as unknown as PrismaService);
     service = new UsersService(
       repository,
@@ -180,7 +237,7 @@ describe("PB17 E2E & Compliance Suite (TC01 - TC20)", () => {
 
     controller = new UsersController(
       service,
-      {} as RateLimitService,
+      { enforce: jest.fn() } as unknown as RateLimitService,
       {} as AuthService,
     );
   });

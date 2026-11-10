@@ -37,7 +37,7 @@ describe("UsersController.exportData (PB17 - PDF & JSON Export)", () => {
 
     controller = new UsersController(
       mockUsersService as unknown as UsersService,
-      {} as RateLimitService,
+      { enforce: jest.fn() } as unknown as RateLimitService,
       {} as AuthService,
     );
   });
@@ -49,7 +49,10 @@ describe("UsersController.exportData (PB17 - PDF & JSON Export)", () => {
       mockResponse as unknown as Response,
     );
 
-    expect(mockUsersService.exportDataAsPdf).toHaveBeenCalledWith("usr_mock_1");
+    expect(mockUsersService.exportDataAsPdf).toHaveBeenCalledWith(
+      "usr_mock_1",
+      "vi",
+    );
     expect(mockResponse.setHeader).toHaveBeenCalledWith(
       "Content-Type",
       "application/pdf",

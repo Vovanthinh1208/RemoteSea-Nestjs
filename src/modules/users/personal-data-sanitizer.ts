@@ -25,7 +25,8 @@ const FORBIDDEN_KEY_PATTERNS = [
 ];
 
 export function isForbiddenKey(key: string): boolean {
-  return FORBIDDEN_KEY_PATTERNS.some((pattern) => pattern.test(key));
+  const normalized = key.replace(/[^a-z0-9]/gi, "");
+  return FORBIDDEN_KEY_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
 export function sanitizePersonalData<T>(input: T): T {
@@ -38,7 +39,7 @@ export function sanitizePersonalData<T>(input: T): T {
   }
 
   if (typeof input === "object" && !(input instanceof Date)) {
-    const sanitized: Record<string, unknown> = {};
+    const sanitized: Record<string, unknown> = Object.create(null);
     for (const [key, value] of Object.entries(input)) {
       if (isForbiddenKey(key)) {
         // Drop the sensitive property completely

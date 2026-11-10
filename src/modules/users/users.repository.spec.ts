@@ -113,9 +113,13 @@ describe("UsersRepository.disconnectConnectionSafely", () => {
 describe("UsersRepository.findExportData", () => {
   it("exports user-editable account data without credentials or 2FA secrets", async () => {
     const findUnique = jest.fn().mockResolvedValue(null);
-    const repository = new UsersRepository({
+    const tx = {
       user: { findUnique },
-    } as unknown as PrismaService);
+      $executeRaw: jest.fn().mockResolvedValue(0),
+      $queryRaw: jest.fn().mockResolvedValue([{ at: new Date() }]),
+    };
+    const prisma = { $transaction: jest.fn((fn) => fn(tx)) };
+    const repository = new UsersRepository(prisma as unknown as PrismaService);
 
     await repository.findExportData("user-1");
 
@@ -134,12 +138,12 @@ describe("UsersRepository.findExportData", () => {
       pausedAt: true,
       createdAt: true,
       updatedAt: true,
-      talent: expect.any(Object),
-      employer: expect.any(Object),
-      jobAlerts: true,
-      notificationPreference: true,
-      messages: expect.any(Object),
     });
+    expect(prisma.$transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ isolationLevel: "RepeatableRead" }),
+    );
+    expect(tx.$executeRaw).toHaveBeenCalled();
     expect(select).not.toHaveProperty("passwordHash");
     expect(select).not.toHaveProperty("twoFactorSecret");
     expect(select).not.toHaveProperty("twoFactorBackupCodes");

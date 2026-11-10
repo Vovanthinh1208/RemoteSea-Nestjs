@@ -1,4 +1,13 @@
 declare module "pdfkit" {
+  export interface TextOptions {
+    width?: number;
+    height?: number;
+    align?: "left" | "center" | "right" | "justify";
+    lineBreak?: boolean;
+    lineGap?: number;
+    continued?: boolean;
+    paragraphGap?: number;
+  }
   export interface PDFDocumentOptions {
     size?: string | [number, number];
     layout?: "portrait" | "landscape";
@@ -29,12 +38,16 @@ declare module "pdfkit" {
     };
     x: number;
     y: number;
-    info: Record<string, any>;
+    info: Record<string, string | Date>;
     bufferedPageRange(): { start: number; count: number };
     switchToPage(pageIndex: number): void;
     addPage(options?: PDFDocumentOptions): this;
-    pipe<T extends NodeJS.WritableStream>(destination: T, options?: any): T;
+    pipe<T extends NodeJS.WritableStream>(
+      destination: T,
+      options?: { end?: boolean },
+    ): T;
     end(): void;
+    destroy(error?: Error): this;
     fontSize(size: number): this;
     font(src: string, family?: string, size?: number): this;
     registerFont(name: string, src: string, family?: string): this;
@@ -51,13 +64,15 @@ declare module "pdfkit" {
     moveTo(x: number, y: number): this;
     lineTo(x: number, y: number): this;
     lineWidth(w: number): this;
-    text(text: string, x?: number, y?: number, options?: any): this;
-    text(text: string, options?: any): this;
-    heightOfString(text: string, options?: any): number;
-    widthOfString(text: string, options?: any): number;
+    text(text: string, x?: number, y?: number, options?: TextOptions): this;
+    text(text: string, options?: TextOptions): this;
+    heightOfString(text: string, options?: TextOptions): number;
+    widthOfString(text: string, options?: TextOptions): number;
     save(): this;
     restore(): this;
-    on(event: string, callback: (...args: any[]) => void): this;
+    on(event: "data", callback: (chunk: Buffer) => void): this;
+    on(event: "error", callback: (error: Error) => void): this;
+    on(event: "end", callback: () => void): this;
   }
 
   const PDFDoc: typeof PDFDocument;
