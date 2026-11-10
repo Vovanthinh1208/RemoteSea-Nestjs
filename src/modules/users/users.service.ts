@@ -20,6 +20,11 @@ import { isOwnedUploadUrl } from "@/modules/uploads/upload-url.util";
 import type { EnvConfig } from "@/core/config/env.validation";
 import { AuthService } from "@/modules/auth/auth.service";
 import { MetricsService } from "@/modules/metrics/metrics.service";
+import { sanitizePersonalData } from "./personal-data-sanitizer";
+import {
+  PersonalDataPdfRenderer,
+  type PersonalDataExportPayload,
+} from "./personal-data-pdf-renderer";
 
 @Injectable()
 export class UsersService {
@@ -242,7 +247,17 @@ export class UsersService {
         ErrorCode.USER_NOT_FOUND,
       );
     }
-    return { exportedAt: new Date().toISOString(), account: data };
+    return {
+      exportedAt: new Date().toISOString(),
+      account: sanitizePersonalData(data),
+    };
+  }
+
+  async exportDataAsPdf(userId: string): Promise<Buffer> {
+    const rawData = await this.exportData(userId);
+    return PersonalDataPdfRenderer.render(
+      rawData as unknown as PersonalDataExportPayload,
+    );
   }
 
   listConnections(userId: string) {

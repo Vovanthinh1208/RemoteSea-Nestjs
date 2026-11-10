@@ -143,13 +143,11 @@ describe("JobReportsService.resolve", () => {
   // on (a concurrent admin action landed in between).
   it("throws JOB_REPORT_ALREADY_RESOLVED when the atomic update finds it no longer OPEN", async () => {
     const { service } = makeService({
-      findByIdForAdmin: jest
-        .fn()
-        .mockResolvedValue({
-          id: "rep-1",
-          status: "OPEN",
-          job: { title: "Engineer" },
-        }),
+      findByIdForAdmin: jest.fn().mockResolvedValue({
+        id: "rep-1",
+        status: "OPEN",
+        job: { title: "Engineer" },
+      }),
       updateStatus: jest.fn().mockResolvedValue(null),
     });
 

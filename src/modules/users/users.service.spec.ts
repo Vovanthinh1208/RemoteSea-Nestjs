@@ -363,3 +363,51 @@ describe("UsersService.disconnectConnection (PB18)", () => {
     });
   });
 });
+
+describe("UsersService.exportData (PB17)", () => {
+  it("TC01 & TC04: gathers and sanitizes user data, excluding credentials", async () => {
+    const findExportData = jest.fn().mockResolvedValue({
+      id: "user-1",
+      email: "user@example.com",
+      passwordHash: "should_be_stripped",
+      twoFactorSecret: "should_be_stripped",
+    });
+    const { service } = makeService({ findExportData });
+
+    const result = await service.exportData("user-1");
+
+    expect(findExportData).toHaveBeenCalledWith("user-1");
+    expect(result.account).toEqual({
+      id: "user-1",
+      email: "user@example.com",
+    });
+    expect(result.account).not.toHaveProperty("passwordHash");
+    expect(result.account).not.toHaveProperty("twoFactorSecret");
+    expect(result.exportedAt).toBeDefined();
+  });
+
+  it("TC12: throws USER_NOT_FOUND when repository returns null", async () => {
+    const findExportData = jest.fn().mockResolvedValue(null);
+    const { service } = makeService({ findExportData });
+
+    await expect(service.exportData("missing-user")).rejects.toMatchObject({
+      response: { code: ErrorCode.USER_NOT_FOUND },
+    });
+  });
+
+  it("TC01: exportDataAsPdf produces a valid PDF buffer", async () => {
+    const findExportData = jest.fn().mockResolvedValue({
+      id: "user-1",
+      email: "user@example.com",
+      name: "Alex User",
+      role: "TALENT",
+      createdAt: new Date(),
+    });
+    const { service } = makeService({ findExportData });
+
+    const pdfBuffer = await service.exportDataAsPdf("user-1");
+
+    expect(pdfBuffer).toBeInstanceOf(Buffer);
+    expect(pdfBuffer.subarray(0, 5).toString("utf-8")).toBe("%PDF-");
+  });
+});

@@ -6,8 +6,12 @@ import {
   Param,
   Patch,
   Post,
+  Query,
+  Res,
+  StreamableFile,
   UseGuards,
 } from "@nestjs/common";
+import type { Response } from "express";
 import { UsersService } from "./users.service";
 import { updateUserSchema, type UpdateUserDto } from "./dto/update-user.dto";
 import {
@@ -160,10 +164,31 @@ export class UsersController {
     return this.usersService.reactivateAccount(user.id);
   }
 
-  // Settings > Privacy & data "Download your data".
+  // Settings > Privacy & data "Download your data" (PB17 - JSON & PDF).
   @ApiExportData()
-  @Get("export")
-  async exportData(@CurrentUser() user: AuthenticatedUser) {
+  @Get(["export", "data-export"])
+  async exportData(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query("format") format: string = "json",
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const isPdf = format?.toLowerCase() === "pdf";
+    const dateStr = new Date().toISOString().split("T")[0];
+
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+
+    if (isPdf) {
+      const buffer = await this.usersService.exportDataAsPdf(user.id);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="remotesea-personal-data-${dateStr}.pdf"`,
+      );
+      return new StreamableFile(buffer);
+    }
+
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
     return this.usersService.exportData(user.id);
   }
 

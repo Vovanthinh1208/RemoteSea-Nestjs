@@ -103,9 +103,7 @@ export class AdminRepository {
     ]);
   }
 
-  findEmployerById(
-    id: string,
-  ): Promise<
+  findEmployerById(id: string): Promise<
     | (Pick<EmployerProfile, "id" | "companyName" | "isVerified"> & {
         user: { email: string };
       })

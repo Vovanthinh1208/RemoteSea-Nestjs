@@ -143,8 +143,21 @@ export class UsersRepository {
           include: {
             skills: { include: { skill: { select: { name: true } } } },
             applications: {
-              include: { job: { select: { title: true, slug: true } } },
+              include: {
+                job: {
+                  select: {
+                    title: true,
+                    slug: true,
+                    employer: { select: { companyName: true } },
+                  },
+                },
+              },
+              orderBy: { appliedAt: "desc" },
             },
+            workExperiences: {
+              orderBy: { startDate: "desc" },
+            },
+            profileHighlights: true,
           },
         },
         employer: {
