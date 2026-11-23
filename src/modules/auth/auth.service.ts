@@ -12,6 +12,7 @@ import { Prisma } from "@prisma/client";
 import { AuthRepository, type SessionMeta } from "./auth.repository";
 import { AuthMapper } from "./auth.mapper";
 import {
+  MAX_TWO_FACTOR_CHALLENGE_ATTEMPTS,
   OAUTH_EXCHANGE_TTL,
   RESET_TOKEN_TTL_MS,
   TWO_FACTOR_ISSUER,
@@ -65,6 +66,39 @@ const generateBackupCodes = (count = BACKUP_CODE_COUNT): string[] =>
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+
+  // PB03 RC3: at most 5 failed verification attempts before cancelling the challenge session.
+  private readonly challengeAttempts = new Map<
+    string,
+    { failedCount: number; expiresAt: number; cancelled: boolean }
+  >();
+
+  private getChallengeTokenKey(challengeToken: string): string {
+    return crypto.createHash("sha256").update(challengeToken).digest("hex");
+  }
+
+  private cleanupChallengeAttempts(now: number = Date.now()): void {
+    if (this.challengeAttempts.size > 1000) {
+      for (const [key, state] of this.challengeAttempts.entries()) {
+        if (state.expiresAt <= now) {
+          this.challengeAttempts.delete(key);
+        }
+      }
+    }
+  }
+
+  private recordFailedChallengeAttempt(challengeKey: string): void {
+    const now = Date.now();
+    this.cleanupChallengeAttempts(now);
+    const current = this.challengeAttempts.get(challengeKey);
+    const failedCount = (current?.failedCount ?? 0) + 1;
+    const isCancelled = failedCount >= MAX_TWO_FACTOR_CHALLENGE_ATTEMPTS;
+    this.challengeAttempts.set(challengeKey, {
+      failedCount,
+      cancelled: isCancelled,
+      expiresAt: now + 5 * 60_000,
+    });
+  }
 
   constructor(
     private readonly authRepository: AuthRepository,
@@ -247,6 +281,12 @@ export class AuthService {
 
   async validateOAuthLogin(profile: OAuthProfile): Promise<AuthenticatedUser> {
     const user = await this.authRepository.findOrCreateOAuthUser(profile);
+    if (user.bannedAt) {
+      throw new ForbiddenApiException(
+        "This account has been banned",
+        ErrorCode.ACCOUNT_BANNED,
+      );
+    }
     return AuthMapper.toAuthenticatedUser(user);
   }
 
@@ -293,6 +333,12 @@ export class AuthService {
       throw new UnauthorizedApiException(
         "This sign-in link has expired — please try again",
         ErrorCode.INVALID_OAUTH_EXCHANGE_CODE,
+      );
+    }
+    if (user.bannedAt) {
+      throw new ForbiddenApiException(
+        "This account has been banned",
+        ErrorCode.ACCOUNT_BANNED,
       );
     }
 
@@ -542,6 +588,20 @@ export class AuthService {
       );
     }
 
+    // PB03 RC3: Check if the challenge session was cancelled due to exceeding max failed attempts.
+    const challengeKey = this.getChallengeTokenKey(challengeToken);
+    const attemptState = this.challengeAttempts.get(challengeKey);
+    if (
+      attemptState &&
+      (attemptState.cancelled ||
+        attemptState.failedCount >= MAX_TWO_FACTOR_CHALLENGE_ATTEMPTS)
+    ) {
+      throw new UnauthorizedApiException(
+        "This code has expired — please sign in again",
+        ErrorCode.INVALID_CHALLENGE_TOKEN,
+      );
+    }
+
     const user = await this.authRepository.findUserById(payload.sub);
     if (!user?.twoFactorEnabled || !user.twoFactorSecret) {
       throw new UnauthorizedApiException(
@@ -573,6 +633,7 @@ export class AuthService {
       );
       const matchedIndex = comparisons.indexOf(true);
       if (matchedIndex === -1) {
+        this.recordFailedChallengeAttempt(challengeKey);
         throw new BadRequestApiException(
           "Invalid code",
           ErrorCode.INVALID_TWO_FACTOR_CODE,
@@ -580,6 +641,7 @@ export class AuthService {
       }
       const matchedHash = user.twoFactorBackupCodes[matchedIndex];
       if (!matchedHash) {
+        this.recordFailedChallengeAttempt(challengeKey);
         throw new BadRequestApiException(
           "Invalid code",
           ErrorCode.INVALID_TWO_FACTOR_CODE,
@@ -590,12 +652,16 @@ export class AuthService {
         matchedHash,
       );
       if (!consumed) {
+        this.recordFailedChallengeAttempt(challengeKey);
         throw new BadRequestApiException(
           "Invalid code",
           ErrorCode.INVALID_TWO_FACTOR_CODE,
         );
       }
     }
+
+    // Success: remove challenge attempt tracker for this completed challenge
+    this.challengeAttempts.delete(challengeKey);
 
     return this.issueToken(AuthMapper.toAuthenticatedUser(user), sessionMeta);
   }

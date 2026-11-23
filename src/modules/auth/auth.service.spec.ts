@@ -1011,4 +1011,171 @@ describe("AuthService.completeTwoFactorChallenge", () => {
       code: ErrorCode.INVALID_TWO_FACTOR_CODE,
     });
   });
+
+  // PB03-TC010: Giới hạn tối đa 5 lần thử nhập sai mã xác thực trước khi hủy phiên challenge.
+  // Sau 5 lần nhập sai, phiên challenge bị hủy; lần thứ 6 nhập đúng mã vẫn bị từ chối.
+  it("PB03-TC010: cancels challenge session after 5 failed attempts — 6th attempt with valid code is rejected", async () => {
+    (bcrypt.compare as jest.Mock).mockImplementation(
+      async (plain: string, hash: string) => {
+        return plain === "VALID-CODE" && hash === "$2b$10$hashedCode1";
+      },
+    );
+
+    const { service, jwtService } = makeService({
+      authRepository: {
+        findUserById: jest.fn().mockResolvedValue(mockUserWith2FA),
+        consumeBackupCode: jest.fn().mockResolvedValue(true),
+      },
+    });
+    jwtService.verify.mockReturnValue(mockChallengePayload);
+
+    // 5 failed attempts with invalid code
+    for (let i = 1; i <= 5; i++) {
+      const err = await service
+        .completeTwoFactorChallenge(challengeToken, "WRONG-CODE")
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestApiException);
+      expect((err as BadRequestApiException).getResponse()).toMatchObject({
+        code: ErrorCode.INVALID_TWO_FACTOR_CODE,
+      });
+    }
+
+    // 6th attempt with valid code must be rejected because challenge session is cancelled
+    const sixthAttempt = await service
+      .completeTwoFactorChallenge(challengeToken, "VALID-CODE")
+      .catch((e: unknown) => e);
+
+    expect(sixthAttempt).toBeInstanceOf(UnauthorizedApiException);
+    expect((sixthAttempt as UnauthorizedApiException).getResponse()).toMatchObject({
+      code: ErrorCode.INVALID_CHALLENGE_TOKEN,
+    });
+
+    // A fresh challenge token (from a new login step 1) has its own budget and succeeds
+    const freshChallengeToken = "fresh.challenge.token";
+    const result = await service.completeTwoFactorChallenge(
+      freshChallengeToken,
+      "VALID-CODE",
+    );
+    expect(result).toHaveProperty("accessToken");
+    expect(result.user.id).toBe("u1");
+  });
+
+  it("PB03-TC010: allows successful completion on attempt 5 after 4 failed attempts", async () => {
+    (bcrypt.compare as jest.Mock).mockImplementation(
+      async (plain: string, hash: string) => {
+        return plain === "VALID-CODE" && hash === "$2b$10$hashedCode1";
+      },
+    );
+
+    const { service, jwtService } = makeService({
+      authRepository: {
+        findUserById: jest.fn().mockResolvedValue(mockUserWith2FA),
+        consumeBackupCode: jest.fn().mockResolvedValue(true),
+      },
+    });
+    jwtService.verify.mockReturnValue(mockChallengePayload);
+
+    // 4 failed attempts
+    for (let i = 1; i <= 4; i++) {
+      const err = await service
+        .completeTwoFactorChallenge(challengeToken, "WRONG-CODE")
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestApiException);
+    }
+
+    // 5th attempt with valid code succeeds
+    const successResult = await service.completeTwoFactorChallenge(
+      challengeToken,
+      "VALID-CODE",
+    );
+    expect(successResult).toHaveProperty("accessToken");
+    expect(successResult.user.id).toBe("u1");
+  });
+
+  // User workflow:
+  // Phiên 1: Email + Password -> Nhập sai OTP 5 lần -> Challenge bị hủy
+  // Phiên 2: Email + Password -> Tạo Challenge mới -> Nhập Backup Code hợp lệ -> Đăng nhập thành công
+  // Phiên 3: Đăng xuất -> Email + Password -> Tạo Challenge mới -> Nhập OTP hợp lệ -> Đăng nhập thành công
+  it("PB03-TC010: executes the full 3-session workflow (cancelled challenge -> backup code login -> OTP login)", async () => {
+    const { generateSecret, generate: generateOtp } = await import("otplib");
+    const secret = generateSecret();
+    const validOtp = await generateOtp({ secret });
+
+    const userWithTotpAndBackup = {
+      id: "u1",
+      email: "user@example.test",
+      name: "Test User",
+      role: "TALENT",
+      twoFactorEnabled: true,
+      twoFactorSecret: secret,
+      twoFactorBackupCodes: ["$2b$10$hashedBackupCode1"],
+    };
+
+    (bcrypt.compare as jest.Mock).mockImplementation(
+      async (plain: string, hash: string) => {
+        return plain === "VALID-BACKUP" && hash === "$2b$10$hashedBackupCode1";
+      },
+    );
+
+    const { service, jwtService } = makeService({
+      authRepository: {
+        findUserById: jest.fn().mockResolvedValue(userWithTotpAndBackup),
+        consumeBackupCode: jest.fn().mockResolvedValue(true),
+      },
+    });
+
+    // ─── PHIÊN 1 ─────────────────────────────────────────────────────────────
+    // 1. User validates credentials -> receives challengeToken 1
+    const challenge1 = "challenge.session.1";
+    jwtService.verify.mockImplementation((t: string) => {
+      if (t === challenge1) return { sub: "u1", purpose: "2fa_challenge" };
+      if (t === "challenge.session.2") return { sub: "u1", purpose: "2fa_challenge" };
+      if (t === "challenge.session.3") return { sub: "u1", purpose: "2fa_challenge" };
+      throw new Error("Invalid token");
+    });
+
+    // 2. User enters wrong OTP 5 times
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      const err = await service
+        .completeTwoFactorChallenge(challenge1, "000000")
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestApiException);
+      expect((err as BadRequestApiException).getResponse()).toMatchObject({
+        code: ErrorCode.INVALID_TWO_FACTOR_CODE,
+      });
+    }
+
+    // 3. Challenge 1 is now cancelled — 6th attempt (even with valid OTP) is rejected
+    const sixthAttempt = await service
+      .completeTwoFactorChallenge(challenge1, validOtp)
+      .catch((e: unknown) => e);
+    expect(sixthAttempt).toBeInstanceOf(UnauthorizedApiException);
+    expect((sixthAttempt as UnauthorizedApiException).getResponse()).toMatchObject({
+      code: ErrorCode.INVALID_CHALLENGE_TOKEN,
+    });
+
+    // ─── PHIÊN 2 ─────────────────────────────────────────────────────────────
+    // 1. User logs in again (Email + Password) -> receives challengeToken 2
+    const challenge2 = "challenge.session.2";
+
+    // 2. User enters valid Backup Code -> Login succeeds!
+    const session2Result = await service.completeTwoFactorChallenge(
+      challenge2,
+      "VALID-BACKUP",
+    );
+    expect(session2Result).toHaveProperty("accessToken");
+    expect(session2Result.user).toMatchObject({ id: "u1", email: "user@example.test" });
+
+    // ─── PHIÊN 3 ─────────────────────────────────────────────────────────────
+    // 1. User logs out, then logs in again (Email + Password) -> receives challengeToken 3
+    const challenge3 = "challenge.session.3";
+
+    // 2. User enters valid OTP -> Login succeeds!
+    const session3Result = await service.completeTwoFactorChallenge(
+      challenge3,
+      validOtp,
+    );
+    expect(session3Result).toHaveProperty("accessToken");
+    expect(session3Result.user).toMatchObject({ id: "u1", email: "user@example.test" });
+  });
 });

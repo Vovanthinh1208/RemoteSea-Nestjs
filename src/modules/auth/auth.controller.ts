@@ -53,6 +53,7 @@ import {
 import type { EnvConfig } from "@/core/config/env.validation";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
 import {
+  BadRequestApiException,
   ConflictApiException,
   ForbiddenApiException,
   TooManyRequestsApiException,
@@ -162,6 +163,14 @@ export class AuthController {
       // legitimate users are never blocked after consecutive successful logins.
       this.rateLimitService.reset(ipKey);
       this.rateLimitService.reset(emailKey);
+      if ("twoFactorRequired" in result && result.twoFactorRequired) {
+        const targetUserId = this.authService.decodeTwoFactorChallengeSubject(
+          result.challengeToken,
+        );
+        if (targetUserId) {
+          this.rateLimitService.reset(`2fa-challenge-account:${targetUserId}`);
+        }
+      }
 
       return result;
     } catch (err) {
@@ -193,34 +202,65 @@ export class AuthController {
     @Body(new ZodValidationPipe(twoFactorChallengeSchema))
     body: TwoFactorChallengeDto,
   ) {
-    this.rateLimitService.enforce(
-      `2fa-challenge:${clientIp(req)}`,
-      RATE_LIMITS.TWO_FACTOR_CHALLENGE.limit,
-      RATE_LIMITS.TWO_FACTOR_CHALLENGE.windowMs,
-      req,
-    );
-    // Same limit, keyed by the target account (decoded from the challenge
-    // token itself) instead of the caller's IP — closes the gap where a TOTP
-    // brute force spread across many source IPs would never trip the per-IP
-    // limiter above. No-op for a token that doesn't decode to a real
-    // challenge — completeTwoFactorChallenge below rejects that on its own,
-    // and the per-IP limiter still applies to it either way.
+    const ipKey = `2fa-challenge:${clientIp(req)}`;
     const challengeAccountId = this.authService.decodeTwoFactorChallengeSubject(
       body.challengeToken,
     );
-    if (challengeAccountId) {
-      this.rateLimitService.enforce(
-        `2fa-challenge-account:${challengeAccountId}`,
-        RATE_LIMITS.TWO_FACTOR_CHALLENGE.limit,
-        RATE_LIMITS.TWO_FACTOR_CHALLENGE.windowMs,
-        req,
-      );
-    }
-    return this.authService.completeTwoFactorChallenge(
-      body.challengeToken,
-      body.code,
-      sessionMeta(req),
+    const accountKey = challengeAccountId
+      ? `2fa-challenge-account:${challengeAccountId}`
+      : null;
+
+    const ipBlock = this.rateLimitService.isBlocked(
+      ipKey,
+      RATE_LIMITS.TWO_FACTOR_CHALLENGE.limit,
     );
+    if (ipBlock.blocked) {
+      throw new TooManyRequestsApiException(ipBlock.retryAfter);
+    }
+
+    if (accountKey) {
+      const accountBlock = this.rateLimitService.isBlocked(
+        accountKey,
+        RATE_LIMITS.TWO_FACTOR_CHALLENGE.limit,
+      );
+      if (accountBlock.blocked) {
+        throw new TooManyRequestsApiException(accountBlock.retryAfter);
+      }
+    }
+
+    try {
+      const result = await this.authService.completeTwoFactorChallenge(
+        body.challengeToken,
+        body.code,
+        sessionMeta(req),
+      );
+
+      this.rateLimitService.reset(ipKey);
+      if (accountKey) {
+        this.rateLimitService.reset(accountKey);
+      }
+
+      return result;
+    } catch (err) {
+      if (
+        err instanceof BadRequestApiException ||
+        err instanceof UnauthorizedApiException
+      ) {
+        this.rateLimitService.check(
+          ipKey,
+          RATE_LIMITS.TWO_FACTOR_CHALLENGE.limit,
+          RATE_LIMITS.TWO_FACTOR_CHALLENGE.windowMs,
+        );
+        if (accountKey) {
+          this.rateLimitService.check(
+            accountKey,
+            RATE_LIMITS.TWO_FACTOR_CHALLENGE.limit,
+            RATE_LIMITS.TWO_FACTOR_CHALLENGE.windowMs,
+          );
+        }
+      }
+      throw err;
+    }
   }
 
   @ApiTwoFactorStatus()

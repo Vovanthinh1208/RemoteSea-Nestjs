@@ -33,3 +33,6 @@ export const RATE_LIMITS = {
   // abuse protection on a public, unauthenticated endpoint.
   OAUTH_EXCHANGE: { limit: 20, windowMs: 60_000 },
 } as const;
+
+// PB03 RC3: at most 5 failed verification attempts before cancelling the challenge session.
+export const MAX_TWO_FACTOR_CHALLENGE_ATTEMPTS = 5;
