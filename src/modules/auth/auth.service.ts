@@ -668,7 +668,9 @@ export class AuthService {
 
   async forgotPassword(email: string): Promise<void> {
     const user = await this.authRepository.findUserIdByEmail(email);
-    if (!user) return;
+    // PB06-TC08: Disqualified or banned accounts do not receive password reset tokens,
+    // while silent return maintains user enumeration protection.
+    if (!user || user.bannedAt) return;
 
     const token = crypto.randomBytes(32).toString("hex");
     // Only the hash is stored: a leaked database row can't be replayed as a

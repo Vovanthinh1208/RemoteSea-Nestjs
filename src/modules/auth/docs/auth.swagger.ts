@@ -410,7 +410,7 @@ export const ApiForgotPassword = () =>
     ApiOperation({
       summary: "Request a password reset",
       description:
-        "Issues a password-reset token (TTL 1h) if the email exists and emails a reset link. Always returns the same generic message to prevent user enumeration.",
+        "Issues a password-reset token (TTL 15m) if the email exists and emails a reset link. Always returns the same generic message to prevent user enumeration.",
     }),
     ApiBody({
       type: ForgotPasswordRequestDto,
@@ -422,7 +422,7 @@ export const ApiForgotPassword = () =>
       schema: { example: ForgotPasswordResponseExample },
     }),
     ValidationErrorResponse,
-    rateLimitResponse("3 req/60s per IP"),
+    rateLimitResponse("3 req/15m per email"),
     InternalServerErrorApiResponse,
   );
 

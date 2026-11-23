@@ -14,9 +14,10 @@ export const TWO_FACTOR_ISSUER = "RemoteSEA";
 export const RATE_LIMITS = {
   REGISTER: { limit: 5, windowMs: 60_000 },
   LOGIN: { limit: 10, windowMs: 60_000 },
-  FORGOT_PASSWORD: { limit: 3, windowMs: 60_000 },
   // PB06 RC1: at most 3 reset emails per 15 minutes for the same address.
   FORGOT_PASSWORD_EMAIL: { limit: 3, windowMs: 15 * 60_000 },
+  // IP-level abuse/flood protection across multiple distinct addresses.
+  FORGOT_PASSWORD: { limit: 30, windowMs: 60_000 },
   RESET_PASSWORD: { limit: 5, windowMs: 60_000 },
   // Brute-forcing a 6-digit TOTP code is only ~1M guesses — this is the
   // control that actually matters, tighter than plain LOGIN.

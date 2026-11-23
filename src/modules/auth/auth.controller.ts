@@ -516,19 +516,19 @@ export class AuthController {
     @Req() req: Request,
     @Body(new ZodValidationPipe(forgotPasswordSchema)) body: ForgotPasswordDto,
   ) {
-    this.rateLimitService.enforce(
-      `forgot:${clientIp(req)}`,
-      RATE_LIMITS.FORGOT_PASSWORD.limit,
-      RATE_LIMITS.FORGOT_PASSWORD.windowMs,
-      req,
-    );
-    // Keyed on the submitted address, known or not, so the 429 itself never
-    // reveals whether an account exists.
+    // PB06-TC06: Keyed on the submitted address, known or not, so the 429 itself never
+    // reveals whether an account exists. Enforces maximum 3 requests per 15 minutes.
     this.rateLimitService.enforce(
       `forgot-email:${body.email.trim().toLowerCase()}`,
       RATE_LIMITS.FORGOT_PASSWORD_EMAIL.limit,
       RATE_LIMITS.FORGOT_PASSWORD_EMAIL.windowMs,
       req,
+    );
+    // Secondary IP-level flood protection across arbitrary email targets.
+    this.rateLimitService.enforce(
+      `forgot:${clientIp(req)}`,
+      RATE_LIMITS.FORGOT_PASSWORD.limit,
+      RATE_LIMITS.FORGOT_PASSWORD.windowMs,
     );
     await this.authService.forgotPassword(body.email);
     return { message: "If that email exists, a reset link was sent." };
