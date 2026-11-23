@@ -72,6 +72,12 @@ export class EmployerListItemDto {
       "Sum of PLAN_PRICES[planType] over this employer's planPaid jobs",
   })
   totalSpend!: number;
+
+  @ApiProperty({
+    example: "2026-10-01T00:00:00.000Z",
+    description: "Employer registration timestamp",
+  })
+  createdAt!: Date;
 }
 
 export class PaginationDto {

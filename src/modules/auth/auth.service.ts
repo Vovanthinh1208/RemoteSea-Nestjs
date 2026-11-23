@@ -693,6 +693,24 @@ export class AuthService {
     );
   }
 
+  async verifyResetToken(token?: string): Promise<{ valid: boolean }> {
+    if (!token || typeof token !== "string" || !token.trim()) {
+      throw new BadRequestApiException(
+        "Invalid or expired token",
+        ErrorCode.INVALID_OR_EXPIRED_TOKEN,
+      );
+    }
+    const tokenHash = hashResetToken(token.trim());
+    const record = await this.authRepository.findVerificationToken(tokenHash);
+    if (!record || record.expires < new Date()) {
+      throw new BadRequestApiException(
+        "Invalid or expired token",
+        ErrorCode.INVALID_OR_EXPIRED_TOKEN,
+      );
+    }
+    return { valid: true };
+  }
+
   async resetPassword(token: string, password: string): Promise<void> {
     const tokenHash = hashResetToken(token);
     const record = await this.authRepository.findVerificationToken(tokenHash);

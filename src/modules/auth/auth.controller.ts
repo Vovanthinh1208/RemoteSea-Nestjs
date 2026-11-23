@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -59,6 +60,7 @@ import {
   TooManyRequestsApiException,
   UnauthorizedApiException,
 } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import type { OAuthProfile, OAuthProviderName } from "./interfaces";
 import {
   assertOAuthProviderConfigured,
@@ -85,6 +87,7 @@ import {
   ApiSetupTwoFactor,
   ApiTwoFactorChallenge,
   ApiTwoFactorStatus,
+  ApiVerifyResetToken,
   ApiVerifyTwoFactorSetup,
 } from "./docs/auth.swagger";
 
@@ -319,9 +322,17 @@ export class AuthController {
   async session(
     @Req() req: Request,
   ): Promise<{ user: AuthenticatedUser | null }> {
-    return {
-      user: await this.authService.verifySession(req.headers.authorization),
-    };
+    const authHeader = req.headers.authorization;
+    const user = await this.authService.verifySession(authHeader);
+    // PB08 AC2.2: If a Bearer token was passed but the session is invalid or expired,
+    // return 401 so the client purges the stale credentials.
+    if (authHeader?.startsWith("Bearer ") && !user) {
+      throw new UnauthorizedApiException(
+        "Invalid or expired session",
+        ErrorCode.AUTHENTICATION_REQUIRED,
+      );
+    }
+    return { user };
   }
 
   @ApiMe()
@@ -532,6 +543,54 @@ export class AuthController {
     );
     await this.authService.forgotPassword(body.email);
     return { message: "If that email exists, a reset link was sent." };
+  }
+
+  @ApiVerifyResetToken()
+  @Get("verify-reset-token")
+  @HttpCode(HttpStatus.OK)
+  async verifyResetToken(
+    @Req() req: Request,
+    @Query("token") token?: string,
+  ) {
+    this.rateLimitService.enforce(
+      `verify-reset:${clientIp(req)}`,
+      RATE_LIMITS.VERIFY_RESET_TOKEN.limit,
+      RATE_LIMITS.VERIFY_RESET_TOKEN.windowMs,
+      req,
+    );
+    return this.authService.verifyResetToken(token);
+  }
+
+  @ApiVerifyResetToken()
+  @Post("verify-reset-token")
+  @HttpCode(HttpStatus.OK)
+  async verifyResetTokenPost(
+    @Req() req: Request,
+    @Body() body?: { token?: string },
+  ) {
+    this.rateLimitService.enforce(
+      `verify-reset:${clientIp(req)}`,
+      RATE_LIMITS.VERIFY_RESET_TOKEN.limit,
+      RATE_LIMITS.VERIFY_RESET_TOKEN.windowMs,
+      req,
+    );
+    return this.authService.verifyResetToken(body?.token);
+  }
+
+  @ApiVerifyResetToken()
+  @Get("reset-password")
+  @HttpCode(HttpStatus.OK)
+  async verifyResetPasswordToken(
+    @Req() req: Request,
+    @Query("token") token?: string,
+  ) {
+    this.rateLimitService.enforce(
+      `verify-reset:${clientIp(req)}`,
+      RATE_LIMITS.VERIFY_RESET_TOKEN.limit,
+      RATE_LIMITS.VERIFY_RESET_TOKEN.windowMs,
+      req,
+    );
+    return this.authService.verifyResetToken(token);
   }
 
   @ApiResetPassword()

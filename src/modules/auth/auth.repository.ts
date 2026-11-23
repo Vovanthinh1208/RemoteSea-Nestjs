@@ -17,6 +17,37 @@ export type AuthSessionProfile = Pick<
 
 @Injectable()
 export class AuthRepository {
+  // Short-lived in-memory cache and promise coalescing for session state lookups.
+  // When multiple parallel requests (e.g. 8 concurrent requests on /settings)
+  // arrive with the same session id, promise coalescing ensures only ONE DB query
+  // is fired, and subsequent lookups within the TTL are served immediately from memory.
+  private readonly sessionCache = new Map<
+    string,
+    {
+      expiresAt: number;
+      data: {
+        id: string;
+        userId: string;
+        revokedAt: Date | null;
+        lastSeenAt: Date;
+        user: { bannedAt: Date | null; role: UserRole; email: string; name: string | null };
+      } | null;
+    }
+  >();
+  private readonly inflightSessionLookups = new Map<
+    string,
+    Promise<{
+      id: string;
+      userId: string;
+      revokedAt: Date | null;
+      lastSeenAt: Date;
+      user: { bannedAt: Date | null; role: UserRole; email: string; name: string | null };
+    } | null>
+  >();
+
+  // Throttles touchSession so concurrent requests don't execute multiple updates on the same row.
+  private readonly touchedSessionMap = new Map<string, number>();
+
   constructor(private readonly prisma: PrismaService) {}
 
   findUserByEmail(email: string): Promise<User | null> {
@@ -306,27 +337,63 @@ export class AuthRepository {
   }
 
   // Read by JwtStrategy.validate on every authenticated request — narrow
-  // select since that's a hot path.
-  findSessionState(id: string) {
-    return this.prisma.session.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        userId: true,
-        revokedAt: true,
-        lastSeenAt: true,
-        user: {
-          select: { bannedAt: true, role: true, email: true, name: true },
-        },
-      },
-    });
+  // select since that's a hot path. Uses Promise coalescing and a short-lived
+  // in-memory cache to absorb concurrency spikes (e.g. settings page loading 8
+  // queries at once) without hammering the database connection pool.
+  async findSessionState(id: string) {
+    const now = Date.now();
+    const cached = this.sessionCache.get(id);
+    if (cached && now < cached.expiresAt) {
+      return cached.data;
+    }
+
+    const inflight = this.inflightSessionLookups.get(id);
+    if (inflight) {
+      return inflight;
+    }
+
+    const lookupPromise = (async () => {
+      try {
+        const session = await this.prisma.session.findUnique({
+          where: { id },
+          select: {
+            id: true,
+            userId: true,
+            revokedAt: true,
+            lastSeenAt: true,
+            user: {
+              select: { bannedAt: true, role: true, email: true, name: true },
+            },
+          },
+        });
+        const ttl = session ? 10_000 : 1_000;
+        this.sessionCache.set(id, { expiresAt: Date.now() + ttl, data: session });
+        return session;
+      } finally {
+        this.inflightSessionLookups.delete(id);
+      }
+    })();
+
+    this.inflightSessionLookups.set(id, lookupPromise);
+    return lookupPromise;
   }
 
   async touchSession(id: string): Promise<void> {
-    await this.prisma.session.update({
-      where: { id },
-      data: { lastSeenAt: new Date() },
-    });
+    const now = Date.now();
+    const lastTouched = this.touchedSessionMap.get(id) ?? 0;
+    // Debounce touchSession to at most once per 60 seconds per session
+    if (now - lastTouched < 60_000) {
+      return;
+    }
+    this.touchedSessionMap.set(id, now);
+    try {
+      await this.prisma.session.update({
+        where: { id },
+        data: { lastSeenAt: new Date() },
+      });
+    } catch {
+      // Best-effort recency signal; ignore transient touch errors
+    }
   }
 
   listActiveSessions(userId: string): Promise<Session[]> {
@@ -339,6 +406,7 @@ export class AuthRepository {
   // Scoped to userId, not just the session's own id — without that, a caller
   // could revoke another user's session by guessing/enumerating ids.
   async revokeSession(userId: string, sessionId: string): Promise<boolean> {
+    this.sessionCache.delete(sessionId);
     const { count } = await this.prisma.session.updateMany({
       where: { id: sessionId, userId, revokedAt: null },
       data: { revokedAt: new Date() },
@@ -350,6 +418,7 @@ export class AuthRepository {
     userId: string,
     currentSessionId: string,
   ): Promise<number> {
+    this.sessionCache.clear();
     const { count } = await this.prisma.session.updateMany({
       where: { userId, revokedAt: null, NOT: { id: currentSessionId } },
       data: { revokedAt: new Date() },
@@ -361,6 +430,7 @@ export class AuthRepository {
   // themselves is no longer trusted (banned, or role changed by an admin),
   // not when they're clearing their own other devices.
   async revokeAllSessions(userId: string): Promise<number> {
+    this.sessionCache.clear();
     const { count } = await this.prisma.session.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },

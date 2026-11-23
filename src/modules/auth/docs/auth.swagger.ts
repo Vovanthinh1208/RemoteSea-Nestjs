@@ -426,6 +426,22 @@ export const ApiForgotPassword = () =>
     InternalServerErrorApiResponse,
   );
 
+export const ApiVerifyResetToken = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: "Verify password reset token",
+      description:
+        "Validates if a password-reset token is valid and not expired without consuming it.",
+    }),
+    ApiOkResponse({
+      description: "Token is valid",
+      schema: { example: { valid: true } },
+    }),
+    InvalidOrExpiredTokenResponse,
+    rateLimitResponse("30 req/60s per IP"),
+    InternalServerErrorApiResponse,
+  );
+
 export const ApiResetPassword = () =>
   applyDecorators(
     ApiOperation({

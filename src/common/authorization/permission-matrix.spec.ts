@@ -365,6 +365,24 @@ const expectations: ControllerExpectation[] = [
         guards: [],
       },
       {
+        method: "verifyResetToken",
+        httpMethod: "GET",
+        path: "verify-reset-token",
+        guards: [],
+      },
+      {
+        method: "verifyResetTokenPost",
+        httpMethod: "POST",
+        path: "verify-reset-token",
+        guards: [],
+      },
+      {
+        method: "verifyResetPasswordToken",
+        httpMethod: "GET",
+        path: "reset-password",
+        guards: [],
+      },
+      {
         method: "resetPassword",
         httpMethod: "POST",
         path: "reset-password",

@@ -19,6 +19,7 @@ export const RATE_LIMITS = {
   // IP-level abuse/flood protection across multiple distinct addresses.
   FORGOT_PASSWORD: { limit: 30, windowMs: 60_000 },
   RESET_PASSWORD: { limit: 5, windowMs: 60_000 },
+  VERIFY_RESET_TOKEN: { limit: 30, windowMs: 60_000 },
   // Brute-forcing a 6-digit TOTP code is only ~1M guesses — this is the
   // control that actually matters, tighter than plain LOGIN.
   TWO_FACTOR_CHALLENGE: { limit: 10, windowMs: 5 * 60_000 },
