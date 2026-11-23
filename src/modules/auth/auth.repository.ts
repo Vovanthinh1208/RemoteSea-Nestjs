@@ -126,18 +126,19 @@ export class AuthRepository {
     });
   }
 
-  // Rewrites the whole array with the matched code removed — same
-  // single-use guarantee as VerificationToken (see consumePasswordReset),
-  // just array-shaped instead of a separate table since there are only ever
-  // a handful of these per user.
+  // Atomically removes the matched backup code hash from the user's array
+  // only if it is still present, returning true on success or false if already consumed.
+  // This prevents race conditions and guarantees single-use even under concurrent requests.
   async consumeBackupCode(
     userId: string,
-    remainingHashedCodes: string[],
-  ): Promise<void> {
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { twoFactorBackupCodes: remainingHashedCodes },
-    });
+    matchedHash: string,
+  ): Promise<boolean> {
+    const count = await this.prisma.$executeRaw`
+      UPDATE "users"
+      SET "twoFactorBackupCodes" = array_remove("twoFactorBackupCodes", ${matchedHash})
+      WHERE "id" = ${userId} AND ${matchedHash} = ANY("twoFactorBackupCodes")
+    `;
+    return count > 0;
   }
 
   createUser(data: {

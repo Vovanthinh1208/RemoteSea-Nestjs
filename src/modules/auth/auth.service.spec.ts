@@ -22,7 +22,7 @@ jest.mock("bcrypt");
 const makeService = (overrides?: {
   authRepository?: Partial<AuthRepository>;
   emailService?: Partial<EmailService>;
-  jwtService?: { sign: jest.Mock; verify?: jest.Mock };
+  jwtService?: { sign: jest.Mock; verify: jest.Mock };
   metricsService?: { recordAuthFailure: jest.Mock };
 }) => {
   const authRepository = {
@@ -38,6 +38,7 @@ const makeService = (overrides?: {
     createVerificationToken: jest.fn(),
     findVerificationToken: jest.fn(),
     consumePasswordReset: jest.fn().mockResolvedValue(true),
+    consumeBackupCode: jest.fn().mockResolvedValue(true),
     ...overrides?.authRepository,
   };
   const emailService = {
@@ -46,7 +47,7 @@ const makeService = (overrides?: {
     sendTwoFactorDisabledEmail: jest.fn().mockResolvedValue(undefined),
     ...overrides?.emailService,
   };
-  const jwtService = overrides?.jwtService ?? {
+  const jwtService: { sign: jest.Mock; verify: jest.Mock } = overrides?.jwtService ?? {
     sign: jest.fn().mockReturnValue("signed.jwt.token"),
     verify: jest.fn(),
   };
@@ -830,5 +831,184 @@ describe("AuthService.disableTwoFactor", () => {
       "Test User",
     );
     expect(metricsService.recordAuthFailure).not.toHaveBeenCalled();
+  });
+});
+
+describe("AuthService.completeTwoFactorChallenge", () => {
+  const challengeToken = "valid.2fa.challenge.token";
+  const mockChallengePayload = {
+    sub: "u1",
+    purpose: "2fa_challenge",
+  };
+  const mockUserWith2FA = {
+    id: "u1",
+    email: "user@example.test",
+    name: "Test User",
+    role: "TALENT",
+    twoFactorEnabled: true,
+    twoFactorSecret: "JBSWY3DPEHPK3PXP",
+    twoFactorBackupCodes: ["$2b$10$hashedCode1", "$2b$10$hashedCode2"],
+  };
+
+  it("rejects invalid or expired challenge token", async () => {
+    const { service, jwtService } = makeService();
+    jwtService.verify.mockImplementation(() => {
+      throw new Error("jwt expired");
+    });
+
+    await expect(
+      service.completeTwoFactorChallenge("expired.token", "123456"),
+    ).rejects.toBeInstanceOf(UnauthorizedApiException);
+  });
+
+  it("rejects token with unexpected purpose", async () => {
+    const { service, jwtService } = makeService();
+    jwtService.verify.mockReturnValue({ sub: "u1", purpose: "login" });
+
+    await expect(
+      service.completeTwoFactorChallenge(challengeToken, "123456"),
+    ).rejects.toBeInstanceOf(UnauthorizedApiException);
+  });
+
+  it("rejects when 2FA is not enabled for the user", async () => {
+    const { service, jwtService, authRepository } = makeService({
+      authRepository: {
+        findUserById: jest.fn().mockResolvedValue({
+          id: "u1",
+          twoFactorEnabled: false,
+          twoFactorSecret: null,
+        }),
+      },
+    });
+    jwtService.verify.mockReturnValue(mockChallengePayload);
+
+    await expect(
+      service.completeTwoFactorChallenge(challengeToken, "123456"),
+    ).rejects.toBeInstanceOf(UnauthorizedApiException);
+  });
+
+  it("authenticates and atomically consumes backup code when a valid backup code is provided", async () => {
+    (bcrypt.compare as jest.Mock).mockImplementation(
+      async (plain: string, hash: string) => {
+        return plain === "ABCDE-FGHIJ" && hash === "$2b$10$hashedCode1";
+      },
+    );
+    const { service, jwtService, authRepository } = makeService({
+      authRepository: {
+        findUserById: jest.fn().mockResolvedValue(mockUserWith2FA),
+        consumeBackupCode: jest.fn().mockResolvedValue(true),
+      },
+    });
+    jwtService.verify.mockReturnValue(mockChallengePayload);
+
+    const result = await service.completeTwoFactorChallenge(
+      challengeToken,
+      "abcde-fghij",
+    );
+
+    expect(authRepository.consumeBackupCode).toHaveBeenCalledWith(
+      "u1",
+      "$2b$10$hashedCode1",
+    );
+    expect(result).toHaveProperty("accessToken");
+    expect(result.user).toEqual({
+      id: "u1",
+      email: "user@example.test",
+      name: "Test User",
+      role: "TALENT",
+    });
+  });
+
+  it("rejects with INVALID_TWO_FACTOR_CODE when backup code does not match any stored hash", async () => {
+    (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+    const { service, jwtService, authRepository } = makeService({
+      authRepository: {
+        findUserById: jest.fn().mockResolvedValue(mockUserWith2FA),
+        consumeBackupCode: jest.fn(),
+      },
+    });
+    jwtService.verify.mockReturnValue(mockChallengePayload);
+
+    const error = await service
+      .completeTwoFactorChallenge(challengeToken, "WRONG-CODE")
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(BadRequestApiException);
+    expect((error as BadRequestApiException).getResponse()).toMatchObject({
+      code: ErrorCode.INVALID_TWO_FACTOR_CODE,
+    });
+    expect(authRepository.consumeBackupCode).not.toHaveBeenCalled();
+  });
+
+  it("rejects with INVALID_TWO_FACTOR_CODE when consumeBackupCode returns false (already consumed / race condition)", async () => {
+    (bcrypt.compare as jest.Mock).mockImplementation(
+      async (plain: string, hash: string) => {
+        return plain === "ABCDE-FGHIJ" && hash === "$2b$10$hashedCode1";
+      },
+    );
+    const { service, jwtService, authRepository } = makeService({
+      authRepository: {
+        findUserById: jest.fn().mockResolvedValue(mockUserWith2FA),
+        consumeBackupCode: jest.fn().mockResolvedValue(false),
+      },
+    });
+    jwtService.verify.mockReturnValue(mockChallengePayload);
+
+    const error = await service
+      .completeTwoFactorChallenge(challengeToken, "ABCDE-FGHIJ")
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(BadRequestApiException);
+    expect((error as BadRequestApiException).getResponse()).toMatchObject({
+      code: ErrorCode.INVALID_TWO_FACTOR_CODE,
+    });
+    expect(authRepository.consumeBackupCode).toHaveBeenCalledWith(
+      "u1",
+      "$2b$10$hashedCode1",
+    );
+  });
+
+  // PB03-TC09: Mỗi Backup code chỉ được phép sử dụng duy nhất 1 lần (Single-use).
+  // Khi gửi đồng thời hai yêu cầu dùng cùng một backup code, chỉ một yêu cầu được chấp nhận.
+  it("PB03-TC09: guarantees single-use under concurrent requests with the same backup code", async () => {
+    (bcrypt.compare as jest.Mock).mockImplementation(
+      async (plain: string, hash: string) => {
+        return plain === "SINGLE-USE-CODE" && hash === "$2b$10$hashedCode1";
+      },
+    );
+
+    let consumedCount = 0;
+    const consumeBackupCode = jest.fn().mockImplementation(async () => {
+      consumedCount++;
+      return consumedCount === 1; // Only the first atomic update succeeds
+    });
+
+    const { service, jwtService } = makeService({
+      authRepository: {
+        findUserById: jest.fn().mockResolvedValue(mockUserWith2FA),
+        consumeBackupCode,
+      },
+    });
+    jwtService.verify.mockReturnValue(mockChallengePayload);
+
+    const [req1, req2] = await Promise.allSettled([
+      service.completeTwoFactorChallenge(challengeToken, "SINGLE-USE-CODE"),
+      service.completeTwoFactorChallenge(challengeToken, "SINGLE-USE-CODE"),
+    ]);
+
+    expect(consumeBackupCode).toHaveBeenCalledTimes(2);
+
+    // Exactly one succeeds
+    const fulfilled = [req1, req2].filter((r) => r.status === "fulfilled");
+    const rejected = [req1, req2].filter((r) => r.status === "rejected");
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+
+    const failureReason = (rejected[0] as PromiseRejectedResult).reason;
+    expect(failureReason).toBeInstanceOf(BadRequestApiException);
+    expect((failureReason as BadRequestApiException).getResponse()).toMatchObject({
+      code: ErrorCode.INVALID_TWO_FACTOR_CODE,
+    });
   });
 });

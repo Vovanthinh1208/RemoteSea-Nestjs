@@ -10,6 +10,7 @@ describe("AuthRepository 2FA secret storage", () => {
       update: jest.Mock;
       updateMany: jest.Mock;
     };
+    $executeRaw: jest.Mock;
   };
   let repository: AuthRepository;
 
@@ -30,6 +31,7 @@ describe("AuthRepository 2FA secret storage", () => {
         update: jest.fn().mockResolvedValue(undefined),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
+      $executeRaw: jest.fn().mockResolvedValue(1),
     };
     repository = new AuthRepository(prisma as unknown as PrismaService);
   });
@@ -191,4 +193,28 @@ describe("AuthRepository OAuth account creation", () => {
       });
     },
   );
+});
+
+describe("AuthRepository.consumeBackupCode", () => {
+  it("atomically removes the matched backup code and returns true when present", async () => {
+    const prisma = {
+      $executeRaw: jest.fn().mockResolvedValue(1),
+    };
+    const repository = new AuthRepository(prisma as unknown as PrismaService);
+
+    const result = await repository.consumeBackupCode("u1", "hashed-code-1");
+    expect(result).toBe(true);
+    expect(prisma.$executeRaw).toHaveBeenCalled();
+  });
+
+  it("returns false when the code has already been consumed (0 rows updated)", async () => {
+    const prisma = {
+      $executeRaw: jest.fn().mockResolvedValue(0),
+    };
+    const repository = new AuthRepository(prisma as unknown as PrismaService);
+
+    const result = await repository.consumeBackupCode("u1", "already-consumed-code");
+    expect(result).toBe(false);
+    expect(prisma.$executeRaw).toHaveBeenCalled();
+  });
 });

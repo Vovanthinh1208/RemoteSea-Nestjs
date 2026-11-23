@@ -578,9 +578,23 @@ export class AuthService {
           ErrorCode.INVALID_TWO_FACTOR_CODE,
         );
       }
-      const remaining = [...user.twoFactorBackupCodes];
-      remaining.splice(matchedIndex, 1);
-      await this.authRepository.consumeBackupCode(user.id, remaining);
+      const matchedHash = user.twoFactorBackupCodes[matchedIndex];
+      if (!matchedHash) {
+        throw new BadRequestApiException(
+          "Invalid code",
+          ErrorCode.INVALID_TWO_FACTOR_CODE,
+        );
+      }
+      const consumed = await this.authRepository.consumeBackupCode(
+        user.id,
+        matchedHash,
+      );
+      if (!consumed) {
+        throw new BadRequestApiException(
+          "Invalid code",
+          ErrorCode.INVALID_TWO_FACTOR_CODE,
+        );
+      }
     }
 
     return this.issueToken(AuthMapper.toAuthenticatedUser(user), sessionMeta);
