@@ -35,6 +35,10 @@ export class CvAnalysisService {
     private readonly aiService: AiService,
   ) {}
 
+  getCached(applicationId: string): Promise<CvAnalysis | null> {
+    return this.cvAnalysisRepository.findByApplicationId(applicationId);
+  }
+
   async getOrCreate(applicationId: string): Promise<CvAnalysis> {
     const existing =
       await this.cvAnalysisRepository.findByApplicationId(applicationId);

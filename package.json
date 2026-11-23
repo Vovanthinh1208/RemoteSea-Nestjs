@@ -1,7 +1,7 @@
 {
   "name": "remotesea-api",
   "version": "1.0.0",
-  "description": "RemoteSEA backend — NestJS migration from Next.js API routes",
+  "description": "RemoteSEA backend \u2014 NestJS migration from Next.js API routes",
   "license": "UNLICENSED",
   "scripts": {
     "postinstall": "prisma generate",
@@ -46,11 +46,11 @@
     "cache-manager": "^7.2.9",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
-    "compression": "^1.8.1",
+    "compression": "^1.8.2",
     "express": "^4.22.1",
     "geoip-lite": "^2.0.3",
     "helmet": "^8.3.0",
-    "nanoid": "^3.3.7",
+    "nanoid": "^3.3.18",
     "nodemailer": "^10.2.0",
     "otplib": "^13.4.1",
     "passport": "^0.7.0",
@@ -65,7 +65,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "stripe": "^17.5.0",
-    "zod": "^3.24.1"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.9",
@@ -122,5 +122,14 @@
   },
   "prisma": {
     "seed": "ts-node --transpile-only prisma/seed.ts"
+  },
+  "overrides": {
+    "lodash": "^4.18.1",
+    "@nestjs/swagger": {
+      "js-yaml": "^4.3.2"
+    },
+    "multer": "^2.5.0",
+    "body-parser": "^1.20.9",
+    "proxy-addr": "^2.0.8"
   }
 }

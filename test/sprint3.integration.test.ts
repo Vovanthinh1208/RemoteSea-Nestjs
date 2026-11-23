@@ -17,6 +17,7 @@ import { InterviewsRepository } from "@/modules/interviews/interviews.repository
 import { CvAnalysisRepository } from "@/modules/cv-analysis/cv-analysis.repository";
 import { CvAnalysisService } from "@/modules/cv-analysis/cv-analysis.service";
 import { TaxonomyRepository } from "@/modules/taxonomy/taxonomy.repository";
+import { ApplicationsRepository } from "@/modules/applications/applications.repository";
 // supertest has no @types in this repository; its runtime API is used here.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const request = require("supertest");
@@ -104,6 +105,37 @@ it("S3-PB64-TC03 only the assigned interviewer can read private scorecards [PRE,
     data: { interviewerId: f.owner.id },
   });
   await http("get", `${employerPath()}/scorecards`, f.owner).expect(200);
+});
+
+it("S3R4-PB64-TC01 assigned interviewer can load only the authorized workspace without the company applicant feed [AC1,PRE,BR2]", async () => {
+  await interview("CONFIRMED", new Date(Date.now() - 60000));
+  await db.companyMember.update({
+    where: { userId: f.owner.id },
+    data: { role: "INTERVIEWER" },
+  });
+  await http("get", employerPath(), f.owner).expect(403);
+  await db.interview.update({
+    where: { applicationId: f.application.id },
+    data: { interviewerId: f.owner.id },
+  });
+  await http("get", "/employer/applications/recent", f.owner).expect(403);
+  await http("get", `${employerPath()}/ai-cv-analysis`, f.owner).expect(403);
+  await http(
+    "post",
+    `${employerPath()}/ai-cv-analysis/regenerate`,
+    f.owner,
+  ).expect(403);
+  expect(complete).not.toHaveBeenCalled();
+  const detail = await http("get", employerPath(), f.owner).expect(200);
+  expect(detail.body.id).toBe(f.application.id);
+  expect(detail.body.talent.user.name).toBe(f.talentUser.name);
+  expect(detail.body.canManage).toBe(false);
+  expect(
+    await db.application.findUniqueOrThrow({ where: { id: f.application.id } }),
+  ).toMatchObject({ viewedAt: expect.any(Date) });
+  await http("get", employerPath(), f.otherOwner).expect(403);
+  await http("get", employerPath(), f.talentUser).expect(403);
+  await http("get", employerPath(), null).expect(401);
 });
 it("S3-PB58-TC03 suspended company cannot mutate applications [AUTH]", async () => {
   await db.employerProfile.update({
@@ -354,6 +386,33 @@ it("S3-PB49-TC04 nonexistent job cannot create a bookmark [NEG]", async () => {
   );
 });
 
+it.each(["DRAFT", "PENDING_REVIEW"] as const)(
+  "S3R4-PB49-TC01 cannot bookmark a private %s job to bypass preview authorization [BR1,SEC]",
+  async (status) => {
+    await db.job.update({ where: { id: f.job.id }, data: { status } });
+    await http("put", `/saved/${f.job.id}`).expect(404);
+    const list = await http("get", "/saved").expect(200);
+    expect(list.body.savedJobs).toEqual([]);
+    expect(
+      await db.savedJob.count({ where: { userId: f.talentUser.id } }),
+    ).toBe(0);
+  },
+);
+
+it("S3R4-PB49-TC02 a bookmarked job made private disappears from list, count and ids [AC4,SEC]", async () => {
+  await http("put", `/saved/${f.job.id}`).expect(200);
+  await db.job.update({ where: { id: f.job.id }, data: { status: "DRAFT" } });
+  const list = await http("get", "/saved").expect(200);
+  const ids = await http("get", "/saved/ids").expect(200);
+  expect(list.body.savedJobs).toEqual([]);
+  expect(list.body.pagination.total).toBe(0);
+  expect(ids.body.jobIds).toEqual([]);
+  // Existing user data remains intact; becoming private is not a deletion.
+  expect(await db.savedJob.count({ where: { userId: f.talentUser.id } })).toBe(
+    1,
+  );
+});
+
 it("S3-PB51-TC01 public category endpoint is cached [AC1,BR1]", async () => {
   const res = await http("get", "/categories", null).expect(200);
   expect(Array.isArray(res.body)).toBe(true);
@@ -447,6 +506,31 @@ it("S3-PB53-TC04 concurrent applies create exactly one application and counter i
   expect(
     (await db.job.findUniqueOrThrow({ where: { id: f.job.id } })).applyCount,
   ).toBe(1);
+});
+it("S3R4-PB53-TC01 job closing after validation cannot commit an application [PRE,CONCURRENCY]", async () => {
+  await db.application.delete({ where: { id: f.application.id } });
+  const repo = app.get(ApplicationsRepository);
+  const original = repo.findByJobAndTalent.bind(repo);
+  const read = jest
+    .spyOn(repo, "findByJobAndTalent")
+    .mockImplementationOnce(async (...args) => {
+      await db.job.update({
+        where: { id: f.job.id },
+        data: { status: "CLOSED" },
+      });
+      return original(...args);
+    });
+  try {
+    await http("post", "/applications", f.talentUser, {
+      jobId: f.job.id,
+    }).expect(409);
+    expect(await db.application.count({ where: { jobId: f.job.id } })).toBe(0);
+    expect(
+      (await db.job.findUniqueOrThrow({ where: { id: f.job.id } })).applyCount,
+    ).toBe(0);
+  } finally {
+    read.mockRestore();
+  }
 });
 it("S3-PB53-TC05 arbitrary resume URL is rejected without persistence [NEG]", async () => {
   await db.application.delete({ where: { id: f.application.id } });
@@ -941,6 +1025,42 @@ it("S3-PB66-TC03 documented recommendation enum is returned [AC3]", async () => 
   ).expect(200);
   expect(["PROCEED", "REVIEW", "REJECT"]).toContain(res.body.recommendation);
 });
+it("S3R4-PB66-TC01 cached reads never generate and restore persisted results with access checks [AC4,BR2]", async () => {
+  const empty = await http(
+    "get",
+    `${employerPath()}/ai-cv-analysis/cached`,
+    f.owner,
+  ).expect(200);
+  expect(empty.text === "" || empty.body === null).toBe(true);
+  expect(complete).not.toHaveBeenCalled();
+  const generated = await http(
+    "get",
+    `${employerPath()}/ai-cv-analysis`,
+    f.owner,
+  ).expect(200);
+  complete.mockClear();
+  const cached = await http(
+    "get",
+    `${employerPath()}/ai-cv-analysis/cached`,
+    f.owner,
+  ).expect(200);
+  expect(cached.body).toEqual(generated.body);
+  expect(complete).not.toHaveBeenCalled();
+  await http(
+    "get",
+    `${employerPath()}/ai-cv-analysis/cached`,
+    f.otherOwner,
+  ).expect(403);
+  await http(
+    "get",
+    `${employerPath()}/ai-cv-analysis/cached`,
+    f.talentUser,
+  ).expect(403);
+  await http("get", `${employerPath()}/ai-cv-analysis/cached`, null).expect(
+    401,
+  );
+});
+
 it("S3-PB67-TC01 regeneration overwrites same row and enforces 30 second request interval [AC2,AC3,BR1]", async () => {
   const original = await http(
     "get",

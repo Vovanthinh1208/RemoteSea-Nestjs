@@ -561,6 +561,26 @@ export class EmployerService {
     return { applications };
   }
 
+  async getApplicationDetail(
+    application: ApplicationWithJobOwner,
+    userId: string,
+  ) {
+    const detail = await this.employerRepository.findApplicationDetail(
+      application.id,
+    );
+    assertFound(
+      detail,
+      "Application not found",
+      ErrorCode.APPLICATION_NOT_FOUND,
+    );
+    const membership =
+      await this.companyMembershipService.resolveMembership(userId);
+    return {
+      ...detail,
+      canManage: !!membership && membership.role !== "INTERVIEWER",
+    };
+  }
+
   // Hiring funnel dashboard chart: aggregates every ApplicationStatusEvent
   // across this employer's jobs into pipeline-stage counts + conversion
   // rates (see funnel.util.ts). Same role gate as the applications list
@@ -948,6 +968,10 @@ export class EmployerService {
 
   getApplicationCvAnalysis(application: ApplicationWithJobOwner) {
     return this.cvAnalysisService.getOrCreate(application.id);
+  }
+
+  getCachedApplicationCvAnalysis(application: ApplicationWithJobOwner) {
+    return this.cvAnalysisService.getCached(application.id);
   }
 
   regenerateApplicationCvAnalysis(application: ApplicationWithJobOwner) {

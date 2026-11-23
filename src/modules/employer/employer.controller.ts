@@ -265,6 +265,16 @@ export class EmployerController {
     return this.employerService.getRecentApplications(user.id);
   }
 
+  @Get("applications/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
+  @Roles("EMPLOYER")
+  getApplicationDetail(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentResource() application: ApplicationWithJobOwner,
+  ) {
+    return this.employerService.getApplicationDetail(application, user.id);
+  }
+
   @ApiGetHiringFunnel()
   @Get("analytics/funnel")
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -493,12 +503,11 @@ export class EmployerController {
     );
   }
 
-  // ApplicationAccessGuard, not ApplicationOwnershipGuard — same reasoning as
-  // the scorecard routes above: this is a read-only hiring aid open to any
-  // team member with access to the application, not just review-tier roles.
+  // PB66/PB67 allow OWNER, RECRUITER and HIRING_MANAGER to request paid
+  // inference. Assigned interviewers may read an existing cached analysis.
   @ApiGetCvAnalysis()
   @Get("applications/:id/ai-cv-analysis")
-  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
   @Roles("EMPLOYER")
   getApplicationCvAnalysis(
     @CurrentUser() user: AuthenticatedUser,
@@ -512,12 +521,22 @@ export class EmployerController {
     return this.employerService.getApplicationCvAnalysis(application);
   }
 
+  // Mount/refresh may read persisted analysis without starting a billed job.
+  @Get("applications/:id/ai-cv-analysis/cached")
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
+  @Roles("EMPLOYER")
+  getCachedApplicationCvAnalysis(
+    @CurrentResource() application: ApplicationWithJobOwner,
+  ) {
+    return this.employerService.getCachedApplicationCvAnalysis(application);
+  }
+
   // Same guard and rate-limit bucket as the GET above — regenerating is
   // still just a paid LLM call gated by the same per-user budget, not a
   // separate allowance to enforce.
   @ApiRegenerateCvAnalysis()
   @Post("applications/:id/ai-cv-analysis/regenerate")
-  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationAccessGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ApplicationOwnershipGuard)
   @Roles("EMPLOYER")
   regenerateApplicationCvAnalysis(
     @CurrentUser() user: AuthenticatedUser,

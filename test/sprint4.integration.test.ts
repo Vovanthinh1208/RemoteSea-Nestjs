@@ -120,6 +120,14 @@ beforeAll(async () => {
     process.env.S4_TEST_DATABASE_URL ??
       "postgresql://remotesea@localhost:55443/remotesea_s4_20261109_integration",
   );
+  if (
+    !["127.0.0.1", "localhost"].includes(url.hostname) ||
+    !/^\/remotesea_s4_[a-z0-9_]+$/.test(url.pathname)
+  ) {
+    throw new Error(
+      "S4_TEST_DATABASE_URL must target a dedicated local remotesea_s4_* database",
+    );
+  }
   process.env.DATABASE_URL = url.toString();
   process.env.DIRECT_URL = url.toString();
   process.env.AUTH_SECRET = "isolated-sprint-four-test-signing-secret";
@@ -596,12 +604,46 @@ describe("PB80 & PB81: Stripe Checkout & Webhook Processing", () => {
   });
 
   it("S4-PB81-TC01 processes checkout.session.completed webhook event [AC1-AC3]", async () => {
+    // The webhook only accepts the Checkout Session created for this job
+    // (BillingRepository.markJobPaidAndSubmitted matches stripeSessionId), so
+    // the event must carry the session id persisted by S4-PB80-TC01 — the
+    // previous hard-coded "cs_test_success_123" was (correctly) ignored.
+    const { stripeSessionId } = await db.job.findUniqueOrThrow({
+      where: { id: f.draftJob.id },
+      select: { stripeSessionId: true },
+    });
+    expect(stripeSessionId).toBeTruthy();
+
+    const forged = {
+      id: `evt_test_${randomUUID().slice(0, 8)}`,
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_test_forged_session",
+          mode: "payment",
+          payment_status: "paid",
+          amount_total: 15000,
+          currency: "usd",
+          metadata: { jobId: f.draftJob.id },
+        },
+      },
+    };
+    await request(app.getHttpServer())
+      .post("/billing/webhook")
+      .set("stripe-signature", "valid-test-sig")
+      .send(forged)
+      .expect(200);
+    expect(
+      (await db.job.findUniqueOrThrow({ where: { id: f.draftJob.id } }))
+        .planPaid,
+    ).toBe(false);
+
     const webhookPayload = {
       id: `evt_test_${randomUUID().slice(0, 8)}`,
       type: "checkout.session.completed",
       data: {
         object: {
-          id: "cs_test_success_123",
+          id: stripeSessionId,
           mode: "payment",
           payment_status: "paid",
           amount_total: 15000,
@@ -615,7 +657,7 @@ describe("PB80 & PB81: Stripe Checkout & Webhook Processing", () => {
       .post("/billing/webhook")
       .set("stripe-signature", "valid-test-sig")
       .send(webhookPayload)
-      .expect(201);
+      .expect(200);
 
     expect(res.body.received).toBe(true);
 

@@ -28,6 +28,7 @@ import { NotificationsModule } from "@/modules/notifications/notifications.modul
 import { ReviewsModule } from "@/modules/reviews/reviews.module";
 import { TeamModule } from "@/modules/team/team.module";
 import { AiOrchestratorModule } from "@/modules/ai-orchestrator/ai-orchestrator.module";
+import { CompanyDocumentsModule } from "@/modules/company-documents/company-documents.module";
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { AiOrchestratorModule } from "@/modules/ai-orchestrator/ai-orchestrator.
     WorkExperienceModule,
     ProfileHighlightsModule,
     EmployerModule,
+    CompanyDocumentsModule,
     JobsModule,
     TaxonomyModule,
     SalaryModule,

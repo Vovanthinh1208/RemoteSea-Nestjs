@@ -774,6 +774,66 @@ export class EmployerRepository {
     });
   }
 
+  async findApplicationDetail(id: string) {
+    const application = await this.prisma.application.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        appliedAt: true,
+        updatedAt: true,
+        coverLetter: true,
+        resumeUrl: true,
+        notes: true,
+        viewedAt: true,
+        ...applicantDecisionFieldsSelect,
+        jobId: true,
+        job: {
+          select: {
+            title: true,
+            level: true,
+            salaryMin: true,
+            salaryMax: true,
+            currency: true,
+            jobType: true,
+            timezone: true,
+            country: true,
+            isRemote: true,
+            skills: {
+              select: {
+                isRequired: true,
+                skill: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+        talent: {
+          select: {
+            id: true,
+            slug: true,
+            headline: true,
+            level: true,
+            user: { select: { name: true } },
+            skills: { include: { skill: true } },
+            yearsExperience: true,
+            desiredSalaryMin: true,
+            desiredSalaryMax: true,
+            currency: true,
+            timezone: true,
+            country: true,
+            employmentTypes: true,
+            timezoneOverlap: true,
+            rightToWork: true,
+            noticePeriod: true,
+            isOpenToWork: true,
+          },
+        },
+      },
+    });
+    if (application) await this.stampViewedApplications([application]);
+    return application;
+  }
+
   // Only writes if status still matches what the caller last read, so two
   // concurrent PATCHes against the same application can't silently overwrite
   // one another (last-write-wins). Returns null if the row moved underneath us.

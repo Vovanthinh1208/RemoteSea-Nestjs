@@ -23,11 +23,7 @@ type EmployerListItem = Pick<
 
 type JobListItem = Omit<
   Job,
-  | "stripeSessionId"
-  | "reviewNote"
-  | "responsibilities"
-  | "applicationUrl"
-  | "rejectedAt"
+  "stripeSessionId" | "reviewNote" | "rejectedAt"
 > & {
   employer: { companyName: string; isVerified: boolean; slug: string };
   categories: { category: unknown }[];
@@ -157,6 +153,8 @@ export class AdminRepository {
           slug: true,
           description: true,
           requirements: true,
+          responsibilities: true,
+          applicationUrl: true,
           jobType: true,
           level: true,
           salaryMin: true,

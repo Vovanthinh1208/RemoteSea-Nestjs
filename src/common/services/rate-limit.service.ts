@@ -75,6 +75,33 @@ export class RateLimitService {
     return { allowed: true, remaining: limit - bucket.count, retryAfter: 0 };
   }
 
+  isBlocked(
+    key: string,
+    limit: number,
+    now: number = Date.now(),
+  ): { blocked: boolean; remaining: number; retryAfter: number } {
+    const bucket = this.store.get(key);
+    if (!bucket || bucket.resetAt <= now) {
+      return { blocked: false, remaining: limit, retryAfter: 0 };
+    }
+    if (bucket.count >= limit) {
+      return {
+        blocked: true,
+        remaining: 0,
+        retryAfter: Math.ceil((bucket.resetAt - now) / 1000),
+      };
+    }
+    return {
+      blocked: false,
+      remaining: limit - bucket.count,
+      retryAfter: 0,
+    };
+  }
+
+  reset(key: string): void {
+    this.store.delete(key);
+  }
+
   private maybeCleanup(now: number): void {
     if (
       this.store.size <= CLEANUP_SIZE_THRESHOLD ||

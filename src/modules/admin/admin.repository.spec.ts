@@ -20,6 +20,22 @@ const makeRepository = () => {
 };
 
 describe("AdminRepository.findJobs", () => {
+  it("includes all submitted content for the review preview and excludes payment secrets", async () => {
+    const { repository, prisma } = makeRepository();
+    await repository.findJobs({ status: "PENDING_REVIEW" }, 0, 20);
+    const query = prisma.job.findMany.mock.calls[0]![0] as {
+      select: Record<string, unknown>;
+    };
+    for (const field of [
+      "description",
+      "requirements",
+      "responsibilities",
+      "applicationUrl",
+      "benefits",
+    ])
+      expect(query.select[field]).toBe(true);
+    expect(query.select).not.toHaveProperty("stripeSessionId");
+  });
   it("orders the PENDING_REVIEW moderation queue by paidAt, not createdAt", async () => {
     const { repository, prisma } = makeRepository();
 

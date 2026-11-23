@@ -44,6 +44,7 @@ export const PLAN_TYPE_VALUES = ["STANDARD", "FEATURED", "HANDS_ON"] as const;
 export const ALERT_FREQUENCY_VALUES = ["IMMEDIATE", "DAILY", "WEEKLY"] as const;
 export const JOB_REPORT_REASON_VALUES = [
   "SCAM",
+  "ILLEGAL_FEE",
   "MISLEADING",
   "ALREADY_FILLED",
   "DISCRIMINATORY",

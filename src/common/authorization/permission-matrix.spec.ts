@@ -33,6 +33,10 @@ import { BillingController } from "@/modules/billing/billing.controller";
 import { TalentController } from "@/modules/talent/talent.controller";
 import { ReviewsController } from "@/modules/reviews/reviews.controller";
 import { TeamController } from "@/modules/team/team.controller";
+import {
+  CompanyDocumentsController,
+  CompanyDocumentUploadGuard,
+} from "@/modules/company-documents/company-documents.controller";
 
 /**
  * This is the permission matrix: every route in the API, alongside the exact
@@ -555,17 +559,31 @@ const expectations: ControllerExpectation[] = [
         roles: ["EMPLOYER"],
       },
       {
+        method: "getApplicationDetail",
+        httpMethod: "GET",
+        path: "applications/:id",
+        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationAccessGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
+        method: "getCachedApplicationCvAnalysis",
+        httpMethod: "GET",
+        path: "applications/:id/ai-cv-analysis/cached",
+        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationAccessGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
         method: "getApplicationCvAnalysis",
         httpMethod: "GET",
         path: "applications/:id/ai-cv-analysis",
-        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationAccessGuard"],
+        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationOwnershipGuard"],
         roles: ["EMPLOYER"],
       },
       {
         method: "regenerateApplicationCvAnalysis",
         httpMethod: "POST",
         path: "applications/:id/ai-cv-analysis/regenerate",
-        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationAccessGuard"],
+        guards: ["JwtAuthGuard", "RolesGuard", "ApplicationOwnershipGuard"],
         roles: ["EMPLOYER"],
       },
       {
@@ -1063,6 +1081,34 @@ const expectations: ControllerExpectation[] = [
       },
     ],
   },
+  {
+    name: "CompanyDocumentsController",
+    controller: CompanyDocumentsController,
+    basePath: "company-documents",
+    routes: [
+      {
+        method: "list",
+        httpMethod: "GET",
+        path: "/",
+        guards: ["JwtAuthGuard", "RolesGuard"],
+        roles: ["EMPLOYER", "ADMIN"],
+      },
+      {
+        method: "upload",
+        httpMethod: "POST",
+        path: "/",
+        guards: ["JwtAuthGuard", "RolesGuard", "CompanyDocumentUploadGuard"],
+        roles: ["EMPLOYER"],
+      },
+      {
+        method: "download",
+        httpMethod: "GET",
+        path: ":id",
+        guards: ["JwtAuthGuard", "RolesGuard"],
+        roles: ["EMPLOYER", "ADMIN"],
+      },
+    ],
+  },
 ];
 
 describe("Permission matrix", () => {
@@ -1107,6 +1153,7 @@ describe("Permission matrix", () => {
       AlertOwnershipGuard,
       JobPayerOwnershipGuard,
       CronSecretGuard,
-    ]).toHaveLength(10);
+      CompanyDocumentUploadGuard,
+    ]).toHaveLength(11);
   });
 });

@@ -52,7 +52,12 @@ import {
 } from "@/common/services/rate-limit.service";
 import type { EnvConfig } from "@/core/config/env.validation";
 import type { AuthenticatedUser } from "@/common/interfaces/authenticated-user.interface";
-import { ConflictApiException } from "@/common/exceptions/api.exception";
+import {
+  ConflictApiException,
+  ForbiddenApiException,
+  TooManyRequestsApiException,
+  UnauthorizedApiException,
+} from "@/common/exceptions/api.exception";
 import type { OAuthProfile, OAuthProviderName } from "./interfaces";
 import {
   assertOAuthProviderConfigured,
@@ -121,29 +126,63 @@ export class AuthController {
     @Req() req: Request,
     @Body(new ZodValidationPipe(loginSchema)) body: LoginDto,
   ) {
-    this.rateLimitService.enforce(
-      `login-ip:${clientIp(req)}`,
-      RATE_LIMITS.LOGIN.limit,
-      RATE_LIMITS.LOGIN.windowMs,
-      req,
-    );
+    const ipKey = `login-ip:${clientIp(req)}`;
     // body.email is already normalized by loginSchema (emailSchema), so this and the
     // actual auth lookup in validateCredentials are guaranteed to agree on identity.
-    this.rateLimitService.enforce(
-      `login-email:${body.email}`,
-      RATE_LIMITS.LOGIN.limit,
-      RATE_LIMITS.LOGIN.windowMs,
-      req,
-    );
+    const emailKey = `login-email:${body.email}`;
 
-    // Returns { accessToken, user } directly, or — if this account has 2FA
-    // enabled — { twoFactorRequired: true, challengeToken } instead, which
-    // the frontend must exchange via POST /auth/2fa/challenge.
-    return this.authService.loginOrChallenge(
-      body.email,
-      body.password,
-      sessionMeta(req),
+    // PB02-TC08: Rate limit applies to consecutive failed login attempts (max 10 bad attempts/min per IP/account).
+    // If IP or email has reached the limit of consecutive failed attempts, temporarily block the request.
+    const ipBlock = this.rateLimitService.isBlocked(
+      ipKey,
+      RATE_LIMITS.LOGIN.limit,
     );
+    if (ipBlock.blocked) {
+      throw new TooManyRequestsApiException(ipBlock.retryAfter);
+    }
+    const emailBlock = this.rateLimitService.isBlocked(
+      emailKey,
+      RATE_LIMITS.LOGIN.limit,
+    );
+    if (emailBlock.blocked) {
+      throw new TooManyRequestsApiException(emailBlock.retryAfter);
+    }
+
+    try {
+      // Returns { accessToken, user } directly, or — if this account has 2FA
+      // enabled — { twoFactorRequired: true, challengeToken } instead, which
+      // the frontend must exchange via POST /auth/2fa/challenge.
+      const result = await this.authService.loginOrChallenge(
+        body.email,
+        body.password,
+        sessionMeta(req),
+      );
+
+      // On successful login, reset the consecutive failed login counters so
+      // legitimate users are never blocked after consecutive successful logins.
+      this.rateLimitService.reset(ipKey);
+      this.rateLimitService.reset(emailKey);
+
+      return result;
+    } catch (err) {
+      // Only count failed credential attempts against the rate limit
+      if (
+        err instanceof UnauthorizedApiException ||
+        err instanceof ForbiddenApiException
+      ) {
+        this.rateLimitService.check(
+          ipKey,
+          RATE_LIMITS.LOGIN.limit,
+          RATE_LIMITS.LOGIN.windowMs,
+        );
+        this.rateLimitService.check(
+          emailKey,
+          RATE_LIMITS.LOGIN.limit,
+          RATE_LIMITS.LOGIN.windowMs,
+        );
+      }
+      throw err;
+    }
   }
 
   @ApiTwoFactorChallenge()

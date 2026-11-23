@@ -129,3 +129,66 @@ describe("RateLimitService.enforce", () => {
     expect(request.rateLimitInfo).toEqual({ limit: 1, remaining: 0 });
   });
 });
+
+describe("RateLimitService.isBlocked", () => {
+  it("returns blocked: false when key does not exist", () => {
+    const service = new RateLimitService();
+    expect(service.isBlocked("key", 10)).toEqual({
+      blocked: false,
+      remaining: 10,
+      retryAfter: 0,
+    });
+  });
+
+  it("returns blocked: false when under the limit", () => {
+    const service = new RateLimitService();
+    service.check("key", 10, 60_000);
+    expect(service.isBlocked("key", 10)).toEqual({
+      blocked: false,
+      remaining: 9,
+      retryAfter: 0,
+    });
+  });
+
+  it("returns blocked: true when limit is reached", () => {
+    const service = new RateLimitService();
+    const now = 1_000;
+    for (let i = 0; i < 10; i++) {
+      service.check("key", 10, 60_000, now);
+    }
+    const result = service.isBlocked("key", 10, now);
+    expect(result.blocked).toBe(true);
+    expect(result.remaining).toBe(0);
+    expect(result.retryAfter).toBeGreaterThan(0);
+  });
+
+  it("returns blocked: false when window expires", () => {
+    const service = new RateLimitService();
+    const now = 1_000;
+    for (let i = 0; i < 10; i++) {
+      service.check("key", 10, 60_000, now);
+    }
+    expect(service.isBlocked("key", 10, now + 60_001)).toEqual({
+      blocked: false,
+      remaining: 10,
+      retryAfter: 0,
+    });
+  });
+});
+
+describe("RateLimitService.reset", () => {
+  it("clears the bucket so isBlocked returns false and remaining resets", () => {
+    const service = new RateLimitService();
+    for (let i = 0; i < 10; i++) {
+      service.check("key", 10, 60_000);
+    }
+    expect(service.isBlocked("key", 10).blocked).toBe(true);
+
+    service.reset("key");
+    expect(service.isBlocked("key", 10)).toEqual({
+      blocked: false,
+      remaining: 10,
+      retryAfter: 0,
+    });
+  });
+});

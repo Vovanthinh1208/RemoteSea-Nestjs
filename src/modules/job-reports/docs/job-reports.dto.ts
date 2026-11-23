@@ -10,6 +10,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 const REASONS = [
   "SCAM",
+  "ILLEGAL_FEE",
   "MISLEADING",
   "ALREADY_FILLED",
   "DISCRIMINATORY",

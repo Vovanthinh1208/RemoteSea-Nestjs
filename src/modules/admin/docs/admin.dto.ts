@@ -145,6 +145,21 @@ class JobListItemCategoryDto {
 }
 
 export class JobListItemDto {
+  @ApiProperty({ description: "Full submitted job description for moderation" })
+  description!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  responsibilities!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  requirements!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  applicationUrl!: string | null;
+
+  @ApiProperty({ type: [String] })
+  benefits!: string[];
+
   @ApiProperty({ example: "cjob1a2b0000ug0h9x1n1a2" })
   id!: string;
 
@@ -415,6 +430,7 @@ export class JobReportListItemDto {
   @ApiProperty({ enum: JOB_REPORT_REASON_VALUES, example: "SCAM" })
   reason!:
     | "SCAM"
+    | "ILLEGAL_FEE"
     | "MISLEADING"
     | "ALREADY_FILLED"
     | "DISCRIMINATORY"

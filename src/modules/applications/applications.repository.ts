@@ -26,6 +26,8 @@ import {
   WITHDRAWABLE_STATUSES,
 } from "./constants";
 import { jobListItemSelect } from "@/common/types/job-list-item.type";
+import { ConflictApiException } from "@/common/exceptions/api.exception";
+import { ErrorCode } from "@/common/exceptions/error-codes";
 import {
   jobWithEmployerEmailInclude,
   type JobWithEmployerEmail,
@@ -146,6 +148,28 @@ export class ApplicationsRepository {
     input: CreateApplicationInput,
   ): Promise<{ application: OwnApplication; job: JobWithEmployerEmail }> {
     return this.prisma.$transaction(async (tx) => {
+      // The service's fast validation can become stale while the candidate
+      // submits. Lock the listing and recheck eligibility inside the same
+      // transaction as the application, timeline and counter writes.
+      await tx.$queryRaw`SELECT id FROM jobs WHERE id = ${input.jobId} FOR UPDATE`;
+      const target = await tx.job.findFirst({
+        where: {
+          id: input.jobId,
+          status: "ACTIVE",
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+          employer: {
+            suspendedAt: null,
+            user: { isPaused: false, bannedAt: null },
+          },
+        },
+        select: { id: true },
+      });
+      if (!target) {
+        throw new ConflictApiException(
+          "This job is no longer accepting applications",
+          ErrorCode.JOB_NOT_ACTIVE,
+        );
+      }
       const created = await tx.application.create({
         data: {
           jobId: input.jobId,

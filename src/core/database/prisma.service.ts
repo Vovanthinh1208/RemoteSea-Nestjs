@@ -8,7 +8,7 @@ import { ConfigService } from "@nestjs/config";
 import { Prisma, PrismaClient } from "@prisma/client";
 import type { EnvConfig } from "@/core/config/env.validation";
 import { withPoolParams } from "./db-url.util";
-import { MetricsService } from "@/modules/metrics/metrics.service";
+import { MetricsService } from "@/core/metrics/metrics.service";
 
 // Below this, a query is unremarkable and only surfaces in dev's debug log; at
 // or above it, it's logged as a warning in every environment, including

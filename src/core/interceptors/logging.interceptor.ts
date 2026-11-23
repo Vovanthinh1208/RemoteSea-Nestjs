@@ -7,7 +7,7 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import type { Observable } from "rxjs";
-import { MetricsService } from "@/modules/metrics/metrics.service";
+import { MetricsService } from "@/core/metrics/metrics.service";
 
 /**
  * One JSON line per request, logged from the response's `finish` event rather

@@ -63,6 +63,7 @@ enum InvitationStatus {
 
 enum JobReportReason {
   SCAM
+  ILLEGAL_FEE
   MISLEADING
   ALREADY_FILLED
   DISCRIMINATORY
@@ -526,12 +527,13 @@ model EmployerProfile {
   createdAt          DateTime                   @default(now())
   updatedAt          DateTime                   @updatedAt
 
-  user               User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  jobs               Job[]
-  invitations        JobInvitation[]
-  emailVerifications EmployerEmailVerification[]
-  members            CompanyMember[]
-  teamInvitations    TeamInvitation[]
+  user                  User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs                  Job[]
+  invitations           JobInvitation[]
+  emailVerifications    EmployerEmailVerification[]
+  members               CompanyMember[]
+  teamInvitations       TeamInvitation[]
+  verificationDocuments CompanyVerificationDocument[]
 
   // Composite, not single-column: AdminRepository.findEmployers filters
   // isVerified and orders by createdAt desc — the plain isVerified index
@@ -545,6 +547,23 @@ enum EmployerVerificationStatus {
   PENDING
   VERIFIED
   FAILED
+}
+
+// PB83: private legal attachments are deliberately kept outside public CDN
+// uploads. Bounded PDF bytes are served only to the company OWNER or ADMIN.
+model CompanyVerificationDocument {
+  id         String          @id @default(cuid())
+  employerId String
+  filename   String
+  byteLength Int
+  sha256     String
+  contents   Bytes
+  createdAt  DateTime        @default(now())
+  employer   EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
+
+  @@unique([employerId, sha256])
+  @@index([employerId, createdAt])
+  @@map("company_verification_documents")
 }
 
 // Deliberately its own table, not a reuse of VerificationToken — that
@@ -885,15 +904,15 @@ model JobInvitation {
 // PB88 permits one report per user/job, including after resolution. A partial
 // unique index excludes legacy duplicate rows (retained for audit history).
 model JobReport {
-  id         String          @id @default(cuid())
-  jobId      String
-  reporterId String
-  reason     JobReportReason
-  details    String?         @db.Text
-  status     JobReportStatus @default(OPEN)
-  resolvedAt DateTime?
-  legacyDuplicate Boolean @default(false)
-  createdAt  DateTime        @default(now())
+  id              String          @id @default(cuid())
+  jobId           String
+  reporterId      String
+  reason          JobReportReason
+  details         String?         @db.Text
+  status          JobReportStatus @default(OPEN)
+  resolvedAt      DateTime?
+  legacyDuplicate Boolean         @default(false)
+  createdAt       DateTime        @default(now())
 
   job      Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
   reporter User @relation(fields: [reporterId], references: [id], onDelete: Cascade)
