@@ -189,15 +189,9 @@ export class UsersController {
     );
 
     const fmt = (format || "pdf").toLowerCase();
-    if (fmt === "json") {
+    if (fmt !== "pdf" && fmt !== "json") {
       throw new BadRequestApiException(
-        "JSON export is no longer supported. Please export your personal data as PDF.",
-        ErrorCode.VALIDATION_ERROR,
-      );
-    }
-    if (fmt !== "pdf") {
-      throw new BadRequestApiException(
-        "Invalid export format. Only PDF is supported.",
+        "Invalid export format. Supported formats: pdf, json.",
         ErrorCode.VALIDATION_ERROR,
       );
     }
@@ -206,6 +200,17 @@ export class UsersController {
 
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
+
+    if (fmt === "json") {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="remotesea-personal-data-${dateStr}.json"`,
+      );
+      const payload = await this.usersService.exportData(user.id);
+      return payload;
+    }
+
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",

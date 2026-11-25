@@ -665,12 +665,10 @@ describe("PB04: Đăng nhập bằng Google, GitHub hoặc LinkedIn (OAuth)", ()
 
       const jwtService = {
         sign: jest.fn().mockReturnValue("mock-token"),
-        verify: jest
-          .fn()
-          .mockReturnValue({
-            sub: "banned-user-id",
-            purpose: "oauth_exchange",
-          }),
+        verify: jest.fn().mockReturnValue({
+          sub: "banned-user-id",
+          purpose: "oauth_exchange",
+        }),
       };
 
       const authService = new AuthService(
