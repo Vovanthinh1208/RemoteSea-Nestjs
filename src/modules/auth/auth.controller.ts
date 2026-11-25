@@ -548,10 +548,7 @@ export class AuthController {
   @ApiVerifyResetToken()
   @Get("verify-reset-token")
   @HttpCode(HttpStatus.OK)
-  async verifyResetToken(
-    @Req() req: Request,
-    @Query("token") token?: string,
-  ) {
+  async verifyResetToken(@Req() req: Request, @Query("token") token?: string) {
     this.rateLimitService.enforce(
       `verify-reset:${clientIp(req)}`,
       RATE_LIMITS.VERIFY_RESET_TOKEN.limit,

@@ -340,13 +340,17 @@ describe("PB06: Yêu cầu quên mật khẩu (Password Reset Request)", () => {
         token: tokenHash,
         expires: new Date(Date.now() + 10 * 60 * 1000),
       });
-      authRepository.consumePasswordReset = jest.fn().mockResolvedValueOnce(true);
+      authRepository.consumePasswordReset = jest
+        .fn()
+        .mockResolvedValueOnce(true);
 
       await authService.resetPassword(rawToken, "NewPass@123");
       expect(authRepository.consumePasswordReset).toHaveBeenCalledTimes(1);
 
       // Giả lập lần 2: token đã bị xóa hoặc consumePasswordReset trả về false (đã dùng)
-      authRepository.findVerificationToken = jest.fn().mockResolvedValueOnce(null);
+      authRepository.findVerificationToken = jest
+        .fn()
+        .mockResolvedValueOnce(null);
 
       let caughtError: unknown;
       try {

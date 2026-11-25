@@ -47,10 +47,11 @@ const makeService = (overrides?: {
     sendTwoFactorDisabledEmail: jest.fn().mockResolvedValue(undefined),
     ...overrides?.emailService,
   };
-  const jwtService: { sign: jest.Mock; verify: jest.Mock } = overrides?.jwtService ?? {
-    sign: jest.fn().mockReturnValue("signed.jwt.token"),
-    verify: jest.fn(),
-  };
+  const jwtService: { sign: jest.Mock; verify: jest.Mock } =
+    overrides?.jwtService ?? {
+      sign: jest.fn().mockReturnValue("signed.jwt.token"),
+      verify: jest.fn(),
+    };
   const metricsService = overrides?.metricsService ?? {
     recordAuthFailure: jest.fn(),
   };
@@ -1007,7 +1008,9 @@ describe("AuthService.completeTwoFactorChallenge", () => {
 
     const failureReason = (rejected[0] as PromiseRejectedResult).reason;
     expect(failureReason).toBeInstanceOf(BadRequestApiException);
-    expect((failureReason as BadRequestApiException).getResponse()).toMatchObject({
+    expect(
+      (failureReason as BadRequestApiException).getResponse(),
+    ).toMatchObject({
       code: ErrorCode.INVALID_TWO_FACTOR_CODE,
     });
   });
@@ -1046,7 +1049,9 @@ describe("AuthService.completeTwoFactorChallenge", () => {
       .catch((e: unknown) => e);
 
     expect(sixthAttempt).toBeInstanceOf(UnauthorizedApiException);
-    expect((sixthAttempt as UnauthorizedApiException).getResponse()).toMatchObject({
+    expect(
+      (sixthAttempt as UnauthorizedApiException).getResponse(),
+    ).toMatchObject({
       code: ErrorCode.INVALID_CHALLENGE_TOKEN,
     });
 
@@ -1129,8 +1134,10 @@ describe("AuthService.completeTwoFactorChallenge", () => {
     const challenge1 = "challenge.session.1";
     jwtService.verify.mockImplementation((t: string) => {
       if (t === challenge1) return { sub: "u1", purpose: "2fa_challenge" };
-      if (t === "challenge.session.2") return { sub: "u1", purpose: "2fa_challenge" };
-      if (t === "challenge.session.3") return { sub: "u1", purpose: "2fa_challenge" };
+      if (t === "challenge.session.2")
+        return { sub: "u1", purpose: "2fa_challenge" };
+      if (t === "challenge.session.3")
+        return { sub: "u1", purpose: "2fa_challenge" };
       throw new Error("Invalid token");
     });
 
@@ -1150,7 +1157,9 @@ describe("AuthService.completeTwoFactorChallenge", () => {
       .completeTwoFactorChallenge(challenge1, validOtp)
       .catch((e: unknown) => e);
     expect(sixthAttempt).toBeInstanceOf(UnauthorizedApiException);
-    expect((sixthAttempt as UnauthorizedApiException).getResponse()).toMatchObject({
+    expect(
+      (sixthAttempt as UnauthorizedApiException).getResponse(),
+    ).toMatchObject({
       code: ErrorCode.INVALID_CHALLENGE_TOKEN,
     });
 
@@ -1164,7 +1173,10 @@ describe("AuthService.completeTwoFactorChallenge", () => {
       "VALID-BACKUP",
     );
     expect(session2Result).toHaveProperty("accessToken");
-    expect(session2Result.user).toMatchObject({ id: "u1", email: "user@example.test" });
+    expect(session2Result.user).toMatchObject({
+      id: "u1",
+      email: "user@example.test",
+    });
 
     // ─── PHIÊN 3 ─────────────────────────────────────────────────────────────
     // 1. User logs out, then logs in again (Email + Password) -> receives challengeToken 3
@@ -1176,6 +1188,9 @@ describe("AuthService.completeTwoFactorChallenge", () => {
       validOtp,
     );
     expect(session3Result).toHaveProperty("accessToken");
-    expect(session3Result.user).toMatchObject({ id: "u1", email: "user@example.test" });
+    expect(session3Result.user).toMatchObject({
+      id: "u1",
+      email: "user@example.test",
+    });
   });
 });

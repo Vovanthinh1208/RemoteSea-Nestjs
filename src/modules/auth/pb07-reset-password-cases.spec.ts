@@ -121,7 +121,10 @@ describe("PB07: Đặt lại mật khẩu qua email (Password Reset)", () => {
     it("từ chối token đã quá hạn 15 phút với mã lỗi INVALID_OR_EXPIRED_TOKEN", async () => {
       const req = createMockRequest();
       const rawToken = "expired-token-xyz";
-      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+      const tokenHash = crypto
+        .createHash("sha256")
+        .update(rawToken)
+        .digest("hex");
 
       // Token hết hạn 1 phút trước
       authRepository.findVerificationToken = jest.fn().mockResolvedValue({
@@ -153,7 +156,10 @@ describe("PB07: Đặt lại mật khẩu qua email (Password Reset)", () => {
     it("trả về { valid: true } khi token hợp lệ và còn trong thời hạn 15 phút", async () => {
       const req = createMockRequest();
       const rawToken = "valid-token-abc";
-      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+      const tokenHash = crypto
+        .createHash("sha256")
+        .update(rawToken)
+        .digest("hex");
 
       authRepository.findVerificationToken = jest.fn().mockResolvedValue({
         identifier: "user@example.com",
@@ -180,7 +186,10 @@ describe("PB07: Đặt lại mật khẩu qua email (Password Reset)", () => {
     it("cho phép đổi mật khẩu thành công khi token hợp lệ và tiêu thụ token duy nhất một lần", async () => {
       const req = createMockRequest();
       const rawToken = "single-use-token";
-      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+      const tokenHash = crypto
+        .createHash("sha256")
+        .update(rawToken)
+        .digest("hex");
 
       authRepository.findVerificationToken = jest.fn().mockResolvedValue({
         identifier: "user@example.com",

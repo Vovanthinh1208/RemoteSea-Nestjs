@@ -30,7 +30,8 @@ describe("PB04: Đăng nhập bằng Google, GitHub hoặc LinkedIn (OAuth)", ()
     AUTH_GITHUB_CALLBACK_URL: "https://remotesea.com/api/auth/github/callback",
     AUTH_LINKEDIN_ID: "linkedin-client-id-789",
     AUTH_LINKEDIN_SECRET: "linkedin-client-secret-xyz",
-    AUTH_LINKEDIN_CALLBACK_URL: "https://remotesea.com/api/auth/linkedin/callback",
+    AUTH_LINKEDIN_CALLBACK_URL:
+      "https://remotesea.com/api/auth/linkedin/callback",
     FRONTEND_URL: "https://remotesea.com",
     JWT_SECRET: "mock-jwt-secret-at-least-32-chars-long",
     JWT_EXPIRES_IN: "7d",
@@ -48,31 +49,58 @@ describe("PB04: Đăng nhập bằng Google, GitHub hoặc LinkedIn (OAuth)", ()
     it("chuyển hướng người dùng đến trang xác thực chính xác của Google, GitHub, LinkedIn với đầy đủ client_id và redirect_uri", () => {
       const config = createMockConfig();
       const authService = {
-        createOAuthLinkIntent: jest.fn().mockReturnValue("mock-link-state-token"),
+        createOAuthLinkIntent: jest
+          .fn()
+          .mockReturnValue("mock-link-state-token"),
         verifyOAuthLinkIntent: jest.fn(),
       } as unknown as AuthService;
       const rateLimitService = { enforce: jest.fn() } as never;
-      const controller = new AuthController(authService, rateLimitService, config);
+      const controller = new AuthController(
+        authService,
+        rateLimitService,
+        config,
+      );
 
       // 1. Kiểm tra URL Google
-      const googleLink = controller.linkProvider({ id: "user-1", email: "u1@test.com", role: "TALENT" } as never, "google");
-      expect(googleLink.url).toContain("https://accounts.google.com/o/oauth2/v2/auth");
+      const googleLink = controller.linkProvider(
+        { id: "user-1", email: "u1@test.com", role: "TALENT" } as never,
+        "google",
+      );
+      expect(googleLink.url).toContain(
+        "https://accounts.google.com/o/oauth2/v2/auth",
+      );
       expect(googleLink.url).toContain("client_id=google-client-id-123");
-      expect(googleLink.url).toContain("redirect_uri=https%3A%2F%2Fremotesea.com%2Fapi%2Fauth%2Fgoogle%2Fcallback");
+      expect(googleLink.url).toContain(
+        "redirect_uri=https%3A%2F%2Fremotesea.com%2Fapi%2Fauth%2Fgoogle%2Fcallback",
+      );
       expect(googleLink.url).toContain("scope=email+profile");
 
       // 2. Kiểm tra URL GitHub
-      const githubLink = controller.linkProvider({ id: "user-1", email: "u1@test.com", role: "TALENT" } as never, "github");
-      expect(githubLink.url).toContain("https://github.com/login/oauth/authorize");
+      const githubLink = controller.linkProvider(
+        { id: "user-1", email: "u1@test.com", role: "TALENT" } as never,
+        "github",
+      );
+      expect(githubLink.url).toContain(
+        "https://github.com/login/oauth/authorize",
+      );
       expect(githubLink.url).toContain("client_id=github-client-id-456");
-      expect(githubLink.url).toContain("redirect_uri=https%3A%2F%2Fremotesea.com%2Fapi%2Fauth%2Fgithub%2Fcallback");
+      expect(githubLink.url).toContain(
+        "redirect_uri=https%3A%2F%2Fremotesea.com%2Fapi%2Fauth%2Fgithub%2Fcallback",
+      );
       expect(githubLink.url).toContain("scope=user%3Aemail");
 
       // 3. Kiểm tra URL LinkedIn
-      const linkedinLink = controller.linkProvider({ id: "user-1", email: "u1@test.com", role: "TALENT" } as never, "linkedin");
-      expect(linkedinLink.url).toContain("https://www.linkedin.com/oauth/v2/authorization");
+      const linkedinLink = controller.linkProvider(
+        { id: "user-1", email: "u1@test.com", role: "TALENT" } as never,
+        "linkedin",
+      );
+      expect(linkedinLink.url).toContain(
+        "https://www.linkedin.com/oauth/v2/authorization",
+      );
       expect(linkedinLink.url).toContain("client_id=linkedin-client-id-789");
-      expect(linkedinLink.url).toContain("redirect_uri=https%3A%2F%2Fremotesea.com%2Fapi%2Fauth%2Flinkedin%2Fcallback");
+      expect(linkedinLink.url).toContain(
+        "redirect_uri=https%3A%2F%2Fremotesea.com%2Fapi%2Fauth%2Flinkedin%2Fcallback",
+      );
       expect(linkedinLink.url).toContain("scope=openid+profile+email");
     });
 
@@ -83,13 +111,27 @@ describe("PB04: Đăng nhập bằng Google, GitHub hoặc LinkedIn (OAuth)", ()
       const authService = { verifyOAuthLinkIntent: jest.fn() } as never;
       const metricsService = { recordAuthFailure: jest.fn() } as never;
 
-      const googleGuard = new GoogleAuthGuard(authService, metricsService, emptyConfig);
-      const githubGuard = new GithubAuthGuard(authService, metricsService, emptyConfig);
+      const googleGuard = new GoogleAuthGuard(
+        authService,
+        metricsService,
+        emptyConfig,
+      );
+      const githubGuard = new GithubAuthGuard(
+        authService,
+        metricsService,
+        emptyConfig,
+      );
       const linkedinGuard = new LinkedinAuthGuard(authService, emptyConfig);
 
-      expect(() => googleGuard.canActivate({} as never)).toThrow(ServiceUnavailableApiException);
-      expect(() => githubGuard.canActivate({} as never)).toThrow(ServiceUnavailableApiException);
-      expect(() => linkedinGuard.canActivate({} as never)).toThrow(ServiceUnavailableApiException);
+      expect(() => googleGuard.canActivate({} as never)).toThrow(
+        ServiceUnavailableApiException,
+      );
+      expect(() => githubGuard.canActivate({} as never)).toThrow(
+        ServiceUnavailableApiException,
+      );
+      expect(() => linkedinGuard.canActivate({} as never)).toThrow(
+        ServiceUnavailableApiException,
+      );
     });
   });
 
@@ -183,16 +225,43 @@ describe("PB04: Đăng nhập bằng Google, GitHub hoặc LinkedIn (OAuth)", ()
     it("từ chối đăng nhập nếu tài khoản nhà cung cấp chưa xác minh email (bảo vệ chống chiếm quyền)", () => {
       const config = createMockConfig();
       const doneGoogle = jest.fn();
-      new GoogleStrategy(config).validate("a", "r", { id: "g1", emails: [{ value: "bad@gmail.com", verified: false }] } as never, doneGoogle);
-      expect(doneGoogle.mock.calls[0][0].message).toBe("Google account has no verified email");
+      new GoogleStrategy(config).validate(
+        "a",
+        "r",
+        {
+          id: "g1",
+          emails: [{ value: "bad@gmail.com", verified: false }],
+        } as never,
+        doneGoogle,
+      );
+      expect(doneGoogle.mock.calls[0][0].message).toBe(
+        "Google account has no verified email",
+      );
 
       const doneGithub = jest.fn();
-      new GithubStrategy(config).validate("a", "r", { id: "gh1", emails: [{ value: "bad@gh.com", verified: false }] } as never, doneGithub);
-      expect(doneGithub.mock.calls[0][0].message).toBe("GitHub account has no verified email");
+      new GithubStrategy(config).validate(
+        "a",
+        "r",
+        {
+          id: "gh1",
+          emails: [{ value: "bad@gh.com", verified: false }],
+        } as never,
+        doneGithub,
+      );
+      expect(doneGithub.mock.calls[0][0].message).toBe(
+        "GitHub account has no verified email",
+      );
 
       const doneLinkedin = jest.fn();
-      new LinkedinStrategy(config).validate("a", "r", { sub: "in1", email: "bad@in.com", email_verified: false }, doneLinkedin);
-      expect(doneLinkedin.mock.calls[0][0].message).toBe("LinkedIn account has no verified email");
+      new LinkedinStrategy(config).validate(
+        "a",
+        "r",
+        { sub: "in1", email: "bad@in.com", email_verified: false },
+        doneLinkedin,
+      );
+      expect(doneLinkedin.mock.calls[0][0].message).toBe(
+        "LinkedIn account has no verified email",
+      );
     });
   });
 
@@ -212,7 +281,9 @@ describe("PB04: Đăng nhập bằng Google, GitHub hoặc LinkedIn (OAuth)", ()
       const signMock = jest.fn().mockReturnValue("mock-single-use-jwt-code");
       const jwtService = { sign: signMock, verify: jest.fn() };
       const authService = new AuthService(
-        { findOrCreateOAuthUser: jest.fn().mockResolvedValue(mockUser) } as never,
+        {
+          findOrCreateOAuthUser: jest.fn().mockResolvedValue(mockUser),
+        } as never,
         jwtService as never,
         {} as never,
         { recordAuthFailure: jest.fn() } as never,
@@ -221,11 +292,21 @@ describe("PB04: Đăng nhập bằng Google, GitHub hoặc LinkedIn (OAuth)", ()
       const redirectMock = jest.fn();
       const res = { redirect: redirectMock } as unknown as Response;
       const req = {
-        user: { provider: "google", providerAccountId: "g1", email: "test@example.com", name: "Test", image: null },
+        user: {
+          provider: "google",
+          providerAccountId: "g1",
+          email: "test@example.com",
+          name: "Test",
+          image: null,
+        },
         query: {},
       } as unknown as Request;
 
-      const controller = new AuthController(authService, { enforce: jest.fn() } as never, config);
+      const controller = new AuthController(
+        authService,
+        { enforce: jest.fn() } as never,
+        config,
+      );
       await controller.googleCallback(req, res);
 
       // Mã trao đổi được sinh với purpose: 'oauth_exchange' và thời hạn 60s
@@ -248,7 +329,9 @@ describe("PB04: Đăng nhập bằng Google, GitHub hoặc LinkedIn (OAuth)", ()
         role: "TALENT",
         bannedAt: null,
       };
-      const verifyMock = jest.fn().mockReturnValue({ sub: "user-123", purpose: "oauth_exchange" });
+      const verifyMock = jest
+        .fn()
+        .mockReturnValue({ sub: "user-123", purpose: "oauth_exchange" });
       const signMock = jest.fn().mockReturnValue("real.access.jwt.token");
       const jwtService = { sign: signMock, verify: verifyMock };
       const authRepository = {
@@ -284,7 +367,9 @@ describe("PB04: Đăng nhập bằng Google, GitHub hoặc LinkedIn (OAuth)", ()
         { recordAuthFailure: jest.fn() } as never,
       );
 
-      await expect(authService.completeOAuthExchange("expired-or-bad-code")).rejects.toMatchObject({
+      await expect(
+        authService.completeOAuthExchange("expired-or-bad-code"),
+      ).rejects.toMatchObject({
         response: {
           code: ErrorCode.INVALID_OAUTH_EXCHANGE_CODE,
         },
@@ -524,7 +609,9 @@ describe("PB04: Đăng nhập bằng Google, GitHub hoặc LinkedIn (OAuth)", ()
         doneGoogle,
       );
       expect(doneGoogle.mock.calls[0][0]).toBeInstanceOf(Error);
-      expect(doneGoogle.mock.calls[0][0].message).toBe("Google account has no verified email");
+      expect(doneGoogle.mock.calls[0][0].message).toBe(
+        "Google account has no verified email",
+      );
 
       const doneGithub = jest.fn();
       new GithubStrategy(config).validate(
@@ -532,12 +619,16 @@ describe("PB04: Đăng nhập bằng Google, GitHub hoặc LinkedIn (OAuth)", ()
         "refresh",
         {
           id: "attacker-github-id",
-          emails: [{ value: "victim@example.com", primary: true, verified: false }],
+          emails: [
+            { value: "victim@example.com", primary: true, verified: false },
+          ],
         } as never,
         doneGithub,
       );
       expect(doneGithub.mock.calls[0][0]).toBeInstanceOf(Error);
-      expect(doneGithub.mock.calls[0][0].message).toBe("GitHub account has no verified email");
+      expect(doneGithub.mock.calls[0][0].message).toBe(
+        "GitHub account has no verified email",
+      );
 
       const doneLinkedin = jest.fn();
       new LinkedinStrategy(config).validate(
@@ -551,7 +642,9 @@ describe("PB04: Đăng nhập bằng Google, GitHub hoặc LinkedIn (OAuth)", ()
         doneLinkedin,
       );
       expect(doneLinkedin.mock.calls[0][0]).toBeInstanceOf(Error);
-      expect(doneLinkedin.mock.calls[0][0].message).toBe("LinkedIn account has no verified email");
+      expect(doneLinkedin.mock.calls[0][0].message).toBe(
+        "LinkedIn account has no verified email",
+      );
     });
 
     it("2. Chặn đăng nhập OAuth nếu tài khoản đã bị cấm (Banned User: bannedAt !== null) với mã lỗi 403 ACCOUNT_BANNED", async () => {
@@ -572,7 +665,12 @@ describe("PB04: Đăng nhập bằng Google, GitHub hoặc LinkedIn (OAuth)", ()
 
       const jwtService = {
         sign: jest.fn().mockReturnValue("mock-token"),
-        verify: jest.fn().mockReturnValue({ sub: "banned-user-id", purpose: "oauth_exchange" }),
+        verify: jest
+          .fn()
+          .mockReturnValue({
+            sub: "banned-user-id",
+            purpose: "oauth_exchange",
+          }),
       };
 
       const authService = new AuthService(

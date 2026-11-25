@@ -213,7 +213,10 @@ describe("AuthRepository.consumeBackupCode", () => {
     };
     const repository = new AuthRepository(prisma as unknown as PrismaService);
 
-    const result = await repository.consumeBackupCode("u1", "already-consumed-code");
+    const result = await repository.consumeBackupCode(
+      "u1",
+      "already-consumed-code",
+    );
     expect(result).toBe(false);
     expect(prisma.$executeRaw).toHaveBeenCalled();
   });

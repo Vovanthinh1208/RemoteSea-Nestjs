@@ -30,7 +30,12 @@ export class AuthRepository {
         userId: string;
         revokedAt: Date | null;
         lastSeenAt: Date;
-        user: { bannedAt: Date | null; role: UserRole; email: string; name: string | null };
+        user: {
+          bannedAt: Date | null;
+          role: UserRole;
+          email: string;
+          name: string | null;
+        };
       } | null;
     }
   >();
@@ -41,7 +46,12 @@ export class AuthRepository {
       userId: string;
       revokedAt: Date | null;
       lastSeenAt: Date;
-      user: { bannedAt: Date | null; role: UserRole; email: string; name: string | null };
+      user: {
+        bannedAt: Date | null;
+        role: UserRole;
+        email: string;
+        name: string | null;
+      };
     } | null>
   >();
 
@@ -367,7 +377,10 @@ export class AuthRepository {
           },
         });
         const ttl = session ? 10_000 : 1_000;
-        this.sessionCache.set(id, { expiresAt: Date.now() + ttl, data: session });
+        this.sessionCache.set(id, {
+          expiresAt: Date.now() + ttl,
+          data: session,
+        });
         return session;
       } finally {
         this.inflightSessionLookups.delete(id);
