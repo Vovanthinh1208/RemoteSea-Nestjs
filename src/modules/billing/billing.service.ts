@@ -73,6 +73,7 @@ export class BillingService {
   async createCheckoutSession(
     job: JobPayer,
     userId: string,
+    clientOrigin?: string,
   ): Promise<CheckoutSessionResult> {
     // Ownership is already enforced by JobPayerOwnershipGuard before this runs.
     if (job.status !== "DRAFT" || job.planPaid) {
@@ -98,7 +99,21 @@ export class BillingService {
       );
     }
 
-    const appUrl = this.config.get("FRONTEND_URL", { infer: true });
+    let appUrl = this.config.get("FRONTEND_URL", { infer: true });
+    if (clientOrigin) {
+      try {
+        const parsedOrigin = new URL(clientOrigin).origin;
+        if (
+          parsedOrigin.includes("localhost") ||
+          parsedOrigin.includes("127.0.0.1") ||
+          parsedOrigin === appUrl
+        ) {
+          appUrl = parsedOrigin;
+        }
+      } catch {
+        // keep fallback appUrl
+      }
+    }
 
     const params: Stripe.Checkout.SessionCreateParams = {
       mode: "payment",
@@ -147,6 +162,23 @@ export class BillingService {
       if (error instanceof Stripe.errors.StripeConnectionError) {
         throw new ServiceUnavailableApiException(
           "Payment processing is temporarily unavailable. Please try again shortly.",
+        );
+      }
+      // Stripe refused the configured key itself (wrong/placeholder value,
+      // revoked, or a restricted key without Checkout permission). That is a
+      // deployment misconfiguration, not a server bug: answer the same 503 as
+      // the missing-key case above and log loudly so it is found from the
+      // logs — never the key, and not error.message (it echoes part of it).
+      if (
+        error instanceof Stripe.errors.StripeAuthenticationError ||
+        error instanceof Stripe.errors.StripePermissionError
+      ) {
+        this.logger.error(
+          `Stripe rejected STRIPE_SECRET_KEY (${error.type}, HTTP ${error.statusCode ?? "?"}). ` +
+            "Checkout is unavailable until the deployed secret is a valid Stripe secret key with Checkout Sessions write access.",
+        );
+        throw new ServiceUnavailableApiException(
+          "Payment processing is not configured on this server.",
         );
       }
       throw error;

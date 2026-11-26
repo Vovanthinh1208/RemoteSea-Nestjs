@@ -131,6 +131,93 @@ describe("BillingService.createCheckoutSession", () => {
     expect(billingRepository.setStripeSessionId).not.toHaveBeenCalled();
   });
 
+  // A placeholder/invalid STRIPE_SECRET_KEY on a deployment used to surface as
+  // a bare 500 INTERNAL_ERROR ("Invalid API Key provided: REPLACE_…_KEY").
+  it.each([
+    [
+      "an invalid key",
+      () =>
+        new Stripe.errors.StripeAuthenticationError({
+          type: "invalid_request_error",
+          message:
+            "Invalid API Key provided: REPLACE_***************************_KEY",
+          statusCode: 401,
+        } as never),
+    ],
+    [
+      "a restricted key without Checkout permission",
+      () =>
+        new Stripe.errors.StripePermissionError({
+          type: "invalid_request_error",
+          message:
+            "The provided key 'rk_test_***' does not have the required permissions",
+          statusCode: 403,
+        } as never),
+    ],
+  ])(
+    "maps Stripe rejecting %s to 503, stores no session and never logs the key",
+    async (_label, makeError) => {
+      const stripeCreate = jest.fn().mockRejectedValue(makeError());
+      const billingRepository = { setStripeSessionId: jest.fn() };
+      const service = new BillingService(
+        { checkout: { sessions: { create: stripeCreate } } } as never,
+        billingRepository as never,
+        {} as never,
+        { get: jest.fn().mockReturnValue("https://app.example.com") } as never,
+        {} as never,
+      );
+      const logged = jest
+        .spyOn(
+          (service as unknown as { logger: { error: () => void } }).logger,
+          "error",
+        )
+        .mockImplementation(() => undefined);
+      const job = {
+        id: "job-1",
+        status: "DRAFT",
+        planPaid: false,
+        planType: "STANDARD",
+        title: "Backend Engineer",
+      } as JobPayer;
+
+      await expect(
+        service.createCheckoutSession(job, "owner-1"),
+      ).rejects.toBeInstanceOf(ServiceUnavailableApiException);
+      expect(billingRepository.setStripeSessionId).not.toHaveBeenCalled();
+      expect(logged).toHaveBeenCalledTimes(1);
+      const message = String((logged.mock.calls[0] as unknown[])[0]);
+      expect(message).toContain("STRIPE_SECRET_KEY");
+      expect(message).not.toMatch(/REPLACE_|rk_test_|sk_test_/);
+    },
+  );
+
+  it("still propagates other Stripe errors (e.g. invalid request) unchanged", async () => {
+    const error = new Stripe.errors.StripeInvalidRequestError({
+      type: "invalid_request_error",
+      message: "Invalid currency",
+    } as never);
+    const service = new BillingService(
+      {
+        checkout: { sessions: { create: jest.fn().mockRejectedValue(error) } },
+      } as never,
+      { setStripeSessionId: jest.fn() } as never,
+      {} as never,
+      { get: jest.fn().mockReturnValue("https://app.example.com") } as never,
+      {} as never,
+    );
+    const job = {
+      id: "job-1",
+      status: "DRAFT",
+      planPaid: false,
+      planType: "STANDARD",
+      title: "Backend Engineer",
+    } as JobPayer;
+
+    await expect(service.createCheckoutSession(job, "owner-1")).rejects.toBe(
+      error,
+    );
+  });
+
   // Stripe rejects a reused idempotency key whose parameters changed, so a
   // retry after switching plan (or editing the title) needs a different key,
   // while a genuine double-submit must still share one.

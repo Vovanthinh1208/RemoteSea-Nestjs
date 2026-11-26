@@ -293,7 +293,13 @@ export class EmployerRepository {
   findProfileForVerification(employerId: string) {
     return this.prisma.employerProfile.findUnique({
       where: { id: employerId },
-      select: { id: true, companyName: true, websiteUrl: true },
+      select: {
+        id: true,
+        companyName: true,
+        websiteUrl: true,
+        verificationStatus: true,
+        isVerified: true,
+      },
     });
   }
 

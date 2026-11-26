@@ -348,6 +348,14 @@ export class EmployerService {
       );
     }
 
+    // PB32-TC005: reject re-verification if already verified
+    if (profile.verificationStatus === "VERIFIED" || profile.isVerified) {
+      throw new BadRequestApiException(
+        "Company is already verified",
+        ErrorCode.EMPLOYER_ALREADY_VERIFIED,
+      );
+    }
+
     if (!domainMatches(profile.websiteUrl, dto.email)) {
       throw new BadRequestApiException(
         "Email domain must match your company website",

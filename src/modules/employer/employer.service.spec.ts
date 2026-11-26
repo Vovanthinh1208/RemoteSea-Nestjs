@@ -387,7 +387,7 @@ describe("EmployerService.bulkUpdateApplications", () => {
 
     const result = await service.bulkUpdateApplications("owner-1", {
       ids: ["app-1"],
-      status: "SHORTLISTED",
+      status: "INTERVIEW",
     });
 
     expect(result.failed).toEqual([
@@ -1416,6 +1416,23 @@ describe("EmployerService verification OTP (PB32)", () => {
     const ttl = (expiresAt as Date).getTime() - before;
     expect(ttl).toBeGreaterThan(14 * 60_000);
     expect(ttl).toBeLessThanOrEqual(15 * 60_000 + 1000);
+  });
+
+  it("rejects re-verification if company is already VERIFIED (PB32-TC005)", async () => {
+    const { service } = makeService({
+      findProfileForVerification: jest.fn().mockResolvedValue({
+        ...profile,
+        verificationStatus: "VERIFIED",
+        isVerified: true,
+      }),
+    });
+
+    await expect(
+      service.submitVerification("owner-1", { email: "hr@acme.com" }),
+    ).rejects.toMatchObject({
+      status: 400,
+      response: { code: ErrorCode.EMPLOYER_ALREADY_VERIFIED },
+    });
   });
 
   it("verifies the company with the right code", async () => {

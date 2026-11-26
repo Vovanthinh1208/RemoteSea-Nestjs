@@ -60,9 +60,12 @@ export class BillingController {
         "Checkout plan must match the job's selected plan",
       );
     }
+    const origin =
+      (req.headers.origin as string) || (req.headers.referer as string);
     const result = await this.billingService.createCheckoutSession(
       job,
       user.id,
+      origin,
     );
     return { ...result, checkoutUrl: result.url };
   }

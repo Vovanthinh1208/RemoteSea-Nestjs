@@ -64,7 +64,9 @@ export class BillingRepository {
 
     if (
       stripeSessionId &&
-      (amountTotal !== PLAN_PRICES[job.planType] || currency !== "usd")
+      amountTotal != null &&
+      (amountTotal !== PLAN_PRICES[job.planType] ||
+        (currency && currency.toLowerCase() !== "usd"))
     )
       return null;
     const { count } = await this.prisma.job.updateMany({
@@ -72,12 +74,15 @@ export class BillingRepository {
         id: jobId,
         planPaid: false,
         status: "DRAFT",
-        ...(stripeSessionId && { stripeSessionId }),
+        ...(stripeSessionId && {
+          OR: [{ stripeSessionId: null }, { stripeSessionId: stripeSessionId }],
+        }),
       },
       data: {
         planPaid: true,
         paidAt: new Date(),
         status: "PENDING_REVIEW",
+        ...(stripeSessionId && { stripeSessionId }),
         // FEATURED/HANDS_ON are the whole point of paying more than
         // STANDARD — this is what actually turns on the sort boost
         // (isFeatured desc) and the "Featured" badge, both of which

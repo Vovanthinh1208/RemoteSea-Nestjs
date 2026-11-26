@@ -557,7 +557,7 @@ export class EmployerController {
   }
 
   @ApiSubmitVerification()
-  @Post("verification")
+  @Post(["verification", "verify"])
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("EMPLOYER")
   @HttpCode(HttpStatus.OK)
